@@ -19,5 +19,5 @@ python calculadora.py
 
 - Soma
 - Subtração
-- Multiplicção
+- Multiplicação
 - Divisão
