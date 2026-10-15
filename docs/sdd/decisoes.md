@@ -11,3 +11,6 @@
 | D7 | 15/10/2026 | Memória do app em 3 níveis (perfil, histórico, aprendizados) com busca textual | Embeddings só se a busca textual não bastar |
 | D8 | 15/10/2026 | Segurança "falha fechada": teto de custo para a execução; downloads só de domínios permitidos | Encontrado no código atual um download sem restrição de domínio → cartão |
 | D9 | 15/10/2026 | **Torralles é a marca padrão de todos os projetos**; o Torralles Studio é um projeto independente | Nenhum exemplo, briefing, memória ou configuração deste projeto deve ser associado a outros projetos da marca |
+| D10 | 15/10/2026 | Sem conteúdo confidencial | Remove a restrição de provedores por sigilo da spec 05 |
+| D11 | 15/10/2026 | O Torralles Studio atenderá **todas as demandas de conteúdo** dos projetos da marca (atuais e futuros) | Precisa de **perfis por projeto/canal** (estilo, público, formato, voz, kit visual, memória separados), escolhidos a cada pedido. Os perfis não se misturam entre si (ver D9) |
+| D12 | 15/10/2026 | Continuar planejando, com foco em análise, pesquisa, comparação e criatividade | Antes de construir: estudar o Torralles Ops (agentes criadores/agência) para reaproveitar, integrar ou trabalhar em conjunto |

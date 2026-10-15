@@ -43,7 +43,7 @@ O app deve **mascarar** qualquer texto parecido com chave antes de gravar logs (
 | **Dependências comprometidas** | Pacote falso no PyPI | Poucas dependências, versões fixas, `pip-audit` e alertas do GitHub |
 
 ### 1.3 Privacidade, direitos e regras das plataformas
-- **Dados enviados aos provedores**: o Gemini grátis pode usar os dados para treino; a API do DeepSeek processa na China. Conteúdo confidencial ou com dados pessoais **não** vai para esses provedores. O config terá uma marca `sigiloso = true` que restringe a cadeia a provedores com termos adequados.
+- **Dados enviados aos provedores**: o Gemini grátis pode usar os dados para treino; a API do DeepSeek processa na China. Decisão D10: o app **não** será usado com conteúdo confidencial, então não haverá restrição de provedores por sigilo. Continua valendo o bom senso de não enviar dados pessoais.
 - **Pessoas reais**: não gerar rosto ou voz de pessoa real sem autorização (inclusive clonagem de voz).
 - **Rotulagem de IA**: YouTube, TikTok e Instagram exigem marcar conteúdo realista gerado por IA. O app lembra disso na exportação.
 - **Licença de cada peça**: registrada na biblioteca (ex.: voz ElevenLabs do plano grátis = **não comercial**). Essencial se o app for vendido.
@@ -131,7 +131,6 @@ O app "lembra" em três níveis:
 - [ ] Download só de domínios permitidos, com limite de tamanho e tempo (teste)
 - [ ] Teto de custo que interrompe a execução (teste)
 - [ ] Resultados de busca delimitados como dados no prompt (teste)
-- [ ] Marca `sigiloso` restringindo provedores (teste)
 - [ ] SQLite com esquema e migrações; retomada de projeto sem regerar o que já foi aprovado (teste)
 - [ ] Cache por hash de provedor + modelo + prompt + parâmetros (teste)
 - [ ] Biblioteca por hash, com licença e busca por etiqueta
@@ -141,6 +140,6 @@ O app "lembra" em três níveis:
 
 ## Questões em aberto
 
-1. Você vai usar o app com **conteúdo confidencial ou com dados pessoais**? Se sim, quais provedores são aceitáveis?
+1. ~~Conteúdo confidencial?~~ Respondido: não (D10).
 2. Onde quer o **backup**: disco externo, Google Drive ou outro?
 3. Já existe um **kit da marca Torralles** (logo, cores, fontes, voz)?
