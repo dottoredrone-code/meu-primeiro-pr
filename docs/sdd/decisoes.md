@@ -10,3 +10,4 @@
 | D6 | 15/10/2026 | Dados locais na fase 1: **SQLite + pastas**; PostgreSQL + nuvem só se for vender | Zero custo e instalação; esquema pensado para migrar ([05](05-dados-seguranca-memoria.md)) |
 | D7 | 15/10/2026 | Memória do app em 3 níveis (perfil, histórico, aprendizados) com busca textual | Embeddings só se a busca textual não bastar |
 | D8 | 15/10/2026 | Segurança "falha fechada": teto de custo para a execução; downloads só de domínios permitidos | Encontrado no código atual um download sem restrição de domínio → cartão |
+| D9 | 15/10/2026 | **Torralles é a marca padrão de todos os projetos**; o Torralles Studio é um projeto independente | Nenhum exemplo, briefing, memória ou configuração deste projeto deve ser associado a outros projetos da marca |

@@ -87,7 +87,7 @@ Para confirmar a pesquisa de mesa com resultados reais, antes de construir a ver
 
 1. **3 briefings iguais para todos**, em pt-BR, 9:16, ~30 s:
    - A. Informativo: *"história do café no Brasil"* (testa a pesquisa e a precisão)
-   - B. Explicativo do seu nicho de trabalho (testa clareza e fidelidade)
+   - B. Explicativo: *"como funciona a fotossíntese"* (testa clareza e fidelidade)
    - C. Visual/emocional: *"amanhecer numa fazenda de café"* (testa imagem e vídeo)
 2. **Ferramentas testadas nos planos grátis**: CapCut, InVideo AI, Canva, Google Flow, MoneyPrinterTurbo e o protótipo atual do Torralles Studio (modo econômico).
 3. **Avaliação** com os parâmetros da [spec 03](03-parametros-avaliacao.md), a mesma régua para todos, mais:

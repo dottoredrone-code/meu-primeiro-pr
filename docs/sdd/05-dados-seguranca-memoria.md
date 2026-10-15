@@ -24,9 +24,9 @@
 ### 1.1 Chaves de API
 | Regra | Fase 1 (uso próprio) | Fase venda |
 |---|---|---|
-| Onde ficam | `.env` local (já no `.gitignore`) | Cofre de segredos do servidor; nunca no navegador do cliente |
-| Nunca aparecem em | logs, relatórios, mensagens de erro, banco | idem + painel do cliente |
-| Limite de gasto | Teto em cada painel do provedor **e** no app (custo máximo por vídeo/mês) | idem, por cliente |
+| Onde ficam | `.env` local (já no `.gitignore`) | Cofre de segredos do servidor; nunca no navegador do usuário |
+| Nunca aparecem em | logs, relatórios, mensagens de erro, banco | idem + painel do usuário |
+| Limite de gasto | Teto em cada painel do provedor **e** no app (custo máximo por vídeo/mês) | idem, por usuário |
 | Vazamento | Revogar no painel e trocar | idem + rotação periódica |
 
 O app deve **mascarar** qualquer texto parecido com chave antes de gravar logs (`sk-…abcd`).
@@ -43,7 +43,7 @@ O app deve **mascarar** qualquer texto parecido com chave antes de gravar logs (
 | **Dependências comprometidas** | Pacote falso no PyPI | Poucas dependências, versões fixas, `pip-audit` e alertas do GitHub |
 
 ### 1.3 Privacidade, direitos e regras das plataformas
-- **Dados enviados aos provedores**: o Gemini grátis pode usar os dados para treino; a API do DeepSeek processa na China. Conteúdo sigiloso (ex.: casos de clientes) **não** vai para esses provedores. O config terá uma marca `sigiloso = true` que restringe a cadeia a provedores com termos adequados.
+- **Dados enviados aos provedores**: o Gemini grátis pode usar os dados para treino; a API do DeepSeek processa na China. Conteúdo confidencial ou com dados pessoais **não** vai para esses provedores. O config terá uma marca `sigiloso = true` que restringe a cadeia a provedores com termos adequados.
 - **Pessoas reais**: não gerar rosto ou voz de pessoa real sem autorização (inclusive clonagem de voz).
 - **Rotulagem de IA**: YouTube, TikTok e Instagram exigem marcar conteúdo realista gerado por IA. O app lembra disso na exportação.
 - **Licença de cada peça**: registrada na biblioteca (ex.: voz ElevenLabs do plano grátis = **não comercial**). Essencial se o app for vendido.
@@ -108,7 +108,7 @@ O app "lembra" em três níveis:
 
 | Tipo | O que guarda | Como é usada | Exemplo |
 |---|---|---|---|
-| **Perfil e estilo** | Tom de voz, público, formato padrão, voz preferida, CTA, palavras a evitar | Entra no prompt de sistema de roteiro e imagem | "linguagem simples, sem juridiquês; CTA: siga @torralles" |
+| **Perfil e estilo** | Tom de voz, público, formato padrão, voz preferida, CTA, palavras a evitar | Entra no prompt de sistema de roteiro e imagem | "linguagem leve e direta; CTA: siga o perfil" |
 | **Histórico de projetos** | Temas já feitos, séries, o que teve melhor nota | Evita repetir tema; mantém continuidade de séries | "já fizemos 'história do café' em 10/2026" |
 | **Aprendizados** | Falhas recorrentes do controle de qualidade, prompts que funcionaram, suas notas de calibração | Vira dica automática no prompt e base para reordenar as cadeias | "no Kling, mãos em primeiro plano reprovam 60% das vezes → evitar" |
 
@@ -141,6 +141,6 @@ O app "lembra" em três níveis:
 
 ## Questões em aberto
 
-1. Você vai usar o app com **conteúdo sigiloso** (ex.: casos de clientes)? Se sim, quais provedores são aceitáveis?
+1. Você vai usar o app com **conteúdo confidencial ou com dados pessoais**? Se sim, quais provedores são aceitáveis?
 2. Onde quer o **backup**: disco externo, Google Drive ou outro?
 3. Já existe um **kit da marca Torralles** (logo, cores, fontes, voz)?
