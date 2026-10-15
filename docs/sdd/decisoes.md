@@ -7,3 +7,6 @@
 | D3 | 15/10/2026 | **Benchmark antes de construir** | Pesquisa de mesa em [04-benchmark](04-benchmark.md); teste prático com 3 briefings antes da versão completa |
 | D4 | 15/10/2026 | Fallback por etapa + controle de qualidade com loop | Diferencial confirmado pelo benchmark: nenhum concorrente combina os dois |
 | D5 | 15/10/2026 | Edição manual via **exportação para CapCut**, sem editor próprio | CapCut grátis já resolve; reconstruir editor não compensa |
+| D6 | 15/10/2026 | Dados locais na fase 1: **SQLite + pastas**; PostgreSQL + nuvem só se for vender | Zero custo e instalação; esquema pensado para migrar ([05](05-dados-seguranca-memoria.md)) |
+| D7 | 15/10/2026 | Memória do app em 3 níveis (perfil, histórico, aprendizados) com busca textual | Embeddings só se a busca textual não bastar |
+| D8 | 15/10/2026 | Segurança "falha fechada": teto de custo para a execução; downloads só de domínios permitidos | Encontrado no código atual um download sem restrição de domínio → cartão |
