@@ -1,7 +1,7 @@
 # 01 — Spec: Controle de qualidade com loop de correção
 
 > Status: **rascunho para revisão** (não implementado).
-> Depende de: [00-descoberta](00-descoberta.md). Relaciona-se com o roteador de fallback (`estudio_ia/roteador.py`).
+> Depende de: [00-descoberta](00-descoberta.md). Parâmetros detalhados em [03-parametros-avaliacao](03-parametros-avaliacao.md). Relaciona-se com o roteador de fallback (`estudio_ia/roteador.py`).
 
 ## Objetivo
 
