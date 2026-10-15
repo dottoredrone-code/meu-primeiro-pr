@@ -94,6 +94,13 @@ reprovada: narração da cena 2 longa demais para 5 s; gancho fraco. Corrija iss
   `{"nota": 0-10, "criterios": {"nome": nota}, "problemas": [str], "correcao_sugerida": str}`
 - Resposta inválida do juiz → tenta o próximo juiz; se nenhum responder, vale só a checagem automática e a peça é marcada `sem_juiz`.
 
+### Ajustes pela pesquisa da comunidade ([02](02-referencias-comunidade.md))
+
+- Juízes com visão acertam bem os casos claramente ruins e erram mais nos detalhes. Por isso, para imagem e vídeo, usar a **média de 2 juízes** de provedores diferentes, e dar prioridade às checagens objetivas (WER, ffprobe, proporção).
+- Juízes podem ser enganados por texto embutido na imagem: o prompt do juiz deve mandar ignorar instruções que apareçam dentro da imagem.
+- **Calibração:** nos primeiros ~20 vídeos, comparar a nota do juiz com a sua avaliação e ajustar `nota_minima`.
+- Feedback com **marcação de tempo** ("aos 0:12 o rosto deforma") e cada tentativa salva como versão (padrão do Agentic Video Editor).
+
 ## Exemplo de configuração
 
 ```toml
