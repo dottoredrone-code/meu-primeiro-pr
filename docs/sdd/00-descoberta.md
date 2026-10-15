@@ -47,6 +47,7 @@ Legenda: 🟢 ok · 🟡 funciona com ressalvas · 🔴 quebrado/precisa mudar n
 | Vídeo | **Wan (fal.ai)** | 🔴 | O endpoint configurado está desatualizado; atual: `fal-ai/wan-25-preview/image-to-video` (`image_url` aceita data URI). |
 | Vídeo | **Ken Burns (FFmpeg)** | 🟢 | Testado: gera 1280×720 localmente, grátis. |
 | Edição | **FFmpeg** | 🟢 | Corte, concatenação, transições (`xfade`), legendas queimadas. Base do "CapCut". |
+| Edição | **CapCut (plano grátis)** | 🟡 | Grátis: linha do tempo, efeitos, transições, legendas automáticas (até 10 min/vídeo), exportação 1080p sem marca d'água (itens "Pro" põem marca d'água; créditos de IA limitados; sem 4K). **Sem API oficial**: automação só via projetos não oficiais que geram rascunhos (pyJianYingDraft/pyCapCut, VectCutAPI, capcut-cli), que podem quebrar a cada atualização. Bom para **acabamento manual** dos vídeos que o app gera. |
 | Edição | **Remotion** | 🟡 | Grátis para empresas de até 3 pessoas; para automação em escala, ~US$ 0,01/render com mínimo de US$ 100/mês. |
 | Legendas | **Whisper** | 🟢 | Open source, roda local (CPU serve para vídeos curtos). |
 | Design | **Canva** | 🟡 | A API do Canva é limitada para isso; alternativa: editor próprio com Fabric.js/Konva ou templates em HTML → imagem. |
@@ -75,3 +76,4 @@ Legenda: 🟢 ok · 🟡 funciona com ressalvas · 🔴 quebrado/precisa mudar n
 - Pollinations: [API sem chave](https://blogs.novita.ai/free-ai-image-generation-api-no-key-required/), [free tier](https://agentdeals.dev/vendor/pollinations-ai)
 - Edge TTS: [DepScope](https://depscope.dev/pkg/pypi/edge_tts)
 - Remotion: [licença e preços](https://www.remotion.dev/docs/license/pricing)
+- CapCut: [Free vs Pro 2026](https://bigvu.tv/blog/capcut-free-vs-pro-what-2026s-restructure-actually-gives-you/), [limites do plano grátis](https://costbench.com/software/video-editing/capcut/free-plan/), [pyJianYingDraft](https://gittrend.io/repo/GuanYixuan/pyJianYingDraft), [pyCapCut](https://gittrend.io/repo/GuanYixuan/pyCapCut), [capcut-cli](https://cdn.jsdelivr.net/npm/capcut-cli@0.9.0/README.md), [VectCutAPI](https://docsearch.algolia.com/mcp/docs/repo/sun-guannan/vectcutapi)
