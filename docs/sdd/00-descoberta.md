@@ -5,7 +5,7 @@
 
 ## Objetivo (rascunho, aguardando confirmação)
 
-Um app que transforma **uma ideia em um vídeo curto completo** (pesquisa → roteiro → imagens →
+O **Torralles Studio** é um app que transforma **uma ideia em um vídeo curto completo** (pesquisa → roteiro → imagens →
 narração → vídeo com legendas), escolhendo automaticamente o melhor modelo disponível para cada
 etapa e caindo para alternativas gratuitas quando o preferido falhar ou não estiver configurado.
 
