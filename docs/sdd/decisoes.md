@@ -15,3 +15,6 @@
 | D11 | 15/10/2026 | O Torralles Studio atenderá **todas as demandas de conteúdo** dos projetos da marca (atuais e futuros) | Precisa de **perfis por projeto/canal** (estilo, público, formato, voz, kit visual, memória separados), escolhidos a cada pedido. Os perfis não se misturam entre si (ver D9) |
 | D12 | 15/10/2026 | Continuar planejando, com foco em análise, pesquisa, comparação e criatividade | Antes de construir: estudar o Torralles Ops (agentes criadores/agência) para reaproveitar, integrar ou trabalhar em conjunto |
 | D13 | 15/10/2026 | **Proposta (aguardando aprovação)**: integração híbrida com o Hermes — motor do Studio como servidor MCP; Hermes/Torralles Ops orquestra | Evita refazer kanban, perfis, memória e gateway que o Hermes já tem ([06](06-estudo-hermes.md)) |
+| D14 | 15/10/2026 | **Proposta**: o Studio começa onde o Torralles Ops termina (briefing da peça criativa), recebendo e devolvendo **JSON** | Lições do Ops: evitar parser de texto frágil e fatos inventados ([07](07-estudo-torralles-ops-cerebro.md)) |
+| D15 | 15/10/2026 | **Proposta**: escala de notas 0–100 (igual ao Ops) e eliminatório "fatos travados" | Uma só régua no ecossistema |
+| D16 | 15/10/2026 | **Proposta**: aprendizados do Studio vão para o Cérebro Centralizado, não para memória paralela | Fase 9 do protocolo; evita duas fontes da verdade |
