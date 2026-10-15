@@ -1,0 +1,4 @@
+.env
+saidas/
+__pycache__/
+*.pyc

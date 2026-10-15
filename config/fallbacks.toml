@@ -1,0 +1,154 @@
+# Cadeias de fallback do Estúdio IA.
+#
+# [provedores.X] define um provedor reutilizável.
+# [tarefas.Y].cadeia lista os provedores em ordem de preferência: o roteador
+# tenta o primeiro e, se faltar chave ou der erro, passa para o próximo.
+#
+# Nomes de modelos mudam com frequência: confira na documentação de cada
+# serviço e ajuste aqui, sem mexer no código.
+
+[roteador]
+repeticoes = 1      # novas tentativas no mesmo provedor em erro temporário
+espera_base = 1.0   # segundos; dobra a cada repetição
+
+# ---------------------------------------------------------------- texto
+
+[provedores.deepseek_chat]
+classe = "openai_compat"
+base_url = "https://api.deepseek.com"
+modelo = "deepseek-chat"
+chave_env = "DEEPSEEK_API_KEY"
+
+[provedores.deepseek_reasoner]
+classe = "openai_compat"
+base_url = "https://api.deepseek.com"
+modelo = "deepseek-reasoner"
+chave_env = "DEEPSEEK_API_KEY"
+timeout = 300
+
+[provedores.claude]
+classe = "anthropic"
+modelo_env = "CLAUDE_MODEL"   # defina o modelo no .env
+chave_env = "ANTHROPIC_API_KEY"
+
+[provedores.gemini_flash]
+classe = "gemini_texto"
+modelo = "gemini-2.5-flash"
+chave_env = "GEMINI_API_KEY"
+
+[provedores.openai_mini]
+classe = "openai_compat"
+base_url = "https://api.openai.com/v1"
+modelo = "gpt-5-mini"
+chave_env = "OPENAI_API_KEY"
+
+[provedores.openrouter_gratis]
+# Modelos ":free" do OpenRouter mudam com frequência: openrouter.ai/models?q=free
+classe = "openai_compat"
+base_url = "https://openrouter.ai/api/v1"
+modelo = "deepseek/deepseek-chat-v3.1:free"
+chave_env = "OPENROUTER_API_KEY"
+
+[provedores.ollama_local]
+# Roda no seu computador: instale o Ollama e baixe o modelo (ollama pull qwen2.5:7b).
+classe = "openai_compat"
+base_url_env = "OLLAMA_BASE_URL"   # ex.: http://localhost:11434/v1
+modelo = "qwen2.5:7b"
+timeout = 600
+
+# ---------------------------------------------------------------- busca
+
+[provedores.tavily]
+classe = "tavily"
+chave_env = "TAVILY_API_KEY"
+
+[provedores.brave]
+classe = "brave"
+chave_env = "BRAVE_API_KEY"
+
+# ---------------------------------------------------------------- imagem
+
+[provedores.nano_banana]
+classe = "gemini_imagem"
+modelo = "gemini-2.5-flash-image"
+chave_env = "GEMINI_API_KEY"
+
+[provedores.fal_flux]
+classe = "fal_imagem"
+modelo = "fal-ai/flux/schnell"
+chave_env = "FAL_KEY"
+
+[provedores.openai_imagem]
+classe = "openai_imagem"
+modelo = "gpt-image-1"
+chave_env = "OPENAI_API_KEY"
+timeout = 300
+
+[provedores.pollinations]
+# Gratuito e sem chave; qualidade e disponibilidade variam.
+classe = "pollinations"
+timeout = 180
+
+# ---------------------------------------------------------------- voz
+
+[provedores.elevenlabs]
+classe = "elevenlabs"
+modelo = "eleven_multilingual_v2"
+voz_id = "21m00Tcm4TlvDq8ikWAM"
+chave_env = "ELEVENLABS_API_KEY"
+
+[provedores.openai_voz]
+classe = "openai_voz"
+modelo = "gpt-4o-mini-tts"
+voz = "alloy"
+chave_env = "OPENAI_API_KEY"
+
+[provedores.edge_tts]
+classe = "edge_tts"
+voz = "pt-BR-FranciscaNeural"
+
+# ---------------------------------------------------------------- vídeo
+
+[provedores.fal_kling]
+classe = "fal_video"
+modelo = "fal-ai/kling-video/v2.1/standard/image-to-video"
+chave_env = "FAL_KEY"
+timeout = 900
+
+[provedores.fal_wan]
+classe = "fal_video"
+modelo = "fal-ai/wan-i2v"
+chave_env = "FAL_KEY"
+enviar_duracao = false
+timeout = 900
+
+[provedores.ken_burns]
+# Zoom local com FFmpeg: gratuito, garante que sempre sai um vídeo.
+classe = "ken_burns"
+
+# ================================================================ tarefas
+
+[tarefas.ideias]
+cadeia = ["deepseek_chat", "gemini_flash", "claude", "openai_mini", "openrouter_gratis", "ollama_local"]
+
+[tarefas.roteiro]
+cadeia = ["deepseek_chat", "claude", "gemini_flash", "openai_mini", "openrouter_gratis", "ollama_local"]
+
+[tarefas.pesquisa]
+# Síntese dos resultados de busca: modelo que "raciocina" primeiro.
+cadeia = ["deepseek_reasoner", "deepseek_chat", "gemini_flash", "claude", "openrouter_gratis", "ollama_local"]
+
+[tarefas.revisao]
+cadeia = ["claude", "deepseek_reasoner", "gemini_flash", "openai_mini"]
+
+[tarefas.busca]
+cadeia = ["tavily", "brave"]
+
+[tarefas.imagem]
+cadeia = ["nano_banana", "fal_flux", "openai_imagem", "pollinations"]
+
+[tarefas.voz]
+cadeia = ["elevenlabs", "openai_voz", "edge_tts"]
+
+[tarefas.video]
+cadeia = ["fal_kling", "fal_wan", "ken_burns"]
