@@ -172,6 +172,9 @@ class TestChecarRoteiro(unittest.TestCase):
         self.assertTrue(any("cena 2 com duração inválida" in p for p in problemas))
         self.assertFalse(any("cena 3" in p for p in problemas))
         self.assertEqual(checar_roteiro("não é dict", 30), ["roteiro em formato inválido"])
+        nao_finitas = checar_roteiro({"cenas": [self.cena(5, float("nan")), self.cena(5, "Infinity")]}, "30")
+        self.assertTrue(any("cena 1 com duração inválida" in p for p in nao_finitas))
+        self.assertTrue(any("cena 2 com duração inválida" in p for p in nao_finitas))
 
     def test_cena_longa_demais(self):
         problemas = checar_roteiro({"cenas": [self.cena(2, 1)] * 4 + [self.cena(40, 26)]}, 30)

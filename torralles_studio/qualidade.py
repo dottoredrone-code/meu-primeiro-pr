@@ -7,6 +7,7 @@ terceiro desempata (mediana); sem terceiro, a peça vai para revisão manual.
 """
 
 import json
+import math
 import re
 import statistics
 from dataclasses import asdict, dataclass, field
@@ -243,6 +244,10 @@ def checar_roteiro(roteiro, duracao_alvo_s, palavras_por_segundo=2.5, tolerancia
     cenas = roteiro.get("cenas") or []
     if not isinstance(cenas, list) or not cenas:
         return ["roteiro sem cenas"]
+    try:
+        duracao_alvo_s = float(duracao_alvo_s or 0)
+    except (TypeError, ValueError):
+        duracao_alvo_s = 0
     problemas = []
     minimo, maximo = segundos_por_cena
     duracoes = []
@@ -253,6 +258,8 @@ def checar_roteiro(roteiro, duracao_alvo_s, palavras_por_segundo=2.5, tolerancia
         try:
             dur = float(str(cena.get("duracao", "")).strip().rstrip("sS").replace(",", "."))
         except ValueError:
+            dur = math.nan
+        if not math.isfinite(dur):
             problemas.append(f"cena {i} com duração inválida: {cena.get('duracao')!r}")
             continue
         duracoes.append(dur)
@@ -267,7 +274,7 @@ def checar_roteiro(roteiro, duracao_alvo_s, palavras_por_segundo=2.5, tolerancia
             problemas.append(f"cena {i} com {dur:.0f} s: longa demais (máx. {2 * maximo} s por cena)")
     total = sum(duracoes)
     if duracao_alvo_s and abs(total - duracao_alvo_s) > tolerancia_duracao * duracao_alvo_s:
-        problemas.append(f"duração total {total:.0f} s fora de ±{tolerancia_duracao:.0%} do pedido ({duracao_alvo_s} s)")
+        problemas.append(f"duração total {total:.0f} s fora de ±{tolerancia_duracao:.0%} do pedido ({duracao_alvo_s:g} s)")
     if total and not (total / maximo <= len(cenas) <= total / minimo + 1):
         problemas.append(f"{len(cenas)} cenas para {total:.0f} s (esperado 1 cena a cada {minimo}–{maximo} s)")
     return problemas

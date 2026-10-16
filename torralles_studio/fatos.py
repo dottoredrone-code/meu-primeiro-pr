@@ -12,17 +12,26 @@ _NUM = r"(\d+(?:\.\d{3})+(?:,\d{1,2})?|\d+,\d{1,2}|\d+(?:\.\d{1,2})?)"
 _MOEDA_ANTES = r"(R\$|US\$|\$|€|BRL|USD|EUR)"
 _MOEDA_DEPOIS = r"(reais|real|d[oó]lares|d[oó]lar|euros?)"
 _PRECO = re.compile(rf"{_MOEDA_ANTES}\s*{_NUM}(?!\d)|(?<![\w.,]){_NUM}\s*{_MOEDA_DEPOIS}\b", re.I)
-# Faixa: "R$ 22 a 28", "R$ 22–R$ 28". O segundo valor precisa ser maior e não pode ser data, medida ou parcela.
+# Faixa: "R$ 22 a 28", "R$ 22–R$ 28". Só conta quando o 2º valor também tem moeda ou fecha a frase
+# ("até 31/10", "a 50 metros", "até 100 unidades" não são faixa). O 2º valor ainda precisa ser maior.
 _FAIXA_PRECO = re.compile(
-    rf"{_MOEDA_ANTES}\s*{_NUM}\s*(?:a|-|–|até)\s*(?:{_MOEDA_ANTES}\s*)?{_NUM}"
-    r"(?![\d/]|\s*(?:x\b|vezes|parcelas?|cm|mm|m\b|kg|g\b|ml|l\b|dias?|h\b|horas?|%|clique))",
+    rf"{_MOEDA_ANTES}\s*{_NUM}\s*(?:a|-|–|até)\s*"
+    rf"(?:{_MOEDA_ANTES}\s*{_NUM}|{_NUM}(?=\s*(?:$|[.,;:!?)]|reais\b|e\b|ou\b)))",
     re.I,
 )
 _LINK = re.compile(
-    r"\b[a-z][a-z0-9+.-]*://[^\s)\]]+"                            # qualquer esquema (https, ftp…)
-    r"|(?<![\w.@-])(?:[a-z0-9-]+\.)+[a-z]{2,}(?![\w-])(?:/[^\s)\]]*)?",  # domínio com ou sem caminho
+    r"\b[a-z][a-z0-9+.-]*://[^\s)\]]+"                                       # qualquer esquema
+    r"|\bwww\.[^\s)\]]+"
+    r"|(?<![\w.@,-])[a-z][a-z0-9-]*(?:\.[a-z0-9-]+)*\.([a-z]{2,})(?![\w-])(/[^\s)\]]*)?",  # domínio
     re.I,
 )
+# Domínio sem caminho só conta com terminação comum ("Sr.Silva", "foto.jpg", "Node.js" não são links).
+_TLD_COMUNS = {"com", "br", "net", "org", "io", "me", "ly", "la", "co", "app", "shop", "store", "site",
+               "online", "xyz", "info", "biz", "tv", "ai", "link", "page", "pt", "us", "gl", "gg", "dev"}
+# Com caminho, qualquer terminação conta, menos extensões de arquivo e linguagem.
+_EXTENSOES = {"js", "ts", "py", "jpg", "jpeg", "png", "gif", "webp", "pdf", "mp4", "mp3", "wav", "txt",
+              "doc", "docx", "csv", "json", "html", "css", "zip"}
+_NAO_SAO_LINKS = {"asp.net"}
 _PERCENTUAL = re.compile(r"(\d+(?:[.,]\d+)?)\s?%")
 _CAMPOS_PRECO = ("preco", "preço", "valor", "preco_promocional")
 _MOEDAS = {"R$": "R$", "BRL": "R$", "REAIS": "R$", "REAL": "R$", "US$": "$", "$": "$", "USD": "$",
@@ -75,7 +84,15 @@ def _normalizar_link(link):
 
 
 def _links(texto):
-    return {_normalizar_link(l) for l in _LINK.findall(texto)}
+    links = set()
+    for m in _LINK.finditer(texto):
+        tld, caminho = (m.group(1) or "").lower(), m.group(2)
+        if tld and (tld in _EXTENSOES or (not caminho and tld not in _TLD_COMUNS)):
+            continue
+        link = _normalizar_link(m.group(0))
+        if link not in _NAO_SAO_LINKS:
+            links.add(link)
+    return links
 
 
 def _link_autorizado(link, permitidos):
@@ -102,7 +119,7 @@ def checar_fatos(texto, fatos):
     referencia = " ".join(valores)
 
     for m in _FAIXA_PRECO.finditer(texto):
-        if _centavos(m.group(4)) > _centavos(m.group(2)):
+        if _centavos(m.group(4) or m.group(5)) > _centavos(m.group(2)):
             problemas.append("faixa de preço inventada (o preço do briefing é fixo)")
             break
     precos_ok = _precos_dos_fatos(fatos, referencia)

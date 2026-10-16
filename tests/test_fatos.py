@@ -75,6 +75,19 @@ class TestFatosTravados(unittest.TestCase):
     def test_percentual_em_formatos_equivalentes(self):
         self.assertEqual(checar_fatos("Luminária Lua 30 cm com 15,0 % off", FATOS), [])
 
+    def test_texto_comum_nao_vira_link(self):
+        for texto in ["Luminária Lua 30 cm, feita com Node.js e Vue.js", "Luminária Lua 30 cm: curso de Next.js",
+                      "Luminária Lua 30 cm em ASP.NET", "Luminária Lua 30 cm: veja a foto.jpg e o relatorio.pdf",
+                      "Luminária Lua 30 cm, p.ex. na sala", "Luminária Lua 30 cm.Sr.Silva aprovou",
+                      "Luminária Lua 30 cm por R$ 49,90.Compre já", "Luminária Lua 30 cm, versão 2.0, 1.5 kg"]:
+            self.assertEqual(checar_fatos(texto, FATOS), [], texto)
+
+    def test_numero_maior_com_unidade_nao_e_faixa(self):
+        for texto in ["Luminária Lua 30 cm por R$ 49,90 a 50 metros da praia",
+                      "Luminária Lua 30 cm por R$ 49,90 até 100 unidades",
+                      "Luminária Lua 30 cm por R$ 49,90 - 50 primeiros clientes"]:
+            self.assertEqual(checar_fatos(texto, FATOS), [], texto)
+
 
 if __name__ == "__main__":
     unittest.main()
