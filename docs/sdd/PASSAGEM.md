@@ -13,7 +13,12 @@ Leia este arquivo antes de continuar. O trabalho até aqui foi feito numa sessã
 - **Propostas aguardando aprovação do Diego:** D13 (integração híbrida via MCP com Hermes/Ops), D14 (Studio começa no briefing da peça criativa, interface JSON), D15 (escala 0–100 + eliminatório "fatos travados"), D16 (aprendizados vão para o Cérebro).
 - Correção pendente no código (cartão futuro): 7 modelos desatualizados no `config/fallbacks.toml` (ver 00-descoberta) e download sem lista de domínios (D8).
 
-## Próximo passo (nesta sessão local)
+## Atualização 16/10/2026
+- Estudo do Ops **concluído** pela sessão local (só leitura) e incorporado ao `07` (seção "Confirmação pelo código").
+- Proposta de contrato Ops → Studio em `08-contrato-ops-studio.md`.
+- Falta: decisão do Diego sobre D13–D16 e as questões do `08`; depois, montar o Kanban.
+
+## Próximo passo (original, já cumprido nos itens 1–3)
 1. Estudar o Torralles Ops **com autorização direta do Diego nesta conversa**: `dashboard\` (Next 16, React 19, SQLite), `dashboard\src\lib\torralles-ops\` (diretor, 6 chefes, qualidade, prompt-formato, parser-ficha, hermes-client, repo, db), `dashboard\docs\superpowers\`, worktrees `torralles-ops-fase2-marketing` e `torralles-ops-redesign-visual`, e as partes do `CEREBRO_MESTRE.md` sobre Ops, Hermes e qualidade.
 2. Atualizar `docs/sdd/07-estudo-torralles-ops-cerebro.md` com o que for confirmado ou corrigido (o estudo atual veio de trechos do Cérebro até 24/08/2026). Já se sabe: a worktree `torralles-ops-criacao-produto` não existe mais; `PADRAO_QUALIDADE_CRIATIVO.md` não foi encontrado.
 3. Registrar o formato real do briefing de peça criativa e propor o **contrato JSON** Ops → Studio.

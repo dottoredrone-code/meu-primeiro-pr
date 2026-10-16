@@ -1,8 +1,9 @@
 # 07 — Estudo: Torralles Ops e o Cérebro Centralizado
 
-> Fonte: trechos do `CEREBRO_MESTRE.md` lidos numa sessão de 26/08/2026 (seção "Histórico de implementações"
-> e base de conhecimento). **Não** tive acesso direto ao código do Torralles Ops, que fica no computador
-> do Diego: o que está aqui pode estar desatualizado e precisa ser confirmado antes de integrar.
+> Fonte original: trechos do `CEREBRO_MESTRE.md` (26/08/2026).
+> **Atualização 15/10/2026:** confirmado e detalhado por leitura direta do código, do banco e do Cérebro,
+> feita por uma sessão local no PC do Diego, só leitura. Ver a seção [Confirmação pelo código](#confirmação-pelo-código-15102026)
+> no fim deste arquivo e o contrato proposto em [08-contrato-ops-studio](08-contrato-ops-studio.md).
 
 ## O Cérebro Centralizado
 
@@ -76,3 +77,52 @@ Torralles Ops (Diretor + Chefes, via Hermes)
 - Formato real do "briefing de peça criativa" gerado hoje.
 - O conteúdo de `PADRAO_QUALIDADE_CRIATIVO.md` (citado como padrão de nota mínima), para alinhar com a spec 03.
 - Como o Ops chama o Hermes (CLI ou API) e se já existe servidor MCP configurado.
+
+---
+
+## Confirmação pelo código (15/10/2026)
+
+Leitura direta, só leitura, de `dashboard/` (Next.js 16.3, React 19.2, TypeScript, Tailwind 4, SQLite via
+`node:sqlite`, Vitest 4), do banco local e do Cérebro. Último commit do Ops: **26/08/2026** (gate v2,
+parser unificado, retry e logging). Nada mudou depois disso.
+
+### O que se confirmou
+- **Diretor + 6 Chefes**. O Diretor aloca por regra (`tipo` → área) e usa a API do Claude só para escrever a justificativa da alocação. Os Chefes executam pelo **Hermes via CLI** (`hermes chat -q "<instrução>"`), sem perfil nem modelo explícitos (usam a configuração global do Hermes).
+- **Fluxo síncrono numa única requisição HTTP**, sem fila: tarefa → Diretor → Chefe/Hermes → parser → rascunho → revisão humana ("Aprovar"/"Polir") → próxima etapa. Encadeamento: referência de mercado → produto → campanha aprovada → **peça criativa**.
+- **Gate de qualidade v2** (`qualidade.ts`): nota 0–100 dividida igualmente entre os campos; vazio ou placeholder = 0; prosa com menos de 20 caracteres = 50%; **aprova com ≥ 95**; reprovação devolve HTTP 422 com os problemas; escape `?forcar=true`.
+- **Retry**: 3 tentativas com espera de 2 s e 4 s; timeout de 600 s por chamada.
+
+### O que se corrigiu
+- A worktree `torralles-ops-criacao-produto` **não existe mais** (há `fase2-marketing` e `redesign-visual`).
+- **`PADRAO_QUALIDADE_CRIATIVO.md` não existe** no PC: é citado no código e no Cérebro, mas os critérios nunca foram escritos ou se perderam. A régua criativa da spec 03 passa a ser a referência.
+- O Ops **não tem documentação própria** além das specs em `dashboard/docs/superpowers/` e do Cérebro.
+
+### O achado mais importante: o Ops para no texto
+O "briefing de peça criativa" é **só texto, com 6 campos**:
+
+| Campo | Exemplo de conteúdo |
+|---|---|
+| `tipo_peca` | post estático, story, carrossel, vídeo curto |
+| `conceito_visual` | ideia central da peça em 1–2 frases |
+| `paleta_cores` | cores sugeridas |
+| `formato_dimensoes` | 1080x1080, 1080x1920 |
+| `texto_overlay` | texto curto para sobrepor |
+| `ferramenta_sugerida` | CapCut, Canva |
+
+A partir daí **a produção é manual** (CapCut/Canva), e o status `aprovada` significa "produzida e revisada fora
+do sistema". **Nenhuma imagem ou vídeo é gerado nem rastreado.** Esse é exatamente o espaço do Torralles Studio:
+transformar esse briefing em peça pronta, com qualidade verificada.
+
+### Pontos fracos do Ops que o Studio não deve repetir
+| Ponto fraco no Ops | Como o Studio evita |
+|---|---|
+| Até 3 × 600 s numa única requisição HTTP | **Trabalho assíncrono**: o Studio devolve um `job_id` na hora e o Ops consulta o andamento |
+| Hermes instável (erros de stream, picos de 2–4 min) e configuração global compartilhada com outro sistema | Fallback por provedor e "descanso" (já existe no roteador); o Studio não depende da configuração do Hermes |
+| Parser de texto "RÓTULO: valor" com 3 classes de bug já vistas | Entrada e saída em **JSON validado por esquema** |
+| Preço inventado e campo cortado; o gate não checa veracidade | Eliminatório **"fatos travados"** (D15) |
+| Gate só estrutural (vazio, placeholder, tamanho); `?forcar=true` aprova qualquer coisa | Juiz criativo da spec 03 + aprovação manual registrada com motivo |
+| Prompt da peça fixo num único negócio, não parametrizado por workspace | **Perfil por projeto** (D11) vindo no pedido |
+| Peça sem arquivo | Biblioteca com hash, licença e relatório por peça (spec 05) |
+
+### Estado do banco do Ops (referência de volume)
+7 pesquisas, 7 fichas de produto, 6 campanhas e 4 peças criativas, todas ainda em texto.
