@@ -93,3 +93,13 @@
   só soma custo.
 - **Amostra pequena engana:** escolher o melhor provedor pelo limite inferior de Wilson (3/3 não vence 48/50).
 - Camada 4 concluída: banco, perfis, biblioteca e Cérebro.
+
+## Camada 3 — Mídia gratuita: K20 (16/10/2026)
+- **Falha fechada também para dado ausente:** item do Openverse sem licença virava CC0. Ausência de licença
+  é "sem licença clara" (bloqueada), nunca o padrão mais permissivo.
+- **Licença da API ≠ licença do arquivo:** os sons do Freesound são CC0/CC-BY, mas a API é só para uso não
+  comercial (D22). Conferir os termos da fonte, não só a licença de cada obra.
+- **Fallback precisa cobrir o download, não só a busca:** se nenhum arquivo de uma fonte baixar, tenta a
+  próxima; resultados de mídia não vão para o cache (links temporários).
+- **Conteúdo também se confere:** página HTML ou SVG com extensão de imagem não entra na biblioteca.
+- 2 rodadas de verificação; teste real com as chaves de Pexels/Pixabay pendente.

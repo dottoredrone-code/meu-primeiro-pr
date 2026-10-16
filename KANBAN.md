@@ -33,11 +33,11 @@
 | K15 | Roteiro em JSON com clima e sons por cena (esquema + régua + fatos travados + perfil) | [03](docs/sdd/03-parametros-avaliacao.md) |
 | K16 | Pesquisa com fontes delimitadas e citações sempre conferidas (2 domínios) | [03](docs/sdd/03-parametros-avaliacao.md) |
 | K27 | Aprendizados de produção para o Cérebro (só tentativas julgadas; instruções positivas com números) | D16 |
+| K20 | Mídia gratuita em 3 camadas com licença por arquivo (Freesound só em projetos não comerciais, D22) — teste real pendente com as chaves | [11](docs/sdd/11-banco-midia-gratuita.md) · D18 · D22 |
 
 ## 🔍 Em verificação
 | ID | Cartão | Spec |
 |---|---|---|
-| K20 | Mídia em 3 camadas: acervo local + Pexels/Pixabay/Freesound/Openverse, com licença por arquivo | [11](docs/sdd/11-banco-midia-gratuita.md) · D18 |
 | K06 | Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) — código pronto; falta o teste real no PC (`docs/teste-real.md`) | [10](docs/sdd/10-percepcao.md) |
 
 ## 🛠️ Em andamento
