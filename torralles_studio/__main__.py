@@ -46,6 +46,32 @@ def comando_perfis(args):
     return 0
 
 
+def comando_com_qualidade(args, roteador, perfil):
+    """roteiro/pesquisa pelo loop de correção: mostra resultado, nota, motivo e custo."""
+    from .config import carregar_loop
+
+    loop = carregar_loop(roteador, args.config)
+    if args.comando == "roteiro":
+        from .roteiro import produzir_roteiro
+
+        r = produzir_roteiro(loop, args.tema, args.duracao, perfil=perfil)
+        saida = json.dumps(r.valor, ensure_ascii=False, indent=2) if r.valor is not None else ""
+    else:
+        from .pesquisa import produzir_pesquisa
+
+        r = produzir_pesquisa(loop, args.tema)
+        v = r.valor or {}
+        fontes = "\n".join(f"[{i}] {f['url']}" for i, f in enumerate(v.get("fontes", []), 1))
+        saida = v.get("resumo", "") + (f"\n\nFontes:\n{fontes}" if fontes else "")
+    estado = "✓ aprovado" if r.aprovado else "⚠ revisar"
+    nota = f", nota {r.nota:.0f}" if r.nota is not None else ""
+    custo = sum(t.custo_usd for t in r.tentativas)
+    print(f"{estado} ({r.motivo}{nota}, {len(r.tentativas)} tentativa(s), US$ {custo:.3f})", file=sys.stderr)
+    if saida:
+        print(saida)
+    return 0 if r.valor is not None else 1
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="torralles_studio", description="Gera conteúdo com fallback entre modelos de IA.")
     p.add_argument("--config", help="caminho de um fallbacks.toml alternativo")
@@ -64,8 +90,10 @@ def main(argv=None):
     s.add_argument("tema")
     s.add_argument("-d", "--duracao", type=int, default=30)
     s.add_argument("-p", "--perfil", help="id do perfil do projeto")
+    s.add_argument("-q", "--qualidade", action="store_true", help="avalia com juiz e refaz até aprovar (loop)")
     s = sub.add_parser("pesquisa")
     s.add_argument("tema")
+    s.add_argument("-q", "--qualidade", action="store_true", help="checa citações e avalia com juiz (loop)")
     s = sub.add_parser("imagem")
     s.add_argument("prompt")
     s.add_argument("-o", "--saida", default="saidas/imagem.png")
@@ -114,6 +142,9 @@ def main(argv=None):
             print(f"✗ {e}", file=sys.stderr)
             return 1
         roteador = perfil.roteador(roteador)
+
+    if getattr(args, "qualidade", False):
+        return comando_com_qualidade(args, roteador, perfil)
 
     try:
         if args.comando == "ideias":

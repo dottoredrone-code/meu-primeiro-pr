@@ -6,12 +6,6 @@ from pathlib import Path
 
 from .roteador import Resultado, TodosFalharam
 
-SISTEMA_ROTEIRO = (
-    "Você é roteirista de vídeos curtos para redes sociais. Responda APENAS com JSON válido, sem texto extra, "
-    'no formato: {"titulo": str, "cenas": [{"narracao": str, "prompt_imagem": str, '
-    '"prompt_movimento": str, "duracao": int}]}. '
-    "Narração em português do Brasil; prompts de imagem e movimento em inglês, bem descritivos."
-)
 
 
 def extrair_json(texto):
@@ -29,14 +23,10 @@ def extrair_json(texto):
 
 
 def validar_roteiro(texto):
-    roteiro = extrair_json(texto)
-    cenas = roteiro.get("cenas")
-    if not isinstance(cenas, list) or not cenas:
-        raise ValueError("roteiro sem cenas")
-    for cena in cenas:
-        if not cena.get("narracao") or not cena.get("prompt_imagem"):
-            raise ValueError("cena sem narração ou prompt de imagem")
-    return roteiro
+    """Formato do roteiro com clima e sons por cena (K15, ver roteiro.py)."""
+    from .roteiro import validar_roteiro as validar
+
+    return validar(texto)
 
 
 def _com_perfil(sistema, perfil, etapa):
@@ -67,6 +57,8 @@ def gerar_roteiro(roteador, tema, duracao=30, contexto="", perfil=None):
             if problemas:
                 raise ValueError("; ".join(problemas))
             return roteiro
+    from .roteiro import SISTEMA_ROTEIRO
+
     return roteador.executar("roteiro", prompt=prompt, sistema=_com_perfil(SISTEMA_ROTEIRO, perfil, "roteiro"),
                              validar=validar)
 
@@ -83,11 +75,12 @@ def pesquisar(roteador, tema, max_resultados=5):
         tentativas += e.tentativas
 
     if fontes:
-        lista = "\n".join(f"[{i}] {f['titulo']} — {f['url']}\n{f['trecho']}" for i, f in enumerate(fontes, 1))
-        prompt = (
-            f"Tema: {tema}\n\nResultados de busca:\n{lista}\n\n"
-            "Escreva um resumo organizado em tópicos, citando as fontes como [1], [2]..."
-        )
+        from .pesquisa import SISTEMA_PESQUISA, fontes_validas, montar_prompt
+
+        fontes = fontes_validas(fontes)
+        sintese = roteador.executar("pesquisa", prompt=montar_prompt(tema, fontes), sistema=SISTEMA_PESQUISA)
+        return Resultado({"resumo": sintese.valor, "fontes": fontes}, sintese.provedor,
+                         tentativas + sintese.tentativas)
     else:
         prompt = (
             f"Tema: {tema}\n\nNão há busca na web disponível. Resuma o que você sabe, "

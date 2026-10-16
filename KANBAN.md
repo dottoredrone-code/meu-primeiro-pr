@@ -32,7 +32,10 @@
 | K25 | Biblioteca de mídia por hash, licença obrigatória, busca por etiqueta, procedência e etiquetas por perfil | [05](docs/sdd/05-dados-seguranca-memoria.md) · [11](docs/sdd/11-banco-midia-gratuita.md) |
 
 ## 🔍 Em verificação
-_(vazio)_
+| ID | Cartão | Spec |
+|---|---|---|
+| K15 | Roteiro em JSON com clima e sons por cena | [03](docs/sdd/03-parametros-avaliacao.md) |
+| K16 | Pesquisa com fontes e checagem de citações | [03](docs/sdd/03-parametros-avaliacao.md) |
 
 ## 🛠️ Em andamento
 _(vazio)_
@@ -60,8 +63,6 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 ### Camada 3 — Produção (depende das Camadas 0 e 1)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
-| K15 | Roteiro em JSON com clima e sons por cena | [03](docs/sdd/03-parametros-avaliacao.md) | K01 · K07 | Validado por esquema e pela régua |
-| K16 | Pesquisa com fontes (Tavily) e checagem de citações | [03](docs/sdd/03-parametros-avaliacao.md) | K01 | Citações sempre apontam para fontes reais |
 | K17 | 🔒 Imagens com consistência entre cenas (Nano Banana 2 / FLUX) | [03](docs/sdd/03-parametros-avaliacao.md) | K01 · K09 · **chaves** | Juízes aprovam consistência e anatomia |
 | K18 | 🔒 Voz com fallback (ElevenLabs → Gemini TTS → Edge → Piper) e checagem por transcrição | [11](docs/sdd/11-banco-midia-gratuita.md) | K00b · **chaves** | Erro de palavras ≤ 10% |
 | K19 | 🔒 Vídeo por cena no modo misto (Kling v3 nas cenas-chave, zoom nas demais) | D20 | K01 · K04 · **chave fal.ai** | Custo dentro do teto; sem congelamento indevido |

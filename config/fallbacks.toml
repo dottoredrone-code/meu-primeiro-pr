@@ -227,3 +227,15 @@ cta       = { peso = 10, descricao = "Fechamento com chamada para ação clara" 
 palavras_por_segundo = 2.5
 tolerancia_duracao = 0.20
 folga_narracao = 1.10
+
+[avaliacao.pesquisa]
+# Spec 03, 3.1. Eliminatórios automáticos (citações reais, 2 domínios) ficam em pesquisa.py.
+nota_minima = 70
+num_juizes = 1
+divergencia_maxima = 20
+
+[avaliacao.pesquisa.criterios]
+fidelidade = { peso = 40, piso = 70, descricao = "Cada afirmação está nos trechos das fontes citadas; nada inventado nem exagerado" }
+cobertura  = { peso = 20, descricao = "Os pontos principais do tema aparecem" }
+atualidade = { peso = 20, descricao = "Usa as fontes mais recentes quando o tema muda rápido; avisa se a informação pode estar velha" }
+clareza    = { peso = 20, descricao = "Tópicos curtos e objetivos, fáceis de transformar em roteiro" }

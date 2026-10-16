@@ -114,7 +114,8 @@ class TestRoteador(unittest.TestCase):
 
 class TestFuncoes(unittest.TestCase):
     def test_roteiro_cai_para_o_proximo_quando_json_e_invalido(self):
-        bom = '```json\n{"titulo": "Café", "cenas": [{"narracao": "Oi", "prompt_imagem": "coffee"}]}\n```'
+        bom = ('```json\n{"titulo": "Café", "cta": "siga", "cenas": [{"narracao": "Oi", "prompt_imagem": "coffee", '
+               '"prompt_movimento": "slow pan", "duracao": 5, "clima": "Épico", "sons": ["xícara"]}]}\n```')
         r = gerar_roteiro(roteador(Falso("a", ["não sei"]), Falso("b", [bom]), tarefa="roteiro"), "café")
         self.assertEqual((r.provedor, r.valor["titulo"]), ("b", "Café"))
 

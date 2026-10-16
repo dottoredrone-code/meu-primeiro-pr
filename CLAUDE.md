@@ -27,6 +27,7 @@ torralles_studio/
   roteador.py     fallback por tarefa, descanso de provedores, teto de custo
   provedores/     texto, busca, imagem, voz, vídeo (um arquivo por tipo)
   funcoes.py      ideias, roteiro, pesquisa, imagem, voz, vídeo
+  roteiro.py      roteiro JSON com clima e sons por cena (esquema + régua); pesquisa.py fontes e citações
   percepcao.py    "assistir" um vídeo: quadros, cortes, som, transcrição
   seguranca.py    mascarar chaves, orçamento
   qualidade.py    avaliador 0–100 (juízes de outra família); fatos.py fatos travados
@@ -48,6 +49,7 @@ python -m torralles_studio status             # cadeias e provedores prontos
 python -m torralles_studio assistir video.mp4 # relatório de percepção
 python -m torralles_studio perfil-novo meu-canal "Meu canal"   # cria perfil de projeto; 'perfis' lista
 python -m torralles_studio roteiro "tema" -p meu-canal          # gera com o perfil do projeto
+python -m torralles_studio roteiro "tema" -q                    # com juiz e loop de correção (também em pesquisa)
 python -m torralles_studio --config outro.toml status   # config alternativo (ou TORRALLES_CONFIG)
 ```
 - O `.env` é lido da **raiz do repositório** e nunca sobrescreve variáveis já definidas.

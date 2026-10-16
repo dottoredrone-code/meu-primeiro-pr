@@ -81,7 +81,7 @@ class TextoFalso(Provedor):
 
     def executar(self, prompt, sistema=None):
         self.sistemas.append(sistema)
-        return '{"titulo": "x", "cenas": [{"narracao": "a", "prompt_imagem": "b", "duracao": 5}]}'
+        return '{"titulo": "x", "cta": "siga", "cenas": [{"narracao": "a", "prompt_imagem": "b", "prompt_movimento": "slow zoom", "duracao": 5, "clima": "calmo", "sons": []}]}'
 
 
 def pasta_com(**arquivos):
@@ -249,7 +249,7 @@ class TestValidacao(unittest.TestCase):
     def test_palavra_proibida_reprova_roteiro_do_perfil(self):
         class Texto(TextoFalso):
             def executar(self, prompt, sistema=None):
-                return '{"titulo": "Chá barato", "cenas": [{"narracao": "a", "prompt_imagem": "b", "duracao": 5}]}'
+                return '{"titulo": "Chá barato", "cta": "siga", "cenas": [{"narracao": "a", "prompt_imagem": "b", "prompt_movimento": "slow zoom", "duracao": 5, "clima": "calmo", "sons": []}]}'
 
         with pasta_com(**{"loja-cha.toml": LOJA}) as d:
             perfil = Perfis(d).obter("loja-cha")
