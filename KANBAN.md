@@ -36,6 +36,7 @@
 ## 🔍 Em verificação
 | ID | Cartão | Spec |
 |---|---|---|
+| K27 | Exportar aprendizados para o Cérebro | D16 |
 | K06 | Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) — código pronto; falta o teste real no PC (`docs/teste-real.md`) | [10](docs/sdd/10-percepcao.md) |
 
 ## 🛠️ Em andamento
@@ -76,7 +77,6 @@ K24, K25 e K26 prontos em 16/10/2026. Falta o K27 (aprendizados para o Cérebro)
 
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
-| K27 | Exportar aprendizados para o Cérebro | D16 | K10 | Resumo gerado no formato do Cérebro |
 
 ### Camada 5 — Integração (depende das Camadas 1, 3 e 4)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |

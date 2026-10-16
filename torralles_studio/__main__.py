@@ -137,6 +137,11 @@ def main(argv=None):
     s.add_argument("-c", "--contexto", help="o que o vídeo deveria ser (briefing, tema)")
     s.add_argument("--percepcao", action="store_true", help="mede antes (cortes, volume, transcrição) e envia ao juiz")
 
+    s = sub.add_parser("cerebro", help="resumo dos aprendizados de produção para colar no Cérebro")
+    s.add_argument("--desde", help="só tentativas a partir desta data (AAAA-MM-DD)")
+    s.add_argument("-p", "--perfil", help="só um perfil de projeto")
+    s.add_argument("-o", "--pasta", default="dados/cerebro", help="pasta onde salvar o resumo")
+
     s = sub.add_parser("assistir", help="analisa um vídeo (quadros, cortes, som, transcrição) para avaliação")
     s.add_argument("video")
     s.add_argument("-o", "--saida", default="saidas/percepcao")
@@ -156,6 +161,14 @@ def main(argv=None):
         return comando_perfis(args)
     if args.comando == "avaliar-video":
         return comando_avaliar_video(args)
+    if args.comando == "cerebro":
+        from .cerebro import exportar
+        from .config import carregar_banco
+
+        destino = exportar(carregar_banco(args.config), args.pasta, desde=args.desde, perfil=args.perfil)
+        print(destino.read_text(encoding="utf-8"))
+        print(f"✓ salvo em {destino} (cole no CEREBRO_MESTRE.md)", file=sys.stderr)
+        return 0
     roteador = carregar_roteador(args.config)
 
     if args.comando == "status":
