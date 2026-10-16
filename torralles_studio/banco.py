@@ -147,6 +147,14 @@ MIGRACOES = [
         "CREATE INDEX idx_memoria_perfil ON memoria(perfil, tipo)",
         "CREATE INDEX idx_projetos_perfil ON projetos(perfil)",
     ],
+    # 4 — biblioteca de mídia: autor, link, título e perfil dono do ativo (spec 11, K25)
+    [
+        "ALTER TABLE ativos ADD COLUMN autor TEXT",
+        "ALTER TABLE ativos ADD COLUMN link TEXT",
+        "ALTER TABLE ativos ADD COLUMN titulo TEXT",
+        "ALTER TABLE ativos ADD COLUMN perfil TEXT",
+        "CREATE INDEX idx_ativos_perfil ON ativos(perfil, tipo)",
+    ],
 ]
 # Cada migração é uma lista de comandos (sem partir por ";", que quebraria textos e gatilhos).
 

@@ -31,7 +31,9 @@
 | K26 | Perfis por projeto que não se misturam (estilo, voz, formato, kit visual, memória; ligação com o Hermes) | D11 · D13 |
 
 ## 🔍 Em verificação
-_(vazio)_
+| ID | Cartão | Spec |
+|---|---|---|
+| K25 | Biblioteca por hash com licença obrigatória e busca por etiqueta | [05](docs/sdd/05-dados-seguranca-memoria.md) · [11](docs/sdd/11-banco-midia-gratuita.md) |
 
 ## 🛠️ Em andamento
 _(vazio)_
@@ -72,7 +74,6 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 ### Camada 4 — Dados e memória (pode começar junto com a Camada 1)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
-| K25 | Biblioteca por hash com licença e busca por etiqueta | [05](docs/sdd/05-dados-seguranca-memoria.md) | K24 | Sem duplicatas; licença obrigatória |
 | K27 | Exportar aprendizados para o Cérebro | D16 | K10 | Resumo gerado no formato do Cérebro |
 
 ### Camada 5 — Integração (depende das Camadas 1, 3 e 4)

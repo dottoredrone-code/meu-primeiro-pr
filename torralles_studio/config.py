@@ -83,6 +83,14 @@ def carregar_banco(caminho=None):
     return Banco(destino if destino.is_absolute() else RAIZ / destino)
 
 
+def carregar_biblioteca(caminho=None, banco=None):
+    """Biblioteca de mídia (K25) na pasta do config, registrada no banco local."""
+    from .biblioteca import Biblioteca
+
+    destino = Path(carregar_config(caminho).get("biblioteca", {}).get("pasta", "dados/biblioteca"))
+    return Biblioteca(destino if destino.is_absolute() else RAIZ / destino, banco or carregar_banco(caminho))
+
+
 MODELO_PERFIL = RAIZ / "config" / "perfil_modelo.toml"
 
 
