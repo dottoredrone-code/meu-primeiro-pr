@@ -28,7 +28,12 @@ pasta = "dados/perfis"
 
 [seguranca]
 # Arquivos devolvidos pelos provedores só são baixados destes domínios (D8).
-dominios_download = ["fal.media", "storage.googleapis.com", "image.pollinations.ai"]
+dominios_download = [
+  "fal.media", "storage.googleapis.com", "image.pollinations.ai",
+  # mídia gratuita (K20): arquivos servidos pelas próprias fontes
+  "images.pexels.com", "videos.pexels.com", "cdn.pixabay.com", "pixabay.com", "cdn.freesound.org",
+  "upload.wikimedia.org", "live.staticflickr.com",
+]
 tamanho_maximo_download_mb = 300
 
 # ---------------------------------------------------------------- texto
@@ -180,6 +185,25 @@ chave_env = "GEMINI_API_KEY"
 timeout = 300
 # temperatura = 0.2  # opcional: sem valor, vale o padrão da API (o Google recomenda 1.0 no Gemini 3); conferir no teste real
 
+# ---------------------------------------------------------------- mídia gratuita (K20, spec 11)
+# Licença conferida em midia.py: aceitas CC0, Pexels, Pixabay e CC-BY (com crédito); o resto é descartado.
+
+[provedores.pexels_midia]
+classe = "pexels"
+chave_env = "PEXELS_API_KEY"     # grátis em pexels.com/api
+
+[provedores.pixabay_midia]
+classe = "pixabay"
+chave_env = "PIXABAY_API_KEY"    # grátis em pixabay.com/api/docs
+
+[provedores.openverse_midia]
+classe = "openverse"
+chave_env = "OPENVERSE_TOKEN"    # opcional: funciona sem, com limite menor
+
+[provedores.freesound_midia]
+classe = "freesound"
+chave_env = "FREESOUND_API_KEY"  # grátis em freesound.org/apiv2/apply
+
 # ================================================================ tarefas
 
 [tarefas.ideias]
@@ -199,6 +223,16 @@ cadeia = ["claude", "gemini_flash", "openai_mini", "deepseek_chat", "openrouter_
 [tarefas.juiz_video]
 # Juízes que assistem o vídeo inteiro com som (spec 10, nível 4). Hoje só o Gemini faz isso pela API.
 cadeia = ["gemini_video"]
+
+[tarefas.midia_imagem]
+cadeia = ["pexels_midia", "pixabay_midia", "openverse_midia"]
+
+[tarefas.midia_video]
+cadeia = ["pexels_midia", "pixabay_midia"]
+
+[tarefas.midia_audio]
+# efeitos sonoros (trilhas: K21)
+cadeia = ["freesound_midia", "openverse_midia"]
 
 [tarefas.revisao]
 cadeia = ["claude", "deepseek_reasoner", "gemini_flash", "openai_mini"]

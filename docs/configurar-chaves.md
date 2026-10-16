@@ -12,6 +12,10 @@
 | 3 | **ElevenLabs** | Voz premium | Grátis ~10 mil créditos/mês, **sem uso comercial** | elevenlabs.io → perfil → *API Keys* | `ELEVENLABS_API_KEY` |
 | 3 | **OpenAI** | Fallback de texto, imagem e voz | Pré-pago | platform.openai.com → *API keys* | `OPENAI_API_KEY` |
 | 3 | **OpenRouter** | Modelos grátis (50 pedidos/dia) | Grátis | openrouter.ai → *Keys* | `OPENROUTER_API_KEY` |
+| 2 | **Pexels** | Fotos e vídeos gratuitos (licença Pexels) | Grátis | pexels.com/api → *Your API key* | `PEXELS_API_KEY` |
+| 2 | **Pixabay** | Fotos e vídeos gratuitos (licença Pixabay) | Grátis | pixabay.com/api/docs (logado) | `PIXABAY_API_KEY` |
+| 2 | **Freesound** | Efeitos sonoros (CC0 e CC-BY) | Grátis | freesound.org/apiv2/apply → *API key* | `FREESOUND_API_KEY` |
+| — | **Openverse** | Imagens e sons Creative Commons | Grátis, funciona sem chave (com limite menor) | api.openverse.org (opcional) | `OPENVERSE_TOKEN` |
 | — | **Edge TTS** | Voz grátis | Grátis, sem chave | `pip install edge-tts` | — |
 | — | **FFmpeg** | Vídeo grátis e montagem | Grátis, sem chave | já instalado | — |
 

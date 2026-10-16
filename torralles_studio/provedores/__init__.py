@@ -1,5 +1,6 @@
 from .busca import BraveBusca, TavilyBusca
 from .juiz_video import GeminiVideoJuiz
+from .midia import FreesoundMidia, OpenverseMidia, PexelsMidia, PixabayMidia
 from .imagem import FalImagem, GeminiImagem, OpenAIImagem, PollinationsImagem
 from .texto import AnthropicTexto, GeminiTexto, OpenAICompatTexto
 from .video import FalVideo, KenBurnsVideo
@@ -22,4 +23,8 @@ CLASSES = {
     "fal_video": FalVideo,
     "ken_burns": KenBurnsVideo,
     "gemini_video": GeminiVideoJuiz,
+    "pexels": PexelsMidia,
+    "pixabay": PixabayMidia,
+    "openverse": OpenverseMidia,
+    "freesound": FreesoundMidia,
 }

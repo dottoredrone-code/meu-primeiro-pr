@@ -44,7 +44,7 @@ BLOQUEADAS = {
 _APELIDOS = {"cc-zero": "cc0", "public-domain": "cc0", "dominio-publico": "cc0", "pdm": "cc0",
              "by": "cc-by", "by-nc": "cc-by-nc", "by-nd": "cc-by-nd", "by-sa": "cc-by-sa",
              "by-nc-sa": "cc-by-nc-sa", "by-nc-nd": "cc-by-nc-nd", "personal": "uso_pessoal",
-             "personal-use": "uso_pessoal", "attribution": "cc-by", "attribution-sharealike": "cc-by-sa",
+             "personal-use": "uso_pessoal", "cc-pdm": "cc0", "attribution": "cc-by", "attribution-sharealike": "cc-by-sa",
              "attribution-noderivs": "cc-by-nd", "attribution-noderivatives": "cc-by-nd",
              "attribution-noncommercial": "cc-by-nc", "attribution-noncommercial-sharealike": "cc-by-nc-sa",
              "attribution-noncommercial-noderivs": "cc-by-nc-nd",
@@ -67,6 +67,11 @@ def normalizar_licenca(licenca):
     """'CC BY 4.0' → 'cc-by'; 'CC-BY-NC-SA 3.0' → 'cc-by-nc-sa'. Devolve '' se vazio."""
     if not licenca:
         return ""
+    url = re.search(r"creativecommons\.org/(publicdomain/(?:zero|mark)|licenses/([a-z\-]+))", str(licenca).lower())
+    if url:  # Freesound e outros devolvem a licença como link
+        return "cc0" if url.group(1).startswith("publicdomain") else _APELIDOS.get(url.group(2), "cc-" + url.group(2))
+    if re.fullmatch(r"\s*creative[\s_-]*commons[\s_-]*(0|zero)\s*", str(licenca), re.I):
+        return "cc0"  # nome usado pelo Freesound
     t = unicodedata.normalize("NFKD", str(licenca))
     t = "".join(c for c in t if unicodedata.category(c) != "Mn").strip().lower()
     t = re.sub(r"[\s_‐-―]+", "-", t)                  # espaços, sublinhado e hífens unicode
