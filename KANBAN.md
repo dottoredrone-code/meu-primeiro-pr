@@ -25,7 +25,11 @@
 | K05 | `CLAUDE.md` do projeto | [05](docs/sdd/05-dados-seguranca-memoria.md) |
 
 ## 🔍 Em verificação
-_(vazio)_
+| ID | Cartão | Spec |
+|---|---|---|
+| K07 | Avaliador na régua 0–100 | [03](docs/sdd/03-parametros-avaliacao.md) · D15 |
+| K08 | Checador de fatos travados | [08](docs/sdd/08-contrato-ops-studio.md) · D15 |
+| K10 | Relatório de qualidade e custo por peça | [01](docs/sdd/01-controle-qualidade.md) |
 
 ## 🛠️ Em andamento
 _(vazio)_
