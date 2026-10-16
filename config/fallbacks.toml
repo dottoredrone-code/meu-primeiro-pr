@@ -22,6 +22,7 @@ tamanho_maximo_download_mb = 300
 # ---------------------------------------------------------------- texto
 
 [provedores.deepseek_chat]
+familia = "deepseek"  # juiz nunca é da mesma família de quem gerou
 custo_usd = 0.001  # estimativa (revisar no KR1)
 classe = "openai_compat"
 base_url = "https://api.deepseek.com"
@@ -29,6 +30,7 @@ modelo = "deepseek-flash"   # V4.1-Flash; "deepseek-chat" foi aposentado em 24/0
 chave_env = "DEEPSEEK_API_KEY"
 
 [provedores.deepseek_reasoner]
+familia = "deepseek"  # juiz nunca é da mesma família de quem gerou
 custo_usd = 0.003  # estimativa (revisar no KR1)
 classe = "openai_compat"
 base_url = "https://api.deepseek.com"
@@ -37,18 +39,21 @@ chave_env = "DEEPSEEK_API_KEY"
 timeout = 300
 
 [provedores.claude]
+familia = "anthropic"  # juiz nunca é da mesma família de quem gerou
 custo_usd = 0.02  # estimativa (revisar no KR1)
 classe = "anthropic"
 modelo_env = "CLAUDE_MODEL"   # defina o modelo no .env
 chave_env = "ANTHROPIC_API_KEY"
 
 [provedores.gemini_flash]
+familia = "google"  # juiz nunca é da mesma família de quem gerou
 custo_usd = 0.003  # estimativa (revisar no KR1)
 classe = "gemini_texto"
 modelo = "gemini-3.6-flash"  # estável; "gemini-2.5-flash" desligado em 16/10/2026
 chave_env = "GEMINI_API_KEY"
 
 [provedores.openai_mini]
+familia = "openai"  # juiz nunca é da mesma família de quem gerou
 custo_usd = 0.003  # estimativa (revisar no KR1)
 classe = "openai_compat"
 base_url = "https://api.openai.com/v1"
@@ -56,6 +61,7 @@ modelo = "gpt-5.4-mini"  # substituto indicado do snapshot gpt-5-mini (desliga 1
 chave_env = "OPENAI_API_KEY"
 
 [provedores.openrouter_gratis]
+familia = "openrouter"  # juiz nunca é da mesma família de quem gerou
 custo_usd = 0  # estimativa (revisar no KR1)
 # Modelos ":free" do OpenRouter mudam com frequência: openrouter.ai/models?q=free
 classe = "openai_compat"
@@ -64,6 +70,7 @@ modelo = "deepseek/deepseek-chat-v3.1:free"
 chave_env = "OPENROUTER_API_KEY"
 
 [provedores.ollama_local]
+familia = "local"  # juiz nunca é da mesma família de quem gerou
 # Roda no seu computador: instale o Ollama e baixe o modelo (ollama pull qwen2.5:7b).
 classe = "openai_compat"
 base_url_env = "OLLAMA_BASE_URL"   # ex.: http://localhost:11434/v1
@@ -162,6 +169,10 @@ cadeia = ["deepseek_chat", "claude", "gemini_flash", "openai_mini", "openrouter_
 # Síntese dos resultados de busca: modelo que "raciocina" primeiro.
 cadeia = ["deepseek_reasoner", "deepseek_chat", "gemini_flash", "claude", "openrouter_gratis", "ollama_local"]
 
+[tarefas.juiz]
+# Juízes de texto (roteiro, pesquisa). Imagem e vídeo usam juízes com visão (K06, K17).
+cadeia = ["claude", "gemini_flash", "openai_mini", "deepseek_chat", "openrouter_gratis", "ollama_local"]
+
 [tarefas.revisao]
 cadeia = ["claude", "deepseek_reasoner", "gemini_flash", "openai_mini"]
 
@@ -176,3 +187,25 @@ cadeia = ["elevenlabs", "openai_voz", "edge_tts"]
 
 [tarefas.video]
 cadeia = ["fal_kling", "fal_wan", "ken_burns"]
+
+# ================================================================ avaliação (régua 0–100, D15)
+# Pesos e pisos da spec 03 convertidos para 0–100. Faixas numéricas serão recalibradas com a base
+# de referência (spec 09/12, cartões K13–K14).
+
+[avaliacao.roteiro]
+nota_minima = 70
+num_juizes = 1
+divergencia_maxima = 20
+
+[avaliacao.roteiro.criterios]
+gancho    = { peso = 25, piso = 60, descricao = "Os 3 primeiros segundos prendem a atenção com pergunta concreta, fato surpreendente, promessa ou ação, sem enrolar" }
+precisao  = { peso = 20, piso = 70, descricao = "Nenhuma contradição com a pesquisa, o briefing ou os fatos travados; nada inventado" }
+aderencia = { peso = 15, descricao = "Fala do tema pedido, sem fugir do assunto" }
+clareza   = { peso = 15, descricao = "Frases curtas e naturais de ouvir, fáceis de entender de primeira" }
+ritmo     = { peso = 15, descricao = "Início, desenvolvimento e fechamento; viradas do tipo 'mas… então…'; nenhuma cena morta" }
+cta       = { peso = 10, descricao = "Fechamento com chamada para ação clara" }
+
+[avaliacao.roteiro.automatico]
+palavras_por_segundo = 2.5
+tolerancia_duracao = 0.20
+folga_narracao = 1.10

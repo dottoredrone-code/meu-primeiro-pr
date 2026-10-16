@@ -52,10 +52,21 @@ def validar_cadeias(provedores, cadeias):
             raise ValueError(f"tarefa '{tarefa}' mistura tipos de provedor: {sorted(tipos)}")
 
 
-def carregar_roteador(caminho=None):
+def carregar_config(caminho=None):
     carregar_env()
     caminho = Path(caminho or os.environ.get("TORRALLES_CONFIG") or os.environ.get("ESTUDIO_CONFIG") or CONFIG_PADRAO)
-    dados = tomllib.loads(caminho.read_text())
+    return tomllib.loads(caminho.read_text())
+
+
+def carregar_avaliador(roteador=None, caminho=None):
+    from .qualidade import Avaliador
+
+    dados = carregar_config(caminho)
+    return Avaliador(roteador or carregar_roteador(caminho), dados.get("avaliacao", {}))
+
+
+def carregar_roteador(caminho=None):
+    dados = carregar_config(caminho)
     provedores = montar_provedores(dados)
     cadeias = {tarefa: t["cadeia"] for tarefa, t in dados["tarefas"].items()}
     validar_cadeias(provedores, cadeias)

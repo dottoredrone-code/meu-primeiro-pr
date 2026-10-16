@@ -59,17 +59,22 @@ class Roteador:
     def tipo_da_tarefa(self, tarefa):
         return self.provedores[self.cadeias[tarefa][0]].tipo
 
-    def executar(self, tarefa, *, validar=None, **kwargs):
+    def executar(self, tarefa, *, validar=None, excluir=(), **kwargs):
         """Executa a tarefa no primeiro provedor que funcionar.
 
         validar: função opcional que recebe a resposta e devolve o valor final,
         ou lança ValueError para tratar a resposta como falha e tentar o próximo.
+        excluir: provedores que não podem ser usados nesta chamada (ex.: o juiz não pode
+        ser da mesma família de quem gerou a peça).
         """
         if tarefa not in self.cadeias:
             raise KeyError(f"tarefa desconhecida: {tarefa}")
         tentativas = []
         for nome in self.cadeias[tarefa]:
             provedor = self.provedores[nome]
+            if nome in excluir:
+                tentativas.append(Tentativa(nome, "pulado", "excluído nesta chamada"))
+                continue
             motivo = provedor.configurado() or self._em_descanso(nome)
             if motivo:
                 tentativas.append(Tentativa(nome, "pulado", motivo))
