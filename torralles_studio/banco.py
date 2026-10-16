@@ -16,110 +16,139 @@ from pathlib import Path
 
 MIGRACOES = [
     # 1 — esquema inicial (spec 05, 2.3)
-    """
-    CREATE TABLE projetos (
-        id INTEGER PRIMARY KEY,
-        titulo TEXT NOT NULL,
-        perfil TEXT,
-        formato TEXT,
-        briefing_json TEXT,
-        status TEXT NOT NULL DEFAULT 'em_andamento',
-        criado_em TEXT NOT NULL,
-        atualizado_em TEXT NOT NULL
-    );
-    CREATE TABLE cenas (
-        id INTEGER PRIMARY KEY,
-        projeto_id INTEGER NOT NULL REFERENCES projetos(id) ON DELETE CASCADE,
-        ordem INTEGER NOT NULL,
-        narracao TEXT,
-        prompt_imagem TEXT,
-        prompt_movimento TEXT,
-        duracao REAL,
-        dados_json TEXT,
-        UNIQUE (projeto_id, ordem)
-    );
-    CREATE TABLE pecas (
-        id INTEGER PRIMARY KEY,
-        projeto_id INTEGER NOT NULL REFERENCES projetos(id) ON DELETE CASCADE,
-        etapa TEXT NOT NULL,
-        chave TEXT NOT NULL,
-        status TEXT NOT NULL,
-        valor_json TEXT,
-        provedor TEXT,
-        nota REAL,
-        revisar_manual INTEGER NOT NULL DEFAULT 0,
-        motivo TEXT,
-        custo_usd REAL NOT NULL DEFAULT 0,
-        atualizado_em TEXT NOT NULL,
-        UNIQUE (projeto_id, etapa, chave)
-    );
-    CREATE TABLE ativos (
-        id INTEGER PRIMARY KEY,
-        hash TEXT NOT NULL UNIQUE,
-        tipo TEXT,
-        caminho TEXT NOT NULL,
-        provedor TEXT,
-        modelo TEXT,
-        prompt TEXT,
-        parametros_json TEXT,
-        licenca TEXT,
-        uso_comercial INTEGER,
-        fonte TEXT,
-        tags TEXT,
-        criado_em TEXT NOT NULL
-    );
-    CREATE TABLE tentativas (
-        id INTEGER PRIMARY KEY,
-        peca_id INTEGER NOT NULL REFERENCES pecas(id) ON DELETE CASCADE,
-        numero INTEGER NOT NULL,
-        etapa TEXT NOT NULL,
-        provedor TEXT,
-        ativo_id INTEGER REFERENCES ativos(id),
-        status TEXT NOT NULL,
-        custo_usd REAL NOT NULL DEFAULT 0,
-        custos_json TEXT,
-        valor_json TEXT,
-        criado_em TEXT NOT NULL
-    );
-    CREATE TABLE avaliacoes (
-        id INTEGER PRIMARY KEY,
-        tentativa_id INTEGER NOT NULL REFERENCES tentativas(id) ON DELETE CASCADE,
-        juizes_json TEXT,
-        nota_final REAL,
-        criterios_json TEXT,
-        problemas_json TEXT,
-        eliminatorios_json TEXT,
-        aprovado INTEGER NOT NULL,
-        revisar_manual INTEGER NOT NULL DEFAULT 0,
-        sem_juiz INTEGER NOT NULL DEFAULT 0,
-        nota_humana REAL
-    );
-    CREATE TABLE cache (
-        chave TEXT PRIMARY KEY,
-        provedor TEXT NOT NULL,
-        modelo TEXT,
-        valor_json TEXT NOT NULL,
-        usos INTEGER NOT NULL DEFAULT 0,
-        criado_em TEXT NOT NULL,
-        ultimo_uso TEXT
-    );
-    CREATE TABLE memoria (
-        id INTEGER PRIMARY KEY,
-        tipo TEXT NOT NULL,
-        chave TEXT,
-        conteudo TEXT NOT NULL,
-        origem TEXT,
-        relevancia REAL,
-        criado_em TEXT NOT NULL,
-        atualizado_em TEXT NOT NULL
-    );
-    CREATE INDEX idx_tentativas_peca ON tentativas(peca_id);
-    CREATE INDEX idx_pecas_projeto ON pecas(projeto_id);
-    """,
+    [
+        """
+        CREATE TABLE projetos (
+                id INTEGER PRIMARY KEY,
+                titulo TEXT NOT NULL,
+                perfil TEXT,
+                formato TEXT,
+                briefing_json TEXT,
+                status TEXT NOT NULL DEFAULT 'em_andamento',
+                criado_em TEXT NOT NULL,
+                atualizado_em TEXT NOT NULL
+            )
+        """,
+        """
+        CREATE TABLE cenas (
+                id INTEGER PRIMARY KEY,
+                projeto_id INTEGER NOT NULL REFERENCES projetos(id) ON DELETE CASCADE,
+                ordem INTEGER NOT NULL,
+                narracao TEXT,
+                prompt_imagem TEXT,
+                prompt_movimento TEXT,
+                duracao REAL,
+                dados_json TEXT,
+                UNIQUE (projeto_id, ordem)
+            )
+        """,
+        """
+        CREATE TABLE pecas (
+                id INTEGER PRIMARY KEY,
+                projeto_id INTEGER NOT NULL REFERENCES projetos(id) ON DELETE CASCADE,
+                etapa TEXT NOT NULL,
+                chave TEXT NOT NULL,
+                status TEXT NOT NULL,
+                valor_json TEXT,
+                provedor TEXT,
+                nota REAL,
+                revisar_manual INTEGER NOT NULL DEFAULT 0,
+                motivo TEXT,
+                custo_usd REAL NOT NULL DEFAULT 0,
+                atualizado_em TEXT NOT NULL,
+                UNIQUE (projeto_id, etapa, chave)
+            )
+        """,
+        """
+        CREATE TABLE ativos (
+                id INTEGER PRIMARY KEY,
+                hash TEXT NOT NULL UNIQUE,
+                tipo TEXT,
+                caminho TEXT NOT NULL,
+                provedor TEXT,
+                modelo TEXT,
+                prompt TEXT,
+                parametros_json TEXT,
+                licenca TEXT,
+                uso_comercial INTEGER,
+                fonte TEXT,
+                tags TEXT,
+                criado_em TEXT NOT NULL
+            )
+        """,
+        """
+        CREATE TABLE tentativas (
+                id INTEGER PRIMARY KEY,
+                peca_id INTEGER NOT NULL REFERENCES pecas(id) ON DELETE CASCADE,
+                numero INTEGER NOT NULL,
+                etapa TEXT NOT NULL,
+                provedor TEXT,
+                ativo_id INTEGER REFERENCES ativos(id),
+                status TEXT NOT NULL,
+                custo_usd REAL NOT NULL DEFAULT 0,
+                custos_json TEXT,
+                valor_json TEXT,
+                criado_em TEXT NOT NULL
+            )
+        """,
+        """
+        CREATE TABLE avaliacoes (
+                id INTEGER PRIMARY KEY,
+                tentativa_id INTEGER NOT NULL REFERENCES tentativas(id) ON DELETE CASCADE,
+                juizes_json TEXT,
+                nota_final REAL,
+                criterios_json TEXT,
+                problemas_json TEXT,
+                eliminatorios_json TEXT,
+                aprovado INTEGER NOT NULL,
+                revisar_manual INTEGER NOT NULL DEFAULT 0,
+                sem_juiz INTEGER NOT NULL DEFAULT 0,
+                nota_humana REAL
+            )
+        """,
+        """
+        CREATE TABLE cache (
+                chave TEXT PRIMARY KEY,
+                provedor TEXT NOT NULL,
+                modelo TEXT,
+                valor_json TEXT NOT NULL,
+                usos INTEGER NOT NULL DEFAULT 0,
+                criado_em TEXT NOT NULL,
+                ultimo_uso TEXT
+            )
+        """,
+        """
+        CREATE TABLE memoria (
+                id INTEGER PRIMARY KEY,
+                tipo TEXT NOT NULL,
+                chave TEXT,
+                conteudo TEXT NOT NULL,
+                origem TEXT,
+                relevancia REAL,
+                criado_em TEXT NOT NULL,
+                atualizado_em TEXT NOT NULL
+            )
+        """,
+        """
+        CREATE INDEX idx_tentativas_peca ON tentativas(peca_id)
+        """,
+        """
+        CREATE INDEX idx_pecas_projeto ON pecas(projeto_id)
+        """,
+    ],
+    # 2 — modelo e erro por tentativa (spec 05, 2.3; base para reordenar cadeias por modelo)
+    [
+        "ALTER TABLE tentativas ADD COLUMN modelo TEXT",
+        "ALTER TABLE tentativas ADD COLUMN erro TEXT",
+    ],
 ]
+# Cada migração é uma lista de comandos (sem partir por ";", que quebraria textos e gatilhos).
 
 # Parâmetros que não mudam o resultado (caminho de saída) e parâmetros que são arquivos (vale o conteúdo).
 _FORA_DA_CHAVE = {"saida"}
+# Campos do config do provedor que não mudam o resultado (o resto — voz, tamanho, base_url… — entra na chave).
+_CFG_FORA_DA_CHAVE = {"chave_env", "modelo_env", "timeout", "familia", "custo_usd", "custo_usd_por_segundo",
+                      "cache", "classe"}
 _ARQUIVOS = {"imagem", "audio", "video"}
 _PRONTOS = ("aprovado", "revisar")
 
@@ -171,8 +200,11 @@ def _decodificar(texto):
     return conv(json.loads(texto))
 
 
-def chave_cache(provedor, modelo, kwargs):
-    """Hash de provedor + modelo + parâmetros (spec 05, 2.2). Arquivos de entrada entram pelo conteúdo."""
+def chave_cache(provedor, modelo, kwargs, cfg=None):
+    """Hash de provedor + modelo + config do provedor + parâmetros (spec 05, 2.2).
+
+    Arquivos de entrada entram pelo conteúdo; o caminho de saída fica de fora.
+    """
     partes = {}
     for nome, valor in sorted(kwargs.items()):
         if nome in _FORA_DA_CHAVE:
@@ -182,7 +214,8 @@ def chave_cache(provedor, modelo, kwargs):
         elif isinstance(valor, Path):
             valor = str(valor)
         partes[nome] = valor
-    bruto = json.dumps({"provedor": provedor, "modelo": modelo or "", "kwargs": partes},
+    config = {k: v for k, v in (cfg or {}).items() if k not in _CFG_FORA_DA_CHAVE}
+    bruto = json.dumps({"provedor": provedor, "modelo": modelo or "", "cfg": config, "kwargs": partes},
                        ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha256(bruto.encode()).hexdigest()
 
@@ -208,12 +241,14 @@ class Banco:
 
     def migrar(self):
         """Aplica, em ordem, as migrações que faltam. Cada uma roda inteira ou não roda."""
+        if self.versao > len(MIGRACOES):
+            raise RuntimeError(f"o banco {self.caminho} é da versão {self.versao}, mais nova que este programa "
+                               f"(versão {len(MIGRACOES)}). Atualize o Torralles Studio antes de usar este banco.")
         for numero in range(self.versao, len(MIGRACOES)):
             with self.con:
                 self.con.execute("BEGIN")
-                for comando in MIGRACOES[numero].split(";"):
-                    if comando.strip():
-                        self.con.execute(comando)
+                for comando in MIGRACOES[numero]:
+                    self.con.execute(comando)
                 self.con.execute(f"PRAGMA user_version = {numero + 1}")
 
     def fechar(self):
@@ -315,9 +350,11 @@ class Banco:
             for t in resultado.tentativas:
                 av = t.avaliacao
                 cur = self.con.execute(
-                    "INSERT INTO tentativas (peca_id, numero, etapa, provedor, status, custo_usd, custos_json, "
-                    "valor_json, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (peca_id, base + t.numero, etapa, t.provedor, "aprovado" if av.aprovado else "reprovado",
+                    "INSERT INTO tentativas (peca_id, numero, etapa, provedor, modelo, status, erro, custo_usd, "
+                    "custos_json, valor_json, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (peca_id, base + t.numero, etapa, t.provedor, getattr(t, "modelo", None),
+                     "aprovado" if av.aprovado else "reprovado",
+                     "; ".join(av.problemas) if av.sem_juiz and av.problemas else None,
                      t.custo_usd, json.dumps(t.custos), _codificar(t.valor), agora))
                 self.con.execute(
                     "INSERT INTO avaliacoes (tentativa_id, juizes_json, nota_final, criterios_json, problemas_json, "
@@ -329,14 +366,17 @@ class Banco:
         return self.peca(projeto_id, etapa, chave)
 
     def produzir(self, projeto_id, etapa, chave, fazer, aceitar_revisar=True):
-        """Checkpoint: devolve a peça pronta sem chamar `fazer`; senão roda `fazer()` (o loop) e guarda.
+        """Checkpoint: devolve a peça pronta sem chamar `fazer`; senão roda `fazer(refazer)` (o loop) e guarda.
 
+        refazer é True quando a peça já existia (rejeitada ou falhou): passe para o loop
+        (`loop.executar(..., refazer=refazer)`) para o gerador não devolver o mesmo resultado do cache.
         Devolve (peça, reaproveitada).
         """
         pronta = self.peca_pronta(projeto_id, etapa, chave, aceitar_revisar)
         if pronta:
             return pronta, True
-        return self.registrar_peca(projeto_id, etapa, chave, fazer()), False
+        refazer = self.peca(projeto_id, etapa, chave) is not None
+        return self.registrar_peca(projeto_id, etapa, chave, fazer(refazer)), False
 
     def tentativas(self, projeto_id, etapa=None, chave=None):
         sql = ("SELECT t.*, p.chave, a.nota_final, a.aprovado AS aval_aprovado, a.problemas_json FROM tentativas t "
@@ -361,7 +401,8 @@ class Banco:
         return {"total": round(total, 4), "por_etapa": arred(por_etapa), "por_provedor": arred(por_provedor)}
 
     def custo_mes(self, ano_mes):
-        """Gasto do mês, ex.: custo_mes("2026-10")."""
+        """Gasto do mês, ex.: custo_mes("2026-10"). As datas são gravadas em UTC (21h do dia 31 em
+        Brasília já conta no mês seguinte)."""
         linha = self.con.execute("SELECT COALESCE(SUM(custo_usd), 0) FROM tentativas WHERE criado_em LIKE ?",
                                  (f"{ano_mes}-%",)).fetchone()
         return round(linha[0], 4)
@@ -380,8 +421,9 @@ class Banco:
                 return None
             if saida:
                 saida = Path(saida)
-                saida.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(valor, saida)
+                if saida.resolve() != valor.resolve():
+                    saida.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(valor, saida)
                 valor = saida
         with self.con:
             self.con.execute("UPDATE cache SET usos = usos + 1, ultimo_uso = ? WHERE chave = ?", (_agora(), chave))

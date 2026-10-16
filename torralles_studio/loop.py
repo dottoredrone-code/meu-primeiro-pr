@@ -10,8 +10,11 @@ depois de tentativas julgadas, o loop encerra e escolhe entre elas (a sem juiz f
 
 import json
 import re
+import shutil
 from dataclasses import dataclass, field
+from pathlib import Path
 
+from .qualidade import Avaliacao
 from .roteador import TodosFalharam
 from .seguranca import mascarar
 
@@ -26,6 +29,7 @@ class TentativaPeca:
     avaliacao: object
     custo_usd: float = 0.0       # tudo o que a tentativa gastou: geração (inclusive erros) + juízes
     custos: dict = field(default_factory=dict)  # quanto cada provedor gastou nesta tentativa
+    modelo: str | None = None
 
 
 @dataclass
@@ -108,25 +112,30 @@ class LoopCorrecao:
         return orc is not None and orc.teto_usd is not None and orc.gasto_usd >= orc.teto_usd - 1e-9
 
     def executar(self, etapa, tarefa, montar_kwargs, *, checar=None, contexto=None, validar=None,
-                 peca=None, excluir=()):
+                 peca=None, excluir=(), refazer=False):
         """Produz uma peça com controle de qualidade.
 
         montar_kwargs(feedback) -> kwargs para o provedor (ex.: {"prompt": ...}); feedback é None na 1ª tentativa.
         checar(valor) -> lista de problemas eliminatórios (checagens automáticas e fatos travados).
+        refazer: True quando a peça já existia e foi rejeitada — o gerador não usa o cache (resultado novo).
+        Com `saida` nos kwargs, cada tentativa grava num arquivo próprio e a escolhida é copiada para `saida`.
         """
         peca = peca or etapa
         rubrica = self.avaliador.rubricas[etapa]
         tentativas, reprovacoes, excluidos = [], {}, set(excluir)
-        feedback, motivo, pendente = None, "limite de tentativas", None
+        feedback, motivo, saida_final = None, "limite de tentativas", None
 
         while len(tentativas) < self.tentativas_totais:
             if tentativas and self._sem_orcamento():
                 motivo = "teto de custo"
                 break
             gasto_antes, lanc_antes = self._gasto(), self._lancamentos()
-            kwargs = montar_kwargs(embrulhar_feedback(feedback) if feedback else None)
+            kwargs = dict(montar_kwargs(embrulhar_feedback(feedback) if feedback else None))
+            if kwargs.get("saida"):
+                saida_final = Path(kwargs["saida"])
+                kwargs["saida"] = saida_final.with_name(f"{saida_final.stem}.t{len(tentativas) + 1}{saida_final.suffix}")
             try:
-                r = self.roteador.executar(tarefa, validar=validar, excluir=excluidos, **kwargs)
+                r = self.roteador.executar(tarefa, validar=validar, excluir=excluidos, usar_cache=not refazer, **kwargs)
             except TodosFalharam as e:
                 teto = any(t.detalhe.startswith("teto de custo") for t in e.tentativas)
                 motivo = "teto de custo" if teto else "nenhum provedor disponível"
@@ -140,10 +149,12 @@ class LoopCorrecao:
                                             eliminatorios=eliminatorios)
             except Exception as e:  # checagem ou avaliador com defeito: não perde o que já foi pago
                 motivo = mascarar(f"erro na avaliação: {type(e).__name__}: {e}")
-                pendente = r
+                av = Avaliacao(etapa, aprovado=False, nota=None, sem_juiz=True, revisar_manual=True, problemas=[motivo])
+                t = self._tentativa(tentativas, r, av, gasto_antes, lanc_antes)
+                tentativas.append(t)
+                self._registrar(etapa, peca, t)
                 break
-            t = TentativaPeca(len(tentativas) + 1, r.provedor, r.valor, av, round(self._gasto() - gasto_antes, 6),
-                              self._custos_desde(lanc_antes))
+            t = self._tentativa(tentativas, r, av, gasto_antes, lanc_antes)
             if av.sem_juiz and tentativas:
                 motivo = "teto de custo" if self._sem_orcamento() else "sem juiz"
                 tentativas.append(t)
@@ -154,16 +165,20 @@ class LoopCorrecao:
             if av.aprovado:
                 return self._final(etapa, peca, ResultadoLoop(
                     r.valor, r.provedor, av, True, av.revisar_manual, "sem juiz" if av.sem_juiz else "aprovado",
-                    tentativas))
+                    tentativas), saida_final)
             self._reprovar(r.provedor, reprovacoes, excluidos)
             feedback = av.feedback(rubrica)
 
         if not tentativas:
-            valor, provedor = (pendente.valor, pendente.provedor) if pendente else (None, None)
-            return self._final(etapa, peca, ResultadoLoop(valor, provedor, None, False, True, motivo, tentativas))
+            return self._final(etapa, peca, ResultadoLoop(None, None, None, False, True, motivo, tentativas))
         melhor = max(tentativas, key=_chave_melhor)
         return self._final(etapa, peca, ResultadoLoop(
-            melhor.valor, melhor.provedor, melhor.avaliacao, False, True, motivo, tentativas))
+            melhor.valor, melhor.provedor, melhor.avaliacao, False, True, motivo, tentativas), saida_final)
+
+    def _tentativa(self, tentativas, r, av, gasto_antes, lanc_antes):
+        prov = self.roteador.provedores.get(r.provedor)
+        return TentativaPeca(len(tentativas) + 1, r.provedor, r.valor, av, round(self._gasto() - gasto_antes, 6),
+                             self._custos_desde(lanc_antes), getattr(prov, "modelo", None) or None)
 
     def _reprovar(self, provedor, reprovacoes, excluidos):
         reprovacoes[provedor] = reprovacoes.get(provedor, 0) + 1
@@ -174,8 +189,16 @@ class LoopCorrecao:
         if self.relatorio is not None:
             self.relatorio.registrar(etapa, peca, t.numero, t.provedor, t.avaliacao, t.custo_usd)
 
-    def _final(self, etapa, peca, resultado):
-        """Registra no relatório a decisão do loop (é ela que vale no resumo, não a última tentativa)."""
+    def _final(self, etapa, peca, resultado, saida_final=None):
+        """Registra no relatório a decisão do loop (é ela que vale no resumo, não a última tentativa).
+
+        Arquivo escolhido é copiado para a saída pedida (cada tentativa gravou no seu próprio arquivo).
+        """
+        if saida_final and isinstance(resultado.valor, Path) and resultado.valor.is_file():
+            if resultado.valor.resolve() != saida_final.resolve():
+                saida_final.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(resultado.valor, saida_final)
+            resultado.valor = saida_final
         if self.relatorio is not None:
             self.relatorio.registrar_final(etapa, peca, resultado)
         return resultado

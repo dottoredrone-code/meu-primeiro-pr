@@ -60,27 +60,33 @@ class Roteador:
     def tipo_da_tarefa(self, tarefa):
         return self.provedores[self.cadeias[tarefa][0]].tipo
 
-    def executar(self, tarefa, *, validar=None, excluir=(), **kwargs):
+    def executar(self, tarefa, *, validar=None, excluir=(), usar_cache=True, **kwargs):
         """Executa a tarefa no primeiro provedor que funcionar.
 
         validar: função opcional que recebe a resposta e devolve o valor final,
         ou lança ValueError para tratar a resposta como falha e tentar o próximo.
         excluir: provedores que não podem ser usados nesta chamada (ex.: o juiz não pode
         ser da mesma família de quem gerou a peça).
+        usar_cache: False para pedir um resultado novo (ex.: refazer peça rejeitada, variações).
         """
         if tarefa not in self.cadeias:
             raise KeyError(f"tarefa desconhecida: {tarefa}")
         tentativas = []
+        chaves = {}
+        if usar_cache:  # acerto de qualquer provedor da cadeia vale antes de pagar outro
+            for nome in self.cadeias[tarefa]:
+                if nome in excluir:
+                    continue
+                chaves[nome] = self._chave_cache(nome, self.provedores[nome], kwargs)
+                guardado = self._do_cache(chaves[nome], kwargs, validar)
+                if guardado is not None:
+                    return Resultado(guardado[0], nome, [Tentativa(nome, "cache")])
         for nome in self.cadeias[tarefa]:
             provedor = self.provedores[nome]
             if nome in excluir:
                 tentativas.append(Tentativa(nome, "pulado", "excluído nesta chamada"))
                 continue
-            chave = self._chave_cache(nome, provedor, kwargs)
-            guardado = self._do_cache(chave, kwargs, validar)
-            if guardado is not None:
-                tentativas.append(Tentativa(nome, "cache"))
-                return Resultado(guardado[0], nome, tentativas)
+            chave = chaves[nome] if nome in chaves else self._chave_cache(nome, provedor, kwargs)
             motivo = provedor.configurado() or self._em_descanso(nome)
             if motivo:
                 tentativas.append(Tentativa(nome, "pulado", motivo))
@@ -110,7 +116,7 @@ class Roteador:
         from .banco import chave_cache
 
         try:
-            return chave_cache(nome, provedor.modelo, kwargs)
+            return chave_cache(nome, provedor.modelo, kwargs, provedor.cfg)
         except (OSError, TypeError, ValueError):
             return None
 

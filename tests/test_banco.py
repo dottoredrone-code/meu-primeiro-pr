@@ -88,26 +88,33 @@ class TestEsquema(unittest.TestCase):
     def test_migracao_nova_e_aplicada_em_banco_existente(self):
         with tempfile.TemporaryDirectory() as d:
             Banco(Path(d) / "t.db").fechar()
-            nova = banco_mod.MIGRACOES + ["ALTER TABLE projetos ADD COLUMN idioma TEXT DEFAULT 'pt-BR'"]
+            nova = banco_mod.MIGRACOES + [["ALTER TABLE projetos ADD COLUMN idioma TEXT DEFAULT 'a;b'"]]
             with mock.patch.object(banco_mod, "MIGRACOES", nova):
                 db = Banco(Path(d) / "t.db")
                 self.assertEqual(db.versao, len(nova))
                 pid = db.criar_projeto("x")
-                self.assertEqual(db.projeto(pid)["idioma"], "pt-BR")
+                self.assertEqual(db.projeto(pid)["idioma"], "a;b")  # ";" dentro de texto não quebra
                 db.fechar()
 
     def test_migracao_com_erro_nao_fica_pela_metade(self):
-        quebrada = banco_mod.MIGRACOES + ["CREATE TABLE t1 (a); CREATE TABLE projetos (b)"]
-        with mock.patch.object(banco_mod, "MIGRACOES", quebrada):
-            with tempfile.TemporaryDirectory() as d:
+        quebrada = banco_mod.MIGRACOES + [["CREATE TABLE t1 (a)", "CREATE TABLE projetos (b)"]]
+        with tempfile.TemporaryDirectory() as d:
+            with mock.patch.object(banco_mod, "MIGRACOES", quebrada):
                 with self.assertRaises(Exception):
                     Banco(Path(d) / "t.db")
-                with mock.patch.object(banco_mod, "MIGRACOES", banco_mod.MIGRACOES[:1]):
-                    db = Banco(Path(d) / "t.db")
-                self.assertEqual(db.versao, 1)
-                tabelas = {r[0] for r in db.con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-                self.assertNotIn("t1", tabelas)
-                db.fechar()
+            db = Banco(Path(d) / "t.db")
+            self.assertEqual(db.versao, len(banco_mod.MIGRACOES))
+            tabelas = {r[0] for r in db.con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            self.assertNotIn("t1", tabelas)
+            db.fechar()
+
+    def test_banco_mais_novo_que_o_programa_avisa(self):
+        with tempfile.TemporaryDirectory() as d:
+            db = Banco(Path(d) / "t.db")
+            db.con.execute("PRAGMA user_version = 99")
+            db.fechar()
+            with self.assertRaisesRegex(RuntimeError, "mais nova que este programa"):
+                Banco(Path(d) / "t.db")
 
     def test_cenas_salvas_e_substituidas(self):
         db = Banco()
@@ -129,7 +136,8 @@ class TestRetomada(unittest.TestCase):
             pecas = []
             for i, p in enumerate(prompts, 1):
                 peca, _ = db.produzir(pid, "roteiro", f"cena{i}",
-                                      lambda p=p: loop.executar("roteiro", "roteiro", lambda fb, p=p: {"prompt": p}))
+                                      lambda refazer, p=p: loop.executar("roteiro", "roteiro", lambda fb, p=p: {"prompt": p},
+                                                                         refazer=refazer))
                 pecas.append(peca)
             return pecas
 
@@ -147,7 +155,7 @@ class TestRetomada(unittest.TestCase):
         db = Banco()
         pid = db.criar_projeto("x")
         loop, gen, _ = montar(db, juiz=JuizFixo(40))
-        fazer = lambda: loop.executar("roteiro", "roteiro", lambda fb: {"prompt": "p"})
+        fazer = lambda refazer: loop.executar("roteiro", "roteiro", lambda fb: {"prompt": "p"}, refazer=refazer)
         peca, reaproveitada = db.produzir(pid, "roteiro", "r", fazer)
         self.assertEqual((peca["status"], peca["revisar_manual"], reaproveitada), ("revisar", True, False))
         n = len(gen.chamadas)
@@ -158,6 +166,39 @@ class TestRetomada(unittest.TestCase):
         self.assertGreater(len(gen.chamadas), n)
         # 2 + 2 (um gerador só: sai da peça após 2 reprovações), numeradas em sequência
         self.assertEqual([t["numero"] for t in db.tentativas(pid, chave="r")], [1, 2, 3, 4])
+
+    def test_erro_na_avaliacao_guarda_o_custo_pago(self):
+        db = Banco()
+        pid = db.criar_projeto("x")
+        loop, _, _ = montar(db)
+
+        def checar(valor):
+            raise RuntimeError("checagem quebrou")
+
+        peca, _ = db.produzir(pid, "roteiro", "r", lambda refazer: loop.executar(
+            "roteiro", "roteiro", lambda fb: {"prompt": "p"}, checar=checar))
+        self.assertEqual(peca["status"], "revisar")
+        self.assertEqual(db.custo_projeto(pid)["total"], 0.1)
+        t = db.tentativas(pid)[0]
+        self.assertEqual(t["modelo"], "m1")
+        self.assertIn("checagem quebrou", t["erro"])
+
+    def test_cada_tentativa_grava_seu_arquivo_e_a_escolhida_vai_para_a_saida(self):
+        with tempfile.TemporaryDirectory() as d:
+            img = Arquivo()
+            juiz = JuizFixo()
+            notas = iter([60, 65, 50])
+            juiz.executar = lambda prompt, sistema=None: nota(next(notas))
+            rt = Roteador({"img": img, "juiz": juiz}, {"imagem": ["img"], "juiz": ["juiz"]}, orcamento=Orcamento())
+            cfg = {"imagem": {"nota_minima": 70, "criterios": CRITERIOS}}
+            loop = LoopCorrecao(rt, Avaliador(rt, cfg), tentativas_por_provedor=5, tentativas_totais=3)
+            saida = Path(d) / "cena1.png"
+            r = loop.executar("imagem", "imagem", lambda fb: {"prompt": "tentativa " + ("2" if fb else "1"),
+                                                               "saida": saida})
+            self.assertEqual(r.valor, saida)
+            self.assertEqual(r.nota, 65.0)
+            self.assertEqual(saida.read_bytes(), r.tentativas[1].valor.read_bytes())
+            self.assertEqual(len({t.valor for t in r.tentativas}), 3)
 
     def test_arquivo_apagado_obriga_a_refazer(self):
         with tempfile.TemporaryDirectory() as d:
@@ -176,7 +217,7 @@ class TestRetomada(unittest.TestCase):
         db = Banco()
         pid = db.criar_projeto("x")
         loop, _, _ = montar(db)
-        db.produzir(pid, "roteiro", "r", lambda: loop.executar("roteiro", "roteiro", lambda fb: {"prompt": "p"}))
+        db.produzir(pid, "roteiro", "r", lambda refazer: loop.executar("roteiro", "roteiro", lambda fb: {"prompt": "p"}))
         custo = db.custo_projeto(pid)
         self.assertEqual(custo, {"total": 0.11, "por_etapa": {"roteiro": 0.11},
                                  "por_provedor": {"gen": 0.1, "juiz": 0.01}})
@@ -238,6 +279,51 @@ class TestCache(unittest.TestCase):
         with self.assertRaises(Exception):
             rt.executar("t", prompt="p", validar=exigir_json)
         self.assertEqual(len(gen.chamadas), 2)
+
+    # Regressões da verificação independente (K24)
+    def test_refazer_peca_rejeitada_nao_devolve_o_mesmo_resultado_do_cache(self):
+        db = Banco()
+        pid = db.criar_projeto("x")
+        loop, gen, _ = montar(db, juiz=JuizFixo(40), cache=True)
+        fazer = lambda refazer: loop.executar("roteiro", "roteiro", lambda fb: {"prompt": "p"}, refazer=refazer)
+        db.produzir(pid, "roteiro", "r", fazer)
+        n = len(gen.chamadas)
+        db.produzir(pid, "roteiro", "r", fazer, aceitar_revisar=False)
+        self.assertGreater(len(gen.chamadas), n)
+        self.assertEqual(gen.chamadas[n], "p")  # o mesmo pedido foi ao gerador, não ao cache
+
+    def test_mudar_config_do_provedor_muda_a_chave(self):
+        db = Banco()
+        gen = Texto("gen")
+        rt = Roteador({"gen": gen}, {"t": ["gen"]}, orcamento=Orcamento(), cache=db)
+        rt.executar("t", prompt="p")
+        gen.cfg["voz"] = "outra"
+        r = rt.executar("t", prompt="p")
+        self.assertEqual(len(gen.chamadas), 2)
+        self.assertEqual(r.tentativas[-1].status, "ok")
+        gen.cfg["timeout"] = 999  # não muda o resultado: continua no cache
+        self.assertEqual(rt.executar("t", prompt="p").tentativas[-1].status, "cache")
+
+    def test_cache_de_qualquer_provedor_da_cadeia_vale_antes_de_pagar(self):
+        db = Banco()
+        a, b = Texto("a"), Texto("b")
+        rt = Roteador({"a": a, "b": b}, {"t": ["a", "b"]}, orcamento=Orcamento(), cache=db, repeticoes=0)
+        a.configurado = lambda: "fora do ar"  # a indisponível: b gera e guarda
+        rt.executar("t", prompt="p")
+        a.configurado = lambda: None  # a voltou
+        r = rt.executar("t", prompt="p")
+        self.assertEqual((r.provedor, r.tentativas[-1].status, len(a.chamadas)), ("b", "cache", 0))
+
+    def test_saida_igual_ao_arquivo_do_cache(self):
+        with tempfile.TemporaryDirectory() as d:
+            db = Banco(Path(d) / "t.db")
+            img = Arquivo()
+            rt = Roteador({"img": img}, {"imagem": ["img"]}, orcamento=Orcamento(), cache=db)
+            rt.executar("imagem", prompt="x", saida=Path(d) / "a.png")
+            guardado = next((Path(d) / "cache").iterdir())
+            r = rt.executar("imagem", prompt="x", saida=guardado)
+            self.assertEqual((img.chamadas, r.tentativas[-1].status), (1, "cache"))
+            db.fechar()
 
     def test_provedor_pode_desligar_o_cache(self):
         db = Banco()
