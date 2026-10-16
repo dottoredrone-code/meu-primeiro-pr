@@ -23,12 +23,15 @@ SISTEMA_PESQUISA = (
     "Use colchetes só para citações. Não invente fontes nem números de citação."
 )
 # Regra positiva: colchetes são reservados para citações — TODO número dentro deles é conferido
-# ([1 e 9], [9a], [ref. 9], [^9], 【9】). Link markdown "[texto](url)" fica de fora.
-_COLCHETES = re.compile(r"[\[【]([^\[\]【】]*)[\]】](?!\()")
+# ([1 e 9], [9a], [ref. 9], [^9], 【9】, [9](url)). Só fica de fora o link markdown com texto: "[site](url)".
+_COLCHETES = re.compile(r"[\[【［〔]([^\[\]【】［］〔〕]*)[\]】］〕](\()?")
+_SO_CITACAO = re.compile(r"[\s\d,;e\-–^]*")
 _FAIXA = re.compile(r"(\d+)\s*[\-–]\s*(\d+)")
 # Entre parênteses, só o que é claramente citação: "(fonte: 9)", "(fontes 2, 3)" ou lista "(9, 10)".
 # "(1)" sozinho (lista numerada), sobrescritos (m², 10⁸) e "fonte 2 de energia" não são citação.
-_PARENTESES = re.compile(r"\(\s*(?:fontes?\s*:?\s*(\d+(?:\s*[,;e]\s*\d+)*)|(\d+(?:\s*[,;]\s*\d+)+))\s*\)", re.I)
+# A lista exige números de 1–2 dígitos e vírgula seguida de espaço: (0,9) é decimal e (2023, 2024) são anos.
+_PARENTESES = re.compile(r"\(\s*(?:fontes?\s*:?\s*(\d+(?:\s*[,;e]\s*\d+)*)|(\d{1,2}(?:\s*;\s*\d{1,2}|,\s+\d{1,2})+))\s*\)",
+                         re.I)
 _MARCA = re.compile(r"<\s*/?\s*fontes?\s*>", re.I)
 _SUFIXOS_PAIS = {"com", "org", "gov", "edu", "net", "co", "ac", "art", "jus", "mil"}
 
@@ -61,7 +64,9 @@ def citacoes(texto):
     """Números citados: tudo entre colchetes e as citações explícitas entre parênteses."""
     texto = str(texto)
     numeros = []
-    for grupo in _COLCHETES.findall(texto):
+    for grupo, link in _COLCHETES.findall(texto):
+        if link and not _SO_CITACAO.fullmatch(grupo):
+            continue  # [texto do link](url): não é citação
         numeros += _numeros(grupo)
     for explicito, lista in _PARENTESES.findall(texto):
         numeros += _numeros(explicito or lista)

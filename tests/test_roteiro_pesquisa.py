@@ -165,7 +165,8 @@ class TestCitacoes(unittest.TestCase):
             with self.subTest(texto=texto):
                 self.assertIn("não existe", " ".join(checar_citacoes(texto, F2)))
         for texto in ("A [1]. B [2]. C [1 e 9].", "A [1][2] [^9]", "A [1][2] (9, 10)", "A [1][2] 【9】",
-                      "A [1][2] [9a]", "A [1][2] [ref. 9]", "A [1][2] (fonte: 9)"):
+                      "A [1][2] [9a]", "A [1][2] [ref. 9]", "A [1][2] (fonte: 9)", "A [1]. B [2]. C [9](https://x.com).",
+                      "A [1][2] ［9］", "A [1][2] 〔9〕"):
             with self.subTest(texto=texto):
                 self.assertIn("não existe", " ".join(checar_citacoes(texto, F2)))
         self.assertEqual(sorted(set(citacoes("a [1, 2] b [2-3] c [texto](https://x.com) d [ 4 ]"))), [1, 2, 3, 4])
@@ -175,7 +176,9 @@ class TestCitacoes(unittest.TestCase):
         for texto in ("Apartamento de 50 m² [1][2].", "A luz anda a 3×10⁸ m/s [1][2].",
                       "Os passos: (1) ferver [1]; (2) servir [2].", "O capítulo (3) explica [1][2].",
                       "A fonte 2 de energia mais usada [1][2].", "Fontes 3 vezes mais ricas [1][2].",
-                      "Em 2024 (ano) houve alta [1][2]."):
+                      "Em 2024 (ano) houve alta [1][2].", "Cresceu nos anos (2023, 2024) [1][2].",
+                      "O índice ficou em (0,9) [1][2].", "Fica em (23,55, 46,63) [1][2].",
+                      "Veja [o guia](https://x.com) [1][2]."):
             with self.subTest(texto=texto):
                 self.assertEqual(checar_citacoes(texto, F2), [])
 
