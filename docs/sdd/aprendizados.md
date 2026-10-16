@@ -85,3 +85,11 @@
   (ou num registro próprio), senão o banco mostra menos do que foi pago.
 - **Fatos travados valem para o que vira imagem:** o prompt de imagem também não pode inventar preço ou link.
 - 4 rodadas de verificação no K16; o K15 aprovado na 1ª.
+
+## Camada 4 — Aprendizados para o Cérebro: K27 (16/10/2026)
+- **Anti-alucinação vale para as nossas próprias estatísticas:** a 1ª versão contava tentativas "sem juiz"
+  como aprovadas e recomendava provedores sem nenhuma avaliação; também transformava falha de chave/limite em
+  "problema do prompt". Regra: só tentativa **julgada** entra em aprovação, recomendação e problemas; o resto
+  só soma custo.
+- **Amostra pequena engana:** escolher o melhor provedor pelo limite inferior de Wilson (3/3 não vence 48/50).
+- Camada 4 concluída: banco, perfis, biblioteca e Cérebro.

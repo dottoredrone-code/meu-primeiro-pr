@@ -32,11 +32,11 @@
 | K25 | Biblioteca de mídia por hash, licença obrigatória, busca por etiqueta, procedência e etiquetas por perfil | [05](docs/sdd/05-dados-seguranca-memoria.md) · [11](docs/sdd/11-banco-midia-gratuita.md) |
 | K15 | Roteiro em JSON com clima e sons por cena (esquema + régua + fatos travados + perfil) | [03](docs/sdd/03-parametros-avaliacao.md) |
 | K16 | Pesquisa com fontes delimitadas e citações sempre conferidas (2 domínios) | [03](docs/sdd/03-parametros-avaliacao.md) |
+| K27 | Aprendizados de produção para o Cérebro (só tentativas julgadas; instruções positivas com números) | D16 |
 
 ## 🔍 Em verificação
 | ID | Cartão | Spec |
 |---|---|---|
-| K27 | Exportar aprendizados para o Cérebro | D16 |
 | K20 | Mídia em 3 camadas: acervo local + Pexels/Pixabay/Freesound/Openverse, com licença por arquivo | [11](docs/sdd/11-banco-midia-gratuita.md) · D18 |
 | K06 | Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) — código pronto; falta o teste real no PC (`docs/teste-real.md`) | [10](docs/sdd/10-percepcao.md) |
 
@@ -73,7 +73,7 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 | K23 | Exportação para CapCut (pasta com clipes, áudios e legendas) | D5 | K22 | Abre no CapCut sem retrabalho |
 
 ### Camada 4 — Dados e memória (pode começar junto com a Camada 1)
-K24, K25 e K26 prontos em 16/10/2026. Falta o K27 (aprendizados para o Cérebro).
+✅ Concluída em 16/10/2026 (K24–K27).
 
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
