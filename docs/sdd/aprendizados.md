@@ -59,3 +59,17 @@
 - **Um arquivo com defeito não derruba os outros:** vai para `Perfis.erros` com o motivo em pt-BR.
 - **Perfis ficam em `dados/perfis/` (fora do Git):** nenhum dado de projeto real entra no repositório (D9).
 - 2 rodadas de verificação.
+
+## Camada 4 — Biblioteca de mídia: K25 (16/10/2026)
+- **Licença: aceitar só o que se conhece.** Lista de aceitas + lista de bloqueadas com motivo; o resto é
+  recusado como "desconhecida". ~55 variantes de "não comercial" testadas pelo verificador: nenhuma passou.
+- **Conteúdo é global, procedência é por perfil:** o arquivo (hash) é guardado uma vez, mas fonte, autor,
+  licença, prompt e etiquetas ficam na ligação perfil↔ativo. A 1ª versão guardava isso no ativo e um perfil
+  via o prompt e as etiquetas do outro — e perdia o próprio crédito CC-BY.
+- **Gravação segura:** cópia para `.parcial` e troca de nome; destino corrompido é copiado de novo; falha no
+  banco apaga o arquivo recém-criado (sem órfãos); corrida entre processos vira duplicata.
+- 3 rodadas de verificação (aprovado já na 1ª pelos critérios; as outras fecharam vazamentos entre perfis).
+
+## Fim da Camada 4 (dados) — resumo para o Cérebro
+- Banco local, perfis e biblioteca prontos: retomada sem pagar de novo, cache, custo real, perfis isolados
+  e mídia com licença. Padrão que funcionou: **todo dado por perfil passa por testes de vazamento**.

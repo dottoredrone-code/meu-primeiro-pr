@@ -29,11 +29,10 @@
 | K09 | Loop de correção: refaz só a peça, feedback delimitado, limites, teto de custo, melhor tentativa | [01](docs/sdd/01-controle-qualidade.md) |
 | K24 | SQLite: projetos, peças, tentativas, avaliações, custo; retomada sem pagar de novo e cache | [05](docs/sdd/05-dados-seguranca-memoria.md) · D6 |
 | K26 | Perfis por projeto que não se misturam (estilo, voz, formato, kit visual, memória; ligação com o Hermes) | D11 · D13 |
+| K25 | Biblioteca de mídia por hash, licença obrigatória, busca por etiqueta, procedência e etiquetas por perfil | [05](docs/sdd/05-dados-seguranca-memoria.md) · [11](docs/sdd/11-banco-midia-gratuita.md) |
 
 ## 🔍 Em verificação
-| ID | Cartão | Spec |
-|---|---|---|
-| K25 | Biblioteca por hash com licença obrigatória e busca por etiqueta | [05](docs/sdd/05-dados-seguranca-memoria.md) · [11](docs/sdd/11-banco-midia-gratuita.md) |
+_(vazio)_
 
 ## 🛠️ Em andamento
 _(vazio)_
@@ -72,6 +71,8 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 | K23 | Exportação para CapCut (pasta com clipes, áudios e legendas) | D5 | K22 | Abre no CapCut sem retrabalho |
 
 ### Camada 4 — Dados e memória (pode começar junto com a Camada 1)
+K24, K25 e K26 prontos em 16/10/2026. Falta o K27 (aprendizados para o Cérebro).
+
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
 | K27 | Exportar aprendizados para o Cérebro | D16 | K10 | Resumo gerado no formato do Cérebro |
