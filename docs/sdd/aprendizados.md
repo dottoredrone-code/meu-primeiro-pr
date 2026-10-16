@@ -73,3 +73,15 @@
 ## Fim da Camada 4 (dados) — resumo para o Cérebro
 - Banco local, perfis e biblioteca prontos: retomada sem pagar de novo, cache, custo real, perfis isolados
   e mídia com licença. Padrão que funcionou: **todo dado por perfil passa por testes de vazamento**.
+
+## Camada 3 — Roteiro e pesquisa: K15, K16 (16/10/2026)
+- **Citação: regra positiva de novo.** Listar formatos proibidos falhou duas vezes (deixava `[1 e 9]` passar e
+  reprovava `m²` e listas `(1)`). O que funcionou: colchetes são reservados para citações e TODO número dentro
+  deles é conferido; entre parênteses só conta citação explícita. Mesma lição do K08.
+- **Todo texto vindo da web é dado, em qualquer canal:** fontes no prompt do pesquisador, pesquisa no prompt
+  do roteirista e contexto do juiz — todos delimitados, com marcas neutralizadas em qualquer variante
+  (maiúsculas, espaços) e o texto achatado numa linha (senão um trecho forja "[2] fonte falsa").
+- **Custo fora do loop também conta:** a busca roda antes do loop; o gasto dela entra na 1ª tentativa
+  (ou num registro próprio), senão o banco mostra menos do que foi pago.
+- **Fatos travados valem para o que vira imagem:** o prompt de imagem também não pode inventar preço ou link.
+- 4 rodadas de verificação no K16; o K15 aprovado na 1ª.

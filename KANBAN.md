@@ -30,12 +30,11 @@
 | K24 | SQLite: projetos, peças, tentativas, avaliações, custo; retomada sem pagar de novo e cache | [05](docs/sdd/05-dados-seguranca-memoria.md) · D6 |
 | K26 | Perfis por projeto que não se misturam (estilo, voz, formato, kit visual, memória; ligação com o Hermes) | D11 · D13 |
 | K25 | Biblioteca de mídia por hash, licença obrigatória, busca por etiqueta, procedência e etiquetas por perfil | [05](docs/sdd/05-dados-seguranca-memoria.md) · [11](docs/sdd/11-banco-midia-gratuita.md) |
+| K15 | Roteiro em JSON com clima e sons por cena (esquema + régua + fatos travados + perfil) | [03](docs/sdd/03-parametros-avaliacao.md) |
+| K16 | Pesquisa com fontes delimitadas e citações sempre conferidas (2 domínios) | [03](docs/sdd/03-parametros-avaliacao.md) |
 
 ## 🔍 Em verificação
-| ID | Cartão | Spec |
-|---|---|---|
-| K15 | Roteiro em JSON com clima e sons por cena | [03](docs/sdd/03-parametros-avaliacao.md) |
-| K16 | Pesquisa com fontes e checagem de citações | [03](docs/sdd/03-parametros-avaliacao.md) |
+_(vazio)_
 
 ## 🛠️ Em andamento
 _(vazio)_
