@@ -23,20 +23,46 @@ class RelatorioQualidade:
             "avaliacao": avaliacao.como_dict() if hasattr(avaliacao, "como_dict") else avaliacao,
         })
 
+    def registrar_final(self, etapa, peca, resultado):
+        """Decisão do loop de correção para a peça: tentativa escolhida, aprovado, revisar_manual e motivo."""
+        escolhida = next((t.numero for t in resultado.tentativas if t.valor is resultado.valor
+                          and t.avaliacao is resultado.avaliacao), None)
+        av = resultado.avaliacao
+        self.entradas.append({
+            "quando": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "etapa": etapa,
+            "peca": peca,
+            "final": True,
+            "tentativa_escolhida": escolhida,
+            "provedor": resultado.provedor,
+            "aprovado": resultado.aprovado,
+            "revisar_manual": resultado.revisar_manual,
+            "motivo": resultado.motivo,
+            "custo_usd": 0.0,
+            "avaliacao": av.como_dict() if hasattr(av, "como_dict") else av,
+        })
+
     def resumo(self, orcamento=None):
         finais = {}
-        for e in self.entradas:  # a última tentativa de cada peça é a que vale
-            finais[(e["etapa"], e["peca"])] = e
-        avaliacoes = [e["avaliacao"] for e in finais.values() if e["avaliacao"]]
-        notas = [a["nota"] for a in avaliacoes if a.get("nota") is not None]
-        custo = orcamento.gasto_usd if orcamento is not None else sum(e["custo_usd"] for e in self.entradas)
+        for e in self.entradas:  # vale a decisão final do loop; sem ela, a última tentativa da peça
+            chave = (e["etapa"], e["peca"])
+            if e.get("final") or not finais.get(chave, {}).get("final"):
+                finais[chave] = e
+        tentativas = [e for e in self.entradas if not e.get("final")]
+
+        def campo(e, nome):
+            return e[nome] if nome in e else (e["avaliacao"] or {}).get(nome)
+
+        avaliadas = [e for e in finais.values() if e["avaliacao"] or e.get("final")]
+        notas = [e["avaliacao"]["nota"] for e in avaliadas if e["avaliacao"] and e["avaliacao"].get("nota") is not None]
+        custo = orcamento.gasto_usd if orcamento is not None else sum(e["custo_usd"] for e in tentativas)
         return {
             "projeto": self.projeto,
             "pecas": len(finais),
-            "tentativas": len(self.entradas),
-            "aprovadas": sum(1 for a in avaliacoes if a.get("aprovado")),
-            "reprovadas": sum(1 for a in avaliacoes if not a.get("aprovado")),
-            "revisar_manual": sum(1 for a in avaliacoes if a.get("revisar_manual")),
+            "tentativas": len(tentativas),
+            "aprovadas": sum(1 for e in avaliadas if campo(e, "aprovado")),
+            "reprovadas": sum(1 for e in avaliadas if not campo(e, "aprovado")),
+            "revisar_manual": sum(1 for e in avaliadas if campo(e, "revisar_manual")),
             "nota_media": round(sum(notas) / len(notas), 1) if notas else None,
             "custo_total_usd": round(custo, 4),
             "teto_usd": getattr(orcamento, "teto_usd", None),
