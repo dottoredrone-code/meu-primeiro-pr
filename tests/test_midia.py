@@ -108,6 +108,26 @@ class TestBuscarMidia(unittest.TestCase):
         ativo = buscar_midia(self.roteador(fonte), self.bib, "chá", baixar_arquivo=lambda url: next(conteudos))
         self.assertEqual(self.bib.caminho(ativo).read_bytes(), b"dois")
 
+    # Regressões da verificação independente (K20)
+    def test_download_falhou_em_tudo_tenta_a_proxima_fonte(self):
+        a = FonteFalsa("pixabay_midia", [[candidato("pixabay", url="https://pixabay.com/get/vencido.jpg")]])
+        b = FonteFalsa("openverse_midia", [[candidato("cc0", url="https://upload.wikimedia.org/ok.jpg")]])
+
+        def baixar(url):
+            if "vencido" in url:
+                raise ErroProvedor("HTTP 403 no download")
+            return b"imagem"
+
+        ativo = buscar_midia(self.roteador(a, b), self.bib, "chá", baixar_arquivo=baixar)
+        self.assertEqual((ativo["provedor"], len(b.pedidos)), ("openverse_midia", 1))
+
+    def test_pagina_html_e_extensao_estranha(self):
+        fonte = FonteFalsa("openverse_midia", [[candidato("cc0", url="https://upload.wikimedia.org/a.jpg"),
+                                                 candidato("cc0", url="https://upload.wikimedia.org/b.svg")]])
+        respostas = iter([b"<!DOCTYPE html><html>erro</html>", b"bytes da imagem"])
+        ativo = buscar_midia(self.roteador(fonte), self.bib, "chá", baixar_arquivo=lambda url: next(respostas))
+        self.assertEqual((ativo["tipo"], Path(ativo["caminho"]).suffix), ("imagem", ".jpg"))
+
     def test_dominios_das_fontes_estao_liberados(self):
         from torralles_studio.config import carregar_config
 
@@ -142,6 +162,9 @@ class TestProvedores(unittest.TestCase):
             {"url": "https://upload.wikimedia.org/a.jpg", "license": "by-sa", "creator": "c"},
             {"url": "https://upload.wikimedia.org/b.jpg", "license": "pdm", "creator": "d"}]})
         self.assertEqual([c["licenca"] for c in r], ["cc-by-sa", "cc0"])
+        r, _ = self.chamar(OpenverseMidia("o", {}), {"results": [{"url": "https://upload.wikimedia.org/c.jpg", "license": None}]})
+        self.assertIsNone(r[0]["licenca"])
+        self.assertEqual(candidatos_aceitos(r), [])  # sem licença clara: bloqueado, nunca CC0
         self.assertIn("license_type=commercial%2Cmodification", url)
         r, _ = self.chamar(FreesoundMidia("f", {}), {"results": [
             {"name": "passos", "username": "u", "license": "http://creativecommons.org/publicdomain/zero/1.0/",
@@ -149,6 +172,31 @@ class TestProvedores(unittest.TestCase):
             {"name": "sem prévia", "license": "x", "previews": {}}]}, tipo="audio")
         self.assertEqual(len(r), 1)
         self.assertEqual(candidatos_aceitos(r)[0]["licenca"], "cc0")
+
+    def test_pixabay_video_sem_large_usa_medium(self):
+        r, _ = self.chamar(PixabayMidia("p", {}), {"hits": [{"user": "u", "pageURL": "https://pixabay.com/v", "tags": "",
+                                                             "videos": {"large": {"url": "", "size": 0},
+                                                                        "medium": {"url": "https://cdn.pixabay.com/m.mp4", "width": 1920}}}]},
+                           tipo="video")
+        self.assertEqual(r[0]["url"], "https://cdn.pixabay.com/m.mp4")
+
+    def test_pexels_ignora_hls_e_freesound_usa_cabecalho(self):
+        p = PexelsMidia("p", {})
+        r, _ = self.chamar(p, {"videos": [{"video_files": [{"link": "https://player.vimeo.com/x.m3u8", "file_type": "video/hls", "width": None},
+                                                           {"link": "https://videos.pexels.com/a.mp4", "file_type": "video/mp4", "width": 1080, "height": 1920}],
+                                           "user": {"name": "u"}}]}, tipo="video")
+        self.assertEqual(r[0]["url"], "https://videos.pexels.com/a.mp4")
+        f = FreesoundMidia("f", {"chave_env": "FREESOUND_API_KEY"})
+        with mock.patch("torralles_studio.provedores.midia.get_json", return_value={"results": [
+                {"previews": {"preview-hq-mp3": "https://cdn.freesound.org/1.mp3"}, "license": "x"}]}) as get, \
+             mock.patch.dict("os.environ", {"FREESOUND_API_KEY": "segredo123456"}):
+            f.executar("chá", tipo="audio")
+        self.assertNotIn("segredo", get.call_args[0][0])
+        self.assertEqual(get.call_args[0][1], {"Authorization": "Token segredo123456"})
+
+    def test_texto_misto_de_licenca_nao_usa_o_link(self):
+        from torralles_studio.biblioteca import normalizar_licenca
+        self.assertEqual(normalizar_licenca("CC BY-NC see creativecommons.org/licenses/by/4.0/")[:8], "cc-by-nc")
 
     def test_tipo_nao_suportado_e_sem_resultados(self):
         with self.assertRaises(ErroProvedor):

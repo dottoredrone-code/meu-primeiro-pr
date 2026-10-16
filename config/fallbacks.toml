@@ -189,18 +189,22 @@ timeout = 300
 # Licença conferida em midia.py: aceitas CC0, Pexels, Pixabay e CC-BY (com crédito); o resto é descartado.
 
 [provedores.pexels_midia]
+cache = false  # links temporários e resultados que mudam: sempre busca de novo
 classe = "pexels"
 chave_env = "PEXELS_API_KEY"     # grátis em pexels.com/api
 
 [provedores.pixabay_midia]
+cache = false  # links temporários e resultados que mudam: sempre busca de novo
 classe = "pixabay"
 chave_env = "PIXABAY_API_KEY"    # grátis em pixabay.com/api/docs
 
 [provedores.openverse_midia]
+cache = false  # links temporários e resultados que mudam: sempre busca de novo
 classe = "openverse"
 chave_env = "OPENVERSE_TOKEN"    # opcional: funciona sem, com limite menor
 
 [provedores.freesound_midia]
+cache = false  # links temporários e resultados que mudam: sempre busca de novo
 classe = "freesound"
 chave_env = "FREESOUND_API_KEY"  # grátis em freesound.org/apiv2/apply
 
@@ -231,8 +235,8 @@ cadeia = ["pexels_midia", "pixabay_midia", "openverse_midia"]
 cadeia = ["pexels_midia", "pixabay_midia"]
 
 [tarefas.midia_audio]
-# efeitos sonoros (trilhas: K21)
-cadeia = ["freesound_midia", "openverse_midia"]
+# efeitos sonoros (trilhas: K21). Freesound fora até a decisão D22 (API só para uso não comercial).
+cadeia = ["openverse_midia"]
 
 [tarefas.revisao]
 cadeia = ["claude", "deepseek_reasoner", "gemini_flash", "openai_mini"]

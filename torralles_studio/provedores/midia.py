@@ -44,7 +44,8 @@ class PexelsMidia(Provedor):
                                    "altura": f.get("height"), "tags": []})
         else:
             for v in r.get("videos", []):
-                arquivos = sorted((a for a in v.get("video_files", []) if a.get("link")),
+                arquivos = sorted((a for a in v.get("video_files", []) if a.get("link") and a.get("width")
+                                   and a.get("file_type", "video/mp4") == "video/mp4"),
                                   key=lambda a: abs((a.get("height") or 0) - 1920) if proporcao == "9:16"
                                   else abs((a.get("width") or 0) - 1920))
                 if not arquivos:
@@ -83,7 +84,8 @@ class PixabayMidia(Provedor):
                                    "largura": h.get("imageWidth"), "altura": h.get("imageHeight")})
             else:
                 videos = h.get("videos") or {}
-                v = videos.get("large") or videos.get("medium") or videos.get("small") or {}
+                # "medium" costuma ser 1920 px; "large" (4K) pode vir vazio ({"url": ""}) e é pesado demais
+                v = next((videos[k] for k in ("medium", "large", "small") if (videos.get(k) or {}).get("url")), {})
                 if v.get("url"):
                     candidatos.append({**comum, "url": v["url"], "tipo": "video", "largura": v.get("width"),
                                        "altura": v.get("height"), "duracao": h.get("duration")})
@@ -102,6 +104,8 @@ class OpenverseMidia(Provedor):
         if tipo not in ("imagem", "audio"):
             raise ErroProvedor("Openverse só tem imagem e áudio")
         params = {"q": consulta, "page_size": max_resultados, "license_type": "commercial,modification"}
+        if tipo == "audio":  # fontes cujos arquivos ficam em domínios liberados e com licença clara
+            params["source"] = "freesound,wikimedia_audio"
         if tipo == "imagem" and proporcao in ("9:16", "4:5"):
             params["aspect_ratio"] = "tall"
         elif tipo == "imagem" and proporcao == "16:9":
@@ -111,7 +115,9 @@ class OpenverseMidia(Provedor):
         r = get_json(f"https://api.openverse.org/v1/{rota}/?{urllib.parse.urlencode(params)}", cab, self.timeout)
         candidatos = []
         for x in r.get("results", []):
-            licenca = f"cc-{x.get('license', '')}" if x.get("license") not in (None, "cc0", "pdm") else "cc0"
+            lic = str(x.get("license") or "").strip().lower()
+            # sem licença = fonte sem licença clara (bloqueada); nunca vira CC0 por padrão
+            licenca = "cc0" if lic in ("cc0", "pdm") else (f"cc-{lic}" if lic else None)
             candidatos.append({"url": x.get("url"), "licenca": licenca, "autor": x.get("creator"),
                                "link": x.get("foreign_landing_url"), "titulo": x.get("title"),
                                "fonte": f"Openverse ({x.get('source') or x.get('provider') or 'origem'})",
@@ -122,17 +128,22 @@ class OpenverseMidia(Provedor):
 
 
 class FreesoundMidia(Provedor):
-    """Efeitos sonoros. Baixa a prévia em alta qualidade (MP3), que não exige login OAuth."""
+    """Efeitos sonoros. Baixa a prévia em alta qualidade (MP3), que não exige login OAuth.
+
+    Atenção (D22): a API do Freesound é grátis só para uso NÃO comercial; uso comercial exige licença deles.
+    Por isso fica fora da cadeia padrão até a decisão do Diego.
+    """
 
     tipo = "midia"
 
     def executar(self, consulta, tipo="audio", max_resultados=5, proporcao=None):
         if tipo != "audio":
             raise ErroProvedor("Freesound só tem áudio")
-        params = {"query": consulta, "page_size": max_resultados, "token": self.chave,
+        params = {"query": consulta, "page_size": max_resultados,
                   "fields": "id,name,username,license,previews,url,duration,tags",
                   "filter": 'license:("Creative Commons 0" OR "Attribution")'}
-        r = get_json(f"https://freesound.org/apiv2/search/text/?{urllib.parse.urlencode(params)}", None, self.timeout)
+        r = get_json(f"https://freesound.org/apiv2/search/text/?{urllib.parse.urlencode(params)}",
+                     {"Authorization": f"Token {self.chave}"}, self.timeout)  # chave no cabeçalho, não na URL
         candidatos = []
         for s in r.get("results", []):
             previa = (s.get("previews") or {}).get("preview-hq-mp3")

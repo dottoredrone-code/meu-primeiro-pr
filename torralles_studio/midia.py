@@ -12,12 +12,13 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .biblioteca import ErroLicenca, conferir_licenca
+from .biblioteca import TIPOS, ErroLicenca, conferir_licenca
 from .rede import ErroProvedor, baixar
 from .roteador import TodosFalharam
 
 _PALAVRAS_VAZIAS = {"de", "da", "do", "das", "dos", "e", "em", "com", "para", "um", "uma", "o", "a", "os", "as",
-                    "no", "na", "nos", "nas", "the", "of", "and", "in", "on", "with"}
+                    "no", "na", "nos", "nas", "por", "pelo", "pela", "pelos", "pelas", "ao", "aos", "ou",
+                    "the", "of", "and", "in", "on", "with"}
 _EXTENSAO = {"imagem": ".jpg", "video": ".mp4", "audio": ".mp3"}
 
 
@@ -54,8 +55,15 @@ def _validar_candidatos(candidatos):
 
 
 def _extensao(url, tipo):
+    """Extensão só se combinar com o tipo pedido (.svg, .php… viram a padrão do tipo)."""
     ext = Path(urlparse(url).path).suffix.lower()
-    return ext if re.fullmatch(r"\.[a-z0-9]{2,4}", ext or "") else _EXTENSAO[tipo]
+    return ext if ext in TIPOS[tipo] else _EXTENSAO[tipo]
+
+
+def _parece_pagina(dados):
+    """Página de erro (HTML) salva como mídia não entra na biblioteca."""
+    inicio = dados[:64].lstrip().lower()
+    return inicio.startswith((b"<!doctype", b"<html", b"<?xml", b"{"))
 
 
 def buscar_midia(roteador, biblioteca, consulta, tipo="imagem", *, perfil=None, proporcao=None, max_resultados=5,
@@ -67,31 +75,38 @@ def buscar_midia(roteador, biblioteca, consulta, tipo="imagem", *, perfil=None, 
         if achados:
             return {**achados[0], "camada": "acervo"}
 
-    try:
-        r = roteador.executar(f"midia_{tipo}", consulta=consulta, tipo=tipo, max_resultados=max_resultados,
-                              proporcao=proporcao, validar=_validar_candidatos)
-    except (TodosFalharam, KeyError) as e:
-        raise SemMidia(f"nenhuma {tipo} com licença aceita para {consulta!r}: {e}") from None
-
-    falhas = []
+    falhas, tentados = [], set()
     with tempfile.TemporaryDirectory() as pasta:
-        for i, c in enumerate(r.valor):
+        while True:  # se nenhum arquivo de uma fonte baixar, tenta a próxima fonte da cadeia
             try:
-                dados = baixar_arquivo(c["url"])
-            except ErroProvedor as e:  # domínio fora da lista, grande demais, rede…
-                falhas.append(f"{c.get('fonte')}: {e}")
-                continue
-            arquivo = Path(pasta) / f"midia_{i}{_extensao(c['url'], tipo)}"
-            arquivo.write_bytes(dados)
-            try:
-                ativo = biblioteca.adicionar(
-                    arquivo, c["licenca"], c.get("fonte") or r.provedor, autor=c.get("autor"), link=c.get("link"),
-                    titulo=c.get("titulo") or consulta, tags=etiquetas + list(c.get("tags") or [])[:10], perfil=perfil,
-                    provedor=r.provedor, parametros={"consulta": consulta, "proporcao": proporcao,
-                                                     "largura": c.get("largura"), "altura": c.get("altura"),
-                                                     "duracao": c.get("duracao")})
-            except ErroLicenca as e:  # dado incompleto da fonte (ex.: link inválido): tenta o próximo
-                falhas.append(f"{c.get('fonte')}: {e}")
-                continue
-            return {**ativo, "camada": "api"}
+                r = roteador.executar(f"midia_{tipo}", consulta=consulta, tipo=tipo, max_resultados=max_resultados,
+                                      proporcao=proporcao, validar=_validar_candidatos, excluir=tentados,
+                                      usar_cache=False)
+            except (TodosFalharam, KeyError) as e:
+                if not falhas:
+                    raise SemMidia(f"nenhuma {tipo} com licença aceita para {consulta!r}: {e}") from None
+                break
+            tentados.add(r.provedor)
+            for i, c in enumerate(r.valor):
+                try:
+                    dados = baixar_arquivo(c["url"])
+                except ErroProvedor as e:  # domínio fora da lista, grande demais, link vencido…
+                    falhas.append(f"{c.get('fonte')}: {e}")
+                    continue
+                if _parece_pagina(dados):
+                    falhas.append(f"{c.get('fonte')}: o link devolveu uma página, não um arquivo")
+                    continue
+                arquivo = Path(pasta) / f"midia_{len(falhas)}_{i}{_extensao(c['url'], tipo)}"
+                arquivo.write_bytes(dados)
+                try:
+                    ativo = biblioteca.adicionar(
+                        arquivo, c["licenca"], c.get("fonte") or r.provedor, autor=c.get("autor"),
+                        link=c.get("link"), titulo=c.get("titulo") or consulta,
+                        tags=etiquetas + list(c.get("tags") or [])[:10], perfil=perfil, provedor=r.provedor,
+                        parametros={"consulta": consulta, "proporcao": proporcao, "largura": c.get("largura"),
+                                    "altura": c.get("altura"), "duracao": c.get("duracao")})
+                except ErroLicenca as e:  # dado incompleto da fonte (ex.: link inválido): tenta o próximo
+                    falhas.append(f"{c.get('fonte')}: {e}")
+                    continue
+                return {**ativo, "camada": "api"}
     raise SemMidia(f"nenhum arquivo pôde ser baixado para {consulta!r}: " + "; ".join(falhas[:3]))

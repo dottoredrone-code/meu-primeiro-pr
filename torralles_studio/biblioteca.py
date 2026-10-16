@@ -67,7 +67,9 @@ def normalizar_licenca(licenca):
     """'CC BY 4.0' → 'cc-by'; 'CC-BY-NC-SA 3.0' → 'cc-by-nc-sa'. Devolve '' se vazio."""
     if not licenca:
         return ""
-    url = re.search(r"creativecommons\.org/(publicdomain/(?:zero|mark)|licenses/([a-z\-]+))", str(licenca).lower())
+    # só quando o campo inteiro é o link (texto misto como "CC BY-NC, veja …/by/" segue a regra do texto)
+    url = re.fullmatch(r"\s*https?://(?:www\.)?creativecommons\.org/(publicdomain/(?:zero|mark)|licenses/([a-z\-]+))"
+                       r"(?:/[\w./-]*)?\s*", str(licenca).lower())
     if url:  # Freesound e outros devolvem a licença como link
         return "cc0" if url.group(1).startswith("publicdomain") else _APELIDOS.get(url.group(2), "cc-" + url.group(2))
     if re.fullmatch(r"\s*creative[\s_-]*commons[\s_-]*(0|zero)\s*", str(licenca), re.I):
