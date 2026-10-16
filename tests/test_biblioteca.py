@@ -49,6 +49,46 @@ class TestSemDuplicatas(BaseBiblioteca):
         caminho.unlink()
         self.assertIn("sumiu", self.bib.verificar()[0])
 
+    def test_destino_corrompido_e_copiado_de_novo(self):
+        import hashlib
+        conteudo = b"conteudo certo"
+        digest = hashlib.sha256(conteudo).hexdigest()
+        destino = self.dir / "biblioteca" / "ativos" / digest[:2] / f"{digest}.png"
+        destino.parent.mkdir(parents=True)
+        destino.write_bytes(b"corrompido")
+        a = self.bib.adicionar(self.arquivo("a.png", conteudo), "cc0", "x")
+        self.assertEqual(self.bib.caminho(a).read_bytes(), conteudo)
+
+    def test_falha_no_banco_nao_deixa_arquivo_orfao(self):
+        from unittest import mock
+        arq = self.arquivo("b.png", b"orfao?")
+        real = self.bib.con
+
+        class ConFalha:
+            def __getattr__(self, nome):
+                return getattr(real, nome)
+
+            def __enter__(self):
+                return real.__enter__()
+
+            def __exit__(self, *a):
+                return real.__exit__(*a)
+
+            def execute(self, sql, *a):
+                if sql.startswith("INSERT INTO ativos"):
+                    raise RuntimeError("disco cheio")
+                return real.execute(sql, *a)
+
+        with mock.patch.object(self.bib, "con", ConFalha()):
+            with self.assertRaisesRegex(RuntimeError, "disco cheio"):
+                self.bib.adicionar(arq, "cc0", "x")
+        self.assertEqual(list((self.dir / "biblioteca" / "ativos").rglob("*.png")), [])
+
+    def test_duplicata_corrige_tipo_desconhecido(self):
+        a = self.bib.adicionar(self.arquivo("x.bin", b"png bytes"), "cc0", "x")
+        self.assertEqual(a["tipo"], "outro")
+        self.assertEqual(self.bib.adicionar(self.arquivo("x.png", b"png bytes"), "cc0", "x")["tipo"], "imagem")
+
     def test_original_pode_ser_apagado(self):
         origem = self.arquivo("v.mp4", b"video")
         a = self.bib.adicionar(origem, "pixabay", "Pixabay")
@@ -83,6 +123,24 @@ class TestLicencaObrigatoria(BaseBiblioteca):
         with self.assertRaisesRegex(ErroLicenca, "fonte"):
             self.bib.adicionar(self.arquivo("a.png", b"a"), "cc0", "  ")
 
+    def test_nomes_oficiais_de_licenca(self):
+        aceitas = {"Pixabay Content License": "pixabay", "Pexels License": "pexels", "CC0 1.0 Universal": "cc0",
+                   "CC BY 4.0 International": "cc-by", "Attribution 4.0 International": "cc-by",
+                   "próprio": "proprio", "CC BY 3.0 BR": "cc-by"}
+        for nome, codigo in aceitas.items():
+            with self.subTest(nome=nome):
+                self.assertEqual(conferir_licenca(nome)[0], codigo)
+        for nome in ("Attribution-NonCommercial 4.0 International", "CC BY‐NC 4.0", "ＣＣ ＢＹ-NC", "personal use",
+                     "Attribution-ShareAlike 4.0"):
+            with self.subTest(nome=nome), self.assertRaises(ErroLicenca):
+                conferir_licenca(nome)
+
+    def test_creditos_limpos_e_link_so_http(self):
+        with self.assertRaisesRegex(ErroLicenca, "http"):
+            self.bib.adicionar(self.arquivo("s.wav", b"s"), "cc-by", "x", autor="Ana", link="javascript:alert(1)")
+        a = self.bib.adicionar(self.arquivo("som da porta.wav", b"porta"), "cc-by", "Freesound", autor="Ana\nSilva")
+        self.assertEqual(self.bib.creditos([a]), "Créditos:\n- som da porta — por Ana Silva — CC BY — Freesound")
+
     def test_normalizacao_de_licencas(self):
         self.assertEqual(normalizar_licenca("CC BY 4.0"), "cc-by")
         self.assertEqual(normalizar_licenca("cc_by_nc_sa_3.0"), "cc-by-nc-sa")
@@ -112,6 +170,12 @@ class TestBusca(BaseBiblioteca):
         self.assertEqual([a["hash"] for a in self.bib.buscar(["Calmo", "chuva"])], [self.chuva["hash"]])
         self.assertEqual(self.bib.buscar(["chu"]), [])  # etiqueta inteira, não pedaço
 
+    def test_busca_ignora_ativo_sem_licenca_aceita(self):
+        with self.banco.con:
+            self.banco.con.execute("UPDATE ativos SET licenca = 'cc-by-nc' WHERE hash = ?", (self.vento["hash"],))
+        self.assertEqual(len(self.bib.buscar(["calmo"])), 2)
+        self.assertIsNone(self.bib.obter(self.vento["hash"]))
+
     def test_tipo_e_texto(self):
         self.assertEqual(len(self.bib.buscar(["calmo"], tipo="audio")), 2)
         self.assertEqual([a["hash"] for a in self.bib.buscar(texto="entardecer")], [self.foto["hash"]])
@@ -124,8 +188,27 @@ class TestBusca(BaseBiblioteca):
         self.assertEqual(self.bib.buscar(["logo"], perfil="loja-b"), [])
         self.assertEqual(self.bib.buscar(["logo"]), [])
         self.assertEqual(len(self.bib.buscar(["calmo"], perfil="loja-b")), 3)  # compartilhados aparecem
-        with self.assertRaisesRegex(ErroLicenca, "outro perfil"):
-            self.bib.adicionar(self.arquivo("copia.png", b"logo A"), "proprio", "x", perfil="loja-b")
+        self.assertIsNone(self.bib.obter(logo["hash"], perfil="loja-b"))
+        self.assertNotIn("perfil", logo)  # o dono não é exposto
+
+    # Regressões da verificação independente (K25)
+    def test_etiquetas_de_um_perfil_nao_vazam_para_outro(self):
+        self.bib.adicionar(self.arquivo("copia-chuva.wav", b"1"), "cc0", "pacote", tags=["segredo-a"], perfil="canal-a")
+        self.assertEqual(self.bib.obter(self.chuva["hash"], perfil="loja-b")["tags"], ["calmo", "chuva"])
+        self.assertEqual(self.bib.obter(self.chuva["hash"], perfil="canal-a")["tags"], ["calmo", "chuva", "segredo-a"])
+        self.assertEqual(self.bib.buscar(["segredo-a"], perfil="loja-b"), [])
+        self.assertEqual(len(self.bib.buscar(["segredo-a", "chuva"], perfil="canal-a")), 1)
+
+    def test_mesmo_arquivo_em_dois_perfis_sem_erro_e_sem_revelar_o_outro(self):
+        a = self.bib.adicionar(self.arquivo("mar.mp4", b"video do mar"), "pexels", "Pexels", tags=["mar"],
+                               perfil="canal-a")
+        b = self.bib.adicionar(self.arquivo("mar2.mp4", b"video do mar"), "pexels", "Pexels", tags=["oceano"],
+                               perfil="loja-b")
+        self.assertEqual(a["hash"], b["hash"])
+        self.assertTrue(b["duplicado"])
+        self.assertEqual(b["tags"], ["oceano"])
+        self.assertEqual(self.bib.obter(a["hash"], perfil="canal-a")["tags"], ["mar"])
+        self.assertEqual(self.bib.buscar(["mar"], perfil="loja-b"), [])
 
 
 class TestConfigDaBiblioteca(unittest.TestCase):

@@ -155,6 +155,13 @@ MIGRACOES = [
         "ALTER TABLE ativos ADD COLUMN perfil TEXT",
         "CREATE INDEX idx_ativos_perfil ON ativos(perfil, tipo)",
     ],
+    # 5 — quem vê cada ativo e com quais etiquetas: '' = compartilhado; perfil = só aquele perfil (D11).
+    # O mesmo arquivo pode servir a vários perfis sem que um veja as etiquetas do outro.
+    [
+        "CREATE TABLE ativo_perfil (hash TEXT NOT NULL REFERENCES ativos(hash) ON DELETE CASCADE, "
+        "perfil TEXT NOT NULL, tags TEXT NOT NULL DEFAULT ',', PRIMARY KEY (hash, perfil))",
+        "INSERT INTO ativo_perfil (hash, perfil, tags) SELECT hash, COALESCE(perfil, ''), COALESCE(tags, ',') FROM ativos",
+    ],
 ]
 # Cada migração é uma lista de comandos (sem partir por ";", que quebraria textos e gatilhos).
 
