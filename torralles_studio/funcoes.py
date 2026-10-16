@@ -67,17 +67,18 @@ def pesquisar(roteador, tema, max_resultados=5):
     """Busca na web e resume com fontes. Sem busca disponível, responde só com o modelo e avisa."""
     tentativas = []
     try:
+        from .pesquisa import fontes_validas
+
         busca = roteador.executar("busca", consulta=tema, max_resultados=max_resultados)
-        fontes = busca.valor
+        fontes = fontes_validas(busca.valor)
         tentativas += busca.tentativas
     except TodosFalharam as e:
         fontes = []
         tentativas += e.tentativas
 
     if fontes:
-        from .pesquisa import SISTEMA_PESQUISA, fontes_validas, montar_prompt
+        from .pesquisa import SISTEMA_PESQUISA, montar_prompt
 
-        fontes = fontes_validas(fontes)
         sintese = roteador.executar("pesquisa", prompt=montar_prompt(tema, fontes), sistema=SISTEMA_PESQUISA)
         return Resultado({"resumo": sintese.valor, "fontes": fontes}, sintese.provedor,
                          tentativas + sintese.tentativas)
