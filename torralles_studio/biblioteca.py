@@ -5,7 +5,8 @@
   licença, data e se permite uso comercial.
 - **Busca por etiqueta** (todas as etiquetas pedidas), tipo e texto.
 - Visibilidade e etiquetas ficam por perfil (tabela ativo_perfil): o mesmo arquivo pode servir a vários
-  perfis, cada um com suas etiquetas, e nenhum vê as etiquetas nem a existência do uso do outro (D11).
+  perfis, cada um com suas etiquetas e sua procedência (fonte, autor, licença, prompt), e nenhum vê o que o
+  outro declarou nem que o outro usa o arquivo (D11). A tabela `ativos` guarda só hash, caminho e tipo.
   Perfil vazio ('') = compartilhado com todos.
 - Créditos automáticos para itens que exigem atribuição (CC-BY).
 """
@@ -143,9 +144,15 @@ class Biblioteca:
         if link and not re.match(r"^https?://\S+$", str(link).strip(), re.I):
             raise ErroLicenca("o link da fonte precisa começar com http:// ou https://")
         dono = perfil or ""
+        procedencia = {
+            "licenca": codigo, "uso_comercial": int(regras["comercial"]), "fonte": str(fonte).strip(),
+            "autor": autor, "link": link, "titulo": titulo, "provedor": provedor, "modelo": modelo,
+            "prompt": prompt, "parametros_json": json.dumps(parametros or {}, ensure_ascii=False, default=str),
+            "criado_em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
         digest = _hash(arquivo)
         if self._linha(digest):
-            return self._duplicata(digest, arquivo, dono, tags)
+            return self._duplicata(digest, arquivo, dono, tags, procedencia)
         relativo = Path("ativos") / digest[:2] / f"{digest}{arquivo.suffix.lower()}"
         destino = self.raiz / relativo
         destino.parent.mkdir(parents=True, exist_ok=True)
@@ -155,20 +162,13 @@ class Biblioteca:
             shutil.copyfile(arquivo, temporario)
             temporario.replace(destino)  # nunca deixa arquivo pela metade com nome final
             criado = True
-        agora = datetime.now(timezone.utc).isoformat(timespec="seconds")
         try:
             with self.con:
-                self.con.execute(
-                    "INSERT INTO ativos (hash, tipo, caminho, provedor, modelo, prompt, parametros_json, licenca, "
-                    "uso_comercial, fonte, tags, criado_em, autor, link, titulo, perfil) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ',', ?, ?, ?, ?, NULL)",
-                    (digest, tipo_do_arquivo(arquivo), relativo.as_posix(), provedor, modelo, prompt,
-                     json.dumps(parametros or {}, ensure_ascii=False, default=str), codigo,
-                     int(regras["comercial"]), str(fonte).strip(), agora, autor, link, titulo))
-                self.con.execute("INSERT INTO ativo_perfil (hash, perfil, tags) VALUES (?, ?, ?)",
-                                 (digest, dono, self._tags_texto(_etiquetas(tags))))
+                self.con.execute("INSERT INTO ativos (hash, tipo, caminho, tags, criado_em) VALUES (?, ?, ?, ',', ?)",
+                                 (digest, tipo_do_arquivo(arquivo), relativo.as_posix(), procedencia["criado_em"]))
+                self._ligar(digest, dono, tags, procedencia)
         except sqlite3.IntegrityError:  # outro processo guardou o mesmo conteúdo agora
-            return self._duplicata(digest, arquivo, dono, tags)
+            return self._duplicata(digest, arquivo, dono, tags, procedencia)
         except Exception:
             if criado:
                 destino.unlink(missing_ok=True)  # sem linha no banco, não deixa arquivo órfão
@@ -177,14 +177,30 @@ class Biblioteca:
         ativo["duplicado"] = False
         return ativo
 
-    def _duplicata(self, digest, arquivo, dono, tags):
+    _COLUNAS = ("licenca", "uso_comercial", "fonte", "autor", "link", "titulo", "provedor", "modelo", "prompt",
+                "parametros_json", "criado_em")
+
+    def _ligar(self, digest, dono, tags, procedencia):
+        """Liga o ativo ao perfil com a procedência que ESTE perfil declarou (não sobrescreve a existente)."""
+        cols = ", ".join(self._COLUNAS)
+        self.con.execute(
+            f"INSERT OR IGNORE INTO ativo_perfil (hash, perfil, tags, {cols}) "
+            f"VALUES (?, ?, ?, {', '.join('?' * len(self._COLUNAS))})",
+            (digest, dono, self._tags_texto(_etiquetas(tags)), *(procedencia[c] for c in self._COLUNAS)))
+
+    def _duplicata(self, digest, arquivo, dono, tags, procedencia):
         linha = self._linha(digest)
         tipo = tipo_do_arquivo(arquivo)
         with self.con:
             if linha["tipo"] == "outro" and tipo != "outro":
                 self.con.execute("UPDATE ativos SET tipo = ? WHERE hash = ?", (tipo, digest))
-            self.con.execute("INSERT OR IGNORE INTO ativo_perfil (hash, perfil, tags) VALUES (?, ?, ',')",
-                             (digest, dono))
+            self._ligar(digest, dono, tags, procedencia)
+            atual = self.con.execute("SELECT licenca FROM ativo_perfil WHERE hash = ? AND perfil = ?",
+                                     (digest, dono)).fetchone()
+            if atual["licenca"] not in LICENCAS:  # linha antiga sem licença aceita: vale a nova, já conferida
+                sets = ", ".join(f"{c} = ?" for c in self._COLUNAS)
+                self.con.execute(f"UPDATE ativo_perfil SET {sets} WHERE hash = ? AND perfil = ?",
+                                 (*(procedencia[c] for c in self._COLUNAS), digest, dono))
         self.adicionar_tags(digest, tags, perfil=dono or None)
         ativo = self.obter(digest, dono or None)
         ativo["duplicado"] = True
@@ -204,39 +220,50 @@ class Biblioteca:
                              (self._tags_texto(novas), digest, dono))
 
     # -- consulta -------------------------------------------------------------
-    _SELECT = ("SELECT a.*, group_concat(l.tags, '') AS tags_visiveis FROM ativos a "
-               "JOIN ativo_perfil l ON l.hash = a.hash WHERE l.perfil IN ('', ?) AND a.licenca IN ({}) ")
-
-    def _sql_base(self):
-        return self._SELECT.format(",".join("?" * len(LICENCAS)))
+    def _linhas_visiveis(self, digest, perfil):
+        sql = (f"SELECT l.*, a.id, a.tipo, a.caminho FROM ativo_perfil l JOIN ativos a ON a.hash = l.hash "
+               f"WHERE l.hash = ? AND l.perfil IN ('', ?) AND l.licenca IN ({','.join('?' * len(LICENCAS))})")
+        return self.con.execute(sql, [digest, perfil or "", *LICENCAS]).fetchall()
 
     def obter(self, digest, perfil=None):
-        """Ativo visível para o perfil (compartilhado ou dele), com as etiquetas que ele pode ver."""
-        sql = self._sql_base() + "AND a.hash = ? GROUP BY a.id"
-        linha = self.con.execute(sql, [perfil or "", *LICENCAS, digest]).fetchone()
-        return self._como_dict(linha) if linha else None
+        """Ativo visível para o perfil: procedência do próprio perfil (ou a compartilhada) e etiquetas que ele vê."""
+        linhas = self._linhas_visiveis(digest, perfil)
+        if not linhas:
+            return None
+        propria = next((l for l in linhas if l["perfil"] == (perfil or "")), linhas[0])
+        d = {k: propria[k] for k in ("id", "hash", "tipo", "caminho", *self._COLUNAS)}
+        d["tags"] = sorted({t for l in linhas for t in l["tags"].split(",") if t})
+        d["parametros"] = json.loads(d.pop("parametros_json") or "{}")
+        d["uso_comercial"] = bool(d["uso_comercial"])
+        return d
 
     def _linha(self, digest):
         return self.con.execute("SELECT * FROM ativos WHERE hash = ?", (digest,)).fetchone()
 
     def buscar(self, tags=(), tipo=None, texto=None, perfil=None, limite=50):
         """Ativos com TODAS as etiquetas pedidas. Mostra os compartilhados e os do perfil, nunca os de outro."""
-        sql, args = self._sql_base(), [perfil or "", *LICENCAS]
+        sql = (f"SELECT a.hash, group_concat(l.tags, '') AS tags_visiveis FROM ativos a "
+               f"JOIN ativo_perfil l ON l.hash = a.hash "
+               f"WHERE l.perfil IN ('', ?) AND l.licenca IN ({','.join('?' * len(LICENCAS))}) ")
+        args = [perfil or "", *LICENCAS]
         if tipo:
             sql, args = sql + "AND a.tipo = ? ", args + [tipo]
+        sql += "GROUP BY a.id "
+        filtros = []
+        for e in _etiquetas(tags):
+            filtros.append("tags_visiveis LIKE ?")
+            args.append(f"%,{e},%")
         if texto:
             alvo = "%" + str(texto).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-            sql += ("AND (COALESCE(a.prompt,'') LIKE ? ESCAPE '\\' OR COALESCE(a.titulo,'') LIKE ? ESCAPE '\\'"
-                    " OR COALESCE(a.autor,'') LIKE ? ESCAPE '\\' OR a.fonte LIKE ? ESCAPE '\\') ")
-            args += [alvo] * 4
-        sql += "GROUP BY a.id "
-        etiquetas = _etiquetas(tags)
-        if etiquetas:
-            sql += "HAVING " + " AND ".join("tags_visiveis LIKE ?" for _ in etiquetas) + " "
-            args += [f"%,{e},%" for e in etiquetas]
+            campos = ("prompt", "titulo", "autor", "fonte")
+            filtros.append("(" + " OR ".join(
+                f"group_concat(COALESCE(l.{c}, ''), char(10)) LIKE ? ESCAPE '\\'" for c in campos) + ")")
+            args += [alvo] * len(campos)
+        if filtros:
+            sql += "HAVING " + " AND ".join(filtros) + " "
         sql += "ORDER BY a.id DESC LIMIT ?"
         args.append(int(limite))
-        return [self._como_dict(l) for l in self.con.execute(sql, args)]
+        return [self.obter(l["hash"], perfil) for l in self.con.execute(sql, args)]
 
     def caminho(self, ativo):
         return self.raiz / ativo["caminho"]
@@ -272,11 +299,3 @@ class Biblioteca:
     def _tags_texto(etiquetas):
         return "," + ",".join(etiquetas) + "," if etiquetas else ","
 
-    @staticmethod
-    def _como_dict(linha):
-        d = dict(linha)
-        d.pop("perfil", None)  # o dono não é exposto: a visibilidade fica em ativo_perfil
-        d["tags"] = sorted({t for t in (d.pop("tags_visiveis", None) or "").split(",") if t})
-        d["parametros"] = json.loads(d.pop("parametros_json") or "{}")
-        d["uso_comercial"] = bool(d["uso_comercial"])
-        return d

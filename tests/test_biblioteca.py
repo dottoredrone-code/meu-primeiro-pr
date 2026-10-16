@@ -172,7 +172,7 @@ class TestBusca(BaseBiblioteca):
 
     def test_busca_ignora_ativo_sem_licenca_aceita(self):
         with self.banco.con:
-            self.banco.con.execute("UPDATE ativos SET licenca = 'cc-by-nc' WHERE hash = ?", (self.vento["hash"],))
+            self.banco.con.execute("UPDATE ativo_perfil SET licenca = 'cc-by-nc' WHERE hash = ?", (self.vento["hash"],))
         self.assertEqual(len(self.bib.buscar(["calmo"])), 2)
         self.assertIsNone(self.bib.obter(self.vento["hash"]))
 
@@ -209,6 +209,27 @@ class TestBusca(BaseBiblioteca):
         self.assertEqual(b["tags"], ["oceano"])
         self.assertEqual(self.bib.obter(a["hash"], perfil="canal-a")["tags"], ["mar"])
         self.assertEqual(self.bib.buscar(["mar"], perfil="loja-b"), [])
+
+    def test_procedencia_de_um_perfil_nao_vaza_e_a_do_outro_vale(self):
+        a = self.bib.adicionar(self.arquivo("logo-secreto.png", b"mesmo conteudo"), "proprio", "produção própria",
+                               prompt="prompt privado A", perfil="canal-a")
+        b = self.bib.adicionar(self.arquivo("foto.png", b"mesmo conteudo"), "CC BY 4.0", "Freesound", autor="Zé",
+                               perfil="loja-b")
+        self.assertEqual(a["hash"], b["hash"])
+        self.assertEqual((b["titulo"], b["prompt"], b["fonte"], b["licenca"], b["autor"]),
+                         ("foto", None, "Freesound", "cc-by", "Zé"))
+        self.assertIn("por Zé", self.bib.creditos([b]))
+        self.assertEqual(self.bib.obter(a["hash"], perfil="canal-a")["prompt"], "prompt privado A")
+        self.assertEqual(self.bib.buscar(texto="privado", perfil="loja-b"), [])
+        self.assertEqual(len(self.bib.buscar(texto="privado", perfil="canal-a")), 1)
+
+    def test_linha_antiga_sem_licenca_recebe_a_nova(self):
+        a = self.bib.adicionar(self.arquivo("v.png", b"antigo"), "cc0", "x")
+        with self.banco.con:
+            self.banco.con.execute("UPDATE ativo_perfil SET licenca = NULL WHERE hash = ?", (a["hash"],))
+        self.assertIsNone(self.bib.obter(a["hash"]))
+        b = self.bib.adicionar(self.arquivo("v2.png", b"antigo"), "pexels", "Pexels")
+        self.assertEqual((b["licenca"], b["duplicado"]), ("pexels", True))
 
 
 class TestConfigDaBiblioteca(unittest.TestCase):

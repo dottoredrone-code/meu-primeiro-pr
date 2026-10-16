@@ -162,6 +162,21 @@ MIGRACOES = [
         "perfil TEXT NOT NULL, tags TEXT NOT NULL DEFAULT ',', PRIMARY KEY (hash, perfil))",
         "INSERT INTO ativo_perfil (hash, perfil, tags) SELECT hash, COALESCE(perfil, ''), COALESCE(tags, ',') FROM ativos",
     ],
+    # 6 — procedência por perfil (fonte, autor, licença, prompt…): cada perfil vê só o que ele declarou (D11)
+    [
+        "ALTER TABLE ativo_perfil ADD COLUMN licenca TEXT",
+        "ALTER TABLE ativo_perfil ADD COLUMN uso_comercial INTEGER",
+        "ALTER TABLE ativo_perfil ADD COLUMN fonte TEXT",
+        "ALTER TABLE ativo_perfil ADD COLUMN autor TEXT",
+        "ALTER TABLE ativo_perfil ADD COLUMN link TEXT",
+        "ALTER TABLE ativo_perfil ADD COLUMN titulo TEXT",
+        "ALTER TABLE ativo_perfil ADD COLUMN provedor TEXT",
+        "ALTER TABLE ativo_perfil ADD COLUMN modelo TEXT",
+        "ALTER TABLE ativo_perfil ADD COLUMN prompt TEXT",
+        "ALTER TABLE ativo_perfil ADD COLUMN parametros_json TEXT",
+        "ALTER TABLE ativo_perfil ADD COLUMN criado_em TEXT",
+        "UPDATE ativo_perfil SET licenca = (SELECT a.licenca FROM ativos a WHERE a.hash = ativo_perfil.hash), uso_comercial = (SELECT a.uso_comercial FROM ativos a WHERE a.hash = ativo_perfil.hash), fonte = (SELECT a.fonte FROM ativos a WHERE a.hash = ativo_perfil.hash), autor = (SELECT a.autor FROM ativos a WHERE a.hash = ativo_perfil.hash), link = (SELECT a.link FROM ativos a WHERE a.hash = ativo_perfil.hash), titulo = (SELECT a.titulo FROM ativos a WHERE a.hash = ativo_perfil.hash), provedor = (SELECT a.provedor FROM ativos a WHERE a.hash = ativo_perfil.hash), modelo = (SELECT a.modelo FROM ativos a WHERE a.hash = ativo_perfil.hash), prompt = (SELECT a.prompt FROM ativos a WHERE a.hash = ativo_perfil.hash), parametros_json = (SELECT a.parametros_json FROM ativos a WHERE a.hash = ativo_perfil.hash), criado_em = (SELECT a.criado_em FROM ativos a WHERE a.hash = ativo_perfil.hash)",
+    ],
 ]
 # Cada migração é uma lista de comandos (sem partir por ";", que quebraria textos e gatilhos).
 
