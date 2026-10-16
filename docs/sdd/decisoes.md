@@ -18,3 +18,4 @@
 | D14 | 15/10/2026 | **Proposta**: o Studio começa onde o Torralles Ops termina (briefing da peça criativa), recebendo e devolvendo **JSON**, de forma **assíncrona** | Confirmado pelo código em 15/10: o Ops para no briefing em texto e a produção é manual. Contrato em [08](08-contrato-ops-studio.md) |
 | D15 | 15/10/2026 | **Proposta**: escala de notas 0–100 (igual ao Ops) e eliminatório "fatos travados" | Uma só régua no ecossistema |
 | D16 | 15/10/2026 | **Proposta**: aprendizados do Studio vão para o Cérebro Centralizado, não para memória paralela | Fase 9 do protocolo; evita duas fontes da verdade |
+| D17 | 16/10/2026 | **Proposta**: base de referência (canais e vídeos aprovados pelo Diego) para ancorar os juízes e gerar números-alvo por formato | Substitui números fixos da spec 03 por faixas medidas em vídeos reais ([09](09-referencias-qualidade.md)) |

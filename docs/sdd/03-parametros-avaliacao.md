@@ -1,6 +1,7 @@
 # 03 — Parâmetros de avaliação
 
 > Status: **rascunho para revisão**. Detalha os critérios da [spec 01](01-controle-qualidade.md).
+> As faixas numéricas serão substituídas pelos perfis medidos na base de referência ([spec 09](09-referencias-qualidade.md)).
 > Todos os números são **padrões iniciais**, ajustáveis no config e recalibrados com a sua avaliação ([calibração](#7-calibração)).
 
 ## 1. Como uma peça é aprovada
