@@ -28,11 +28,10 @@
 | K10 | Relatório de qualidade e custo por peça (JSON) | [01](docs/sdd/01-controle-qualidade.md) |
 | K09 | Loop de correção: refaz só a peça, feedback delimitado, limites, teto de custo, melhor tentativa | [01](docs/sdd/01-controle-qualidade.md) |
 | K24 | SQLite: projetos, peças, tentativas, avaliações, custo; retomada sem pagar de novo e cache | [05](docs/sdd/05-dados-seguranca-memoria.md) · D6 |
+| K26 | Perfis por projeto que não se misturam (estilo, voz, formato, kit visual, memória; ligação com o Hermes) | D11 · D13 |
 
 ## 🔍 Em verificação
-| ID | Cartão | Spec |
-|---|---|---|
-| K26 | Perfis por projeto (estilo, voz, formato, kit visual, memória), ligados aos perfis do Hermes | D11 · D13 |
+_(vazio)_
 
 ## 🛠️ Em andamento
 _(vazio)_

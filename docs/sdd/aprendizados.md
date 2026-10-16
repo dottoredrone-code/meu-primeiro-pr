@@ -48,3 +48,14 @@
   senão "a melhor tentativa" aponta para o conteúdo da última.
 - **Migrações:** listas de comandos (partir por ";" quebra textos) e erro claro se o banco for mais novo.
 - 2 rodadas de verificação; os testes iniciais não pegavam o cache ligado no caminho de refazer.
+
+## Camada 4 — Perfis por projeto: K26 (16/10/2026)
+- **Isolamento se prova com testes de vazamento nos quatro caminhos:** prompt, arquivos do kit, ajustes de
+  provedor (roteador próprio do perfil, sem mexer no original) e memória no banco. O cache não mistura porque
+  o contexto do perfil e o config do provedor fazem parte da chave.
+- **Perfil é dado do usuário, mas não pode furar regra do produto:** a 1ª versão deixava o perfil zerar o
+  custo, trocar o modelo e subir o teto. Agora o perfil ajusta estilo (voz, tamanho), nunca modelo, custo,
+  chaves ou endereços; o teto do perfil só pode ser menor que o do config.
+- **Um arquivo com defeito não derruba os outros:** vai para `Perfis.erros` com o motivo em pt-BR.
+- **Perfis ficam em `dados/perfis/` (fora do Git):** nenhum dado de projeto real entra no repositório (D9).
+- 2 rodadas de verificação.
