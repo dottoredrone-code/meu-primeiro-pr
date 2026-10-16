@@ -19,3 +19,4 @@
 | D15 | 15/10/2026 | **Proposta**: escala de notas 0–100 (igual ao Ops) e eliminatório "fatos travados" | Uma só régua no ecossistema |
 | D16 | 15/10/2026 | **Proposta**: aprendizados do Studio vão para o Cérebro Centralizado, não para memória paralela | Fase 9 do protocolo; evita duas fontes da verdade |
 | D17 | 16/10/2026 | **Proposta**: base de referência (canais e vídeos aprovados pelo Diego) para ancorar os juízes e gerar números-alvo por formato | Substitui números fixos da spec 03 por faixas medidas em vídeos reais ([09](09-referencias-qualidade.md)) |
+| D18 | 16/10/2026 | **Proposta**: mídia em 3 camadas (acervo local → APIs gratuitas → geração por IA), com licença registrada por arquivo; CapCut só para acabamento manual | CapCut não tem API e a licença vale dentro dele ([11](11-banco-midia-gratuita.md)) |
