@@ -125,7 +125,7 @@ def transcrever(video, pasta):
 def _transcrever_gemini(video, pasta):
     audio = pasta / "audio.mp3"
     _ff("-y", "-loglevel", "error", "-i", str(video), "-vn", "-ac", "1", "-ar", "16000", "-b:a", "48k", str(audio))
-    modelo = os.environ.get("GEMINI_MODELO_PERCEPCAO", "gemini-3-flash-preview")
+    modelo = os.environ.get("GEMINI_MODELO_PERCEPCAO", "gemini-3.6-flash")
     r = post_json(
         f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent",
         {"contents": [{"parts": [

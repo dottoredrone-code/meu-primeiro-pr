@@ -5,7 +5,8 @@
 # tenta o primeiro e, se faltar chave ou der erro, passa para o próximo.
 #
 # Nomes de modelos mudam com frequência: confira na documentação de cada
-# serviço e ajuste aqui, sem mexer no código.
+# serviço e ajuste aqui, sem mexer no código. Última revisão: 16/10/2026 (K01).
+# Verificação mensal no cartão recorrente KR1 do KANBAN.md.
 
 [roteador]
 repeticoes = 1      # novas tentativas no mesmo provedor em erro temporário
@@ -16,13 +17,13 @@ espera_base = 1.0   # segundos; dobra a cada repetição
 [provedores.deepseek_chat]
 classe = "openai_compat"
 base_url = "https://api.deepseek.com"
-modelo = "deepseek-chat"
+modelo = "deepseek-flash"   # V4.1-Flash; "deepseek-chat" foi aposentado em 24/07/2026
 chave_env = "DEEPSEEK_API_KEY"
 
 [provedores.deepseek_reasoner]
 classe = "openai_compat"
 base_url = "https://api.deepseek.com"
-modelo = "deepseek-reasoner"
+modelo = "deepseek-v4-pro"  # "deepseek-reasoner" foi aposentado; se indisponível, a cadeia segue
 chave_env = "DEEPSEEK_API_KEY"
 timeout = 300
 
@@ -33,13 +34,13 @@ chave_env = "ANTHROPIC_API_KEY"
 
 [provedores.gemini_flash]
 classe = "gemini_texto"
-modelo = "gemini-2.5-flash"
+modelo = "gemini-3.6-flash"  # estável; "gemini-2.5-flash" desligado em 16/10/2026
 chave_env = "GEMINI_API_KEY"
 
 [provedores.openai_mini]
 classe = "openai_compat"
 base_url = "https://api.openai.com/v1"
-modelo = "gpt-5-mini"
+modelo = "gpt-5.4-mini"  # substituto indicado do snapshot gpt-5-mini (desliga 11/12/2026)
 chave_env = "OPENAI_API_KEY"
 
 [provedores.openrouter_gratis]
@@ -70,7 +71,7 @@ chave_env = "BRAVE_API_KEY"
 
 [provedores.nano_banana]
 classe = "gemini_imagem"
-modelo = "gemini-2.5-flash-image"
+modelo = "gemini-3.1-flash-image"  # Nano Banana 2; "gemini-2.5-flash-image" desligado em 02/10/2026
 chave_env = "GEMINI_API_KEY"
 
 [provedores.fal_flux]
@@ -80,7 +81,7 @@ chave_env = "FAL_KEY"
 
 [provedores.openai_imagem]
 classe = "openai_imagem"
-modelo = "gpt-image-1"
+modelo = "gpt-image-2"  # "gpt-image-1" desliga em 23/10/2026
 chave_env = "OPENAI_API_KEY"
 timeout = 300
 
@@ -111,13 +112,14 @@ voz = "pt-BR-FranciscaNeural"
 
 [provedores.fal_kling]
 classe = "fal_video"
-modelo = "fal-ai/kling-video/v2.1/standard/image-to-video"
+modelo = "fal-ai/kling-video/v3/standard/image-to-video"
+campo_imagem = "start_image_url"  # o Kling v3 usa este nome de parâmetro
 chave_env = "FAL_KEY"
 timeout = 900
 
 [provedores.fal_wan]
 classe = "fal_video"
-modelo = "fal-ai/wan-i2v"
+modelo = "fal-ai/wan-25-preview/image-to-video"
 chave_env = "FAL_KEY"
 enviar_duracao = false
 timeout = 900

@@ -12,7 +12,8 @@ class FalVideo(Provedor):
     tipo = "video"
 
     def executar(self, imagem, prompt, saida, duracao=5):
-        corpo = {"prompt": prompt, "image_url": data_uri(imagem)}
+        # Cada modelo nomeia o campo da imagem de um jeito (Kling v3: start_image_url; Wan: image_url).
+        corpo = {"prompt": prompt, self.cfg.get("campo_imagem", "image_url"): data_uri(imagem)}
         if self.cfg.get("enviar_duracao", True):
             corpo["duration"] = str(duracao)
         r = post_json(f"https://fal.run/{self.modelo}", corpo, {"Authorization": f"Key {self.chave}"}, self.timeout)
