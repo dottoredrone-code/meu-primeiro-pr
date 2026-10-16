@@ -4,12 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from estudio_ia.config import CONFIG_PADRAO, carregar_roteador, validar_cadeias
-from estudio_ia.funcoes import gerar_roteiro, pesquisar
-from estudio_ia.provedores.base import Provedor
-from estudio_ia.provedores.video import KenBurnsVideo
-from estudio_ia.rede import ErroProvedor
-from estudio_ia.roteador import Roteador, TodosFalharam
+from torralles_studio.config import CONFIG_PADRAO, carregar_roteador, validar_cadeias
+from torralles_studio.funcoes import gerar_roteiro, pesquisar
+from torralles_studio.provedores.base import Provedor
+from torralles_studio.provedores.video import KenBurnsVideo
+from torralles_studio.rede import ErroProvedor
+from torralles_studio.roteador import Roteador, TodosFalharam
 
 
 class Falso(Provedor):

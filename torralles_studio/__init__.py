@@ -1,4 +1,4 @@
-"""Estúdio IA: gera roteiros, imagens, vozes e vídeos com fallback entre modelos."""
+"""Torralles Studio: gera roteiros, imagens, vozes e vídeos com fallback entre modelos."""
 
 from .config import carregar_roteador
 from .roteador import Resultado, Roteador, TodosFalharam

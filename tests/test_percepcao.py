@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from estudio_ia.percepcao import analisar_video
+from torralles_studio.percepcao import analisar_video
 
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg não instalado")

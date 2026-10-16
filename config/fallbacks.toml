@@ -1,4 +1,4 @@
-# Cadeias de fallback do Estúdio IA.
+# Cadeias de fallback do Torralles Studio.
 #
 # [provedores.X] define um provedor reutilizável.
 # [tarefas.Y].cadeia lista os provedores em ordem de preferência: o roteador

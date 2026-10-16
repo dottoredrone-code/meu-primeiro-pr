@@ -23,7 +23,7 @@ class ErroProvedor(Exception):
 
 
 def requisitar(url, *, metodo="GET", corpo=None, cabecalhos=None, timeout=120):
-    cab = {"User-Agent": "estudio-ia/0.1", **(cabecalhos or {})}
+    cab = {"User-Agent": "torralles-studio/0.1", **(cabecalhos or {})}
     dados = None
     if corpo is not None:
         dados = json.dumps(corpo).encode()

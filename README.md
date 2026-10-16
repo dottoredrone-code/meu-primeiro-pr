@@ -24,7 +24,7 @@ python calculadora.py
 
 ---
 
-# Estúdio IA (fallback entre modelos)
+# Torralles Studio (fallback entre modelos)
 
 Gera ideias, roteiros, pesquisas, imagens, vozes e vídeos. Cada função tem uma
 **cadeia de fallback**: se o modelo preferido não tiver chave, atingir o limite
@@ -57,13 +57,13 @@ Requer Python 3.11+ e nenhuma biblioteca extra (FFmpeg opcional, para o vídeo l
 
 ```bash
 cp .env.example .env              # preencha só as chaves que tiver
-python -m estudio_ia status       # mostra cada cadeia e o que está pronto
-python -m estudio_ia ideias "história do café"
-python -m estudio_ia roteiro "história do café" -d 30
-python -m estudio_ia pesquisa "origem do café no Brasil"
-python -m estudio_ia imagem "coffee farm at sunrise, cinematic" -o saidas/cena1.png
-python -m estudio_ia voz "O café chegou ao Brasil em 1727." -o saidas/cena1.mp3
-python -m estudio_ia video saidas/cena1.png "slow camera push-in" -o saidas/cena1.mp4
+python -m torralles_studio status       # mostra cada cadeia e o que está pronto
+python -m torralles_studio ideias "história do café"
+python -m torralles_studio roteiro "história do café" -d 30
+python -m torralles_studio pesquisa "origem do café no Brasil"
+python -m torralles_studio imagem "coffee farm at sunrise, cinematic" -o saidas/cena1.png
+python -m torralles_studio voz "O café chegou ao Brasil em 1727." -o saidas/cena1.mp3
+python -m torralles_studio video saidas/cena1.png "slow camera push-in" -o saidas/cena1.mp4
 ```
 
 ## Testes

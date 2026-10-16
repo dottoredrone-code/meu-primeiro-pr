@@ -5,7 +5,7 @@ Leia este arquivo antes de continuar. O trabalho até aqui foi feito numa sessã
 ## Onde está tudo
 - Repositório: `dottoredrone-code/meu-primeiro-pr`, branch **`claude/multi-model-integration-app-g1697x`**
 - Specs (SDD): `docs/sdd/00` a `07` + `decisoes.md` (D1–D16)
-- Protótipo: pacote `estudio_ia/` (roteador de fallback, provedores, CLI, testes: `python -m unittest discover -s tests`)
+- Protótipo: pacote `torralles_studio/` (antes `estudio_ia`) (roteador de fallback, provedores, CLI, testes: `python -m unittest discover -s tests`)
 
 ## Estado
 - Fase do protocolo: **planejamento** (nada novo deve ser construído antes do plano aprovado).

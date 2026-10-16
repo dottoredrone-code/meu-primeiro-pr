@@ -1,4 +1,4 @@
-"""Linha de comando: python -m estudio_ia <comando> ..."""
+"""Linha de comando: python -m torralles_studio <comando> ..."""
 
 import argparse
 import json
@@ -24,7 +24,7 @@ def relatar(resultado):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="estudio_ia", description="Gera conteúdo com fallback entre modelos de IA.")
+    p = argparse.ArgumentParser(prog="torralles_studio", description="Gera conteúdo com fallback entre modelos de IA.")
     p.add_argument("--config", help="caminho de um fallbacks.toml alternativo")
     sub = p.add_subparsers(dest="comando", required=True)
 

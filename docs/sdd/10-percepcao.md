@@ -1,6 +1,6 @@
 # 10 — Percepção: como a IA assiste e ouve os vídeos
 
-> Status: **nível 1 implementado** (`estudio_ia/percepcao.py`, comando `python -m estudio_ia assistir`); níveis 2–4 especificados.
+> Status: **nível 1 implementado** (`torralles_studio/percepcao.py`, comando `python -m torralles_studio assistir`); níveis 2–4 especificados.
 
 Sem assistir e ouvir, não há avaliação. A percepção tem quatro níveis, do mais barato ao mais completo,
 e o juiz usa todos os disponíveis (fallback, como no resto do Studio).
@@ -14,7 +14,7 @@ e o juiz usa todos os disponíveis (fallback, como no resto do Studio).
 
 ## Uso
 ```bash
-python -m estudio_ia assistir saidas/video.mp4 -o saidas/percepcao
+python -m torralles_studio assistir saidas/video.mp4 -o saidas/percepcao
 # gera percepcao.json, folha_contato.jpg e quadros/
 ```
 

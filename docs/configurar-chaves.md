@@ -32,7 +32,7 @@ pesquisa, roteiro, voz (Edge) e vídeo (Ken Burns). Imagem precisa de pelo menos
 ### No seu computador
 ```bash
 cp .env.example .env    # depois preencha as chaves no .env
-python -m estudio_ia status
+python -m torralles_studio status
 ```
 
 ### No ambiente de nuvem do Claude Code (para os testes aqui)

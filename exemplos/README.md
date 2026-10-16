@@ -6,5 +6,5 @@
 Avaliar com percepção completa (precisa de `GEMINI_API_KEY` no ambiente ou no `.env` da raiz, que não vai para o Git):
 
 ```bash
-python -m estudio_ia assistir exemplos/demo_torralles_studio_v2.mp4 -o saidas/percepcao_demo
+python -m torralles_studio assistir exemplos/demo_torralles_studio_v2.mp4 -o saidas/percepcao_demo
 ```
