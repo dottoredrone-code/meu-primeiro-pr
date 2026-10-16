@@ -169,6 +169,16 @@ timeout = 900
 # Zoom local com FFmpeg: gratuito, garante que sempre sai um vídeo.
 classe = "ken_burns"
 
+# ---------------------------------------------------------------- juiz de vídeo (assiste com som)
+
+[provedores.gemini_video]
+familia = "google"  # juiz nunca é da mesma família de quem gerou
+custo_usd = 0.05    # estimativa por vídeo curto (revisar no KR1)
+classe = "gemini_video"
+modelo = "gemini-3.6-flash"  # mesmo modelo da percepção; aceita vídeo + áudio e link do YouTube
+chave_env = "GEMINI_API_KEY"
+timeout = 300
+
 # ================================================================ tarefas
 
 [tarefas.ideias]
@@ -184,6 +194,10 @@ cadeia = ["deepseek_reasoner", "deepseek_chat", "gemini_flash", "claude", "openr
 [tarefas.juiz]
 # Juízes de texto (roteiro, pesquisa). Imagem e vídeo usam juízes com visão (K06, K17).
 cadeia = ["claude", "gemini_flash", "openai_mini", "deepseek_chat", "openrouter_gratis", "ollama_local"]
+
+[tarefas.juiz_video]
+# Juízes que assistem o vídeo inteiro com som (spec 10, nível 4). Hoje só o Gemini faz isso pela API.
+cadeia = ["gemini_video"]
 
 [tarefas.revisao]
 cadeia = ["claude", "deepseek_reasoner", "gemini_flash", "openai_mini"]
@@ -239,3 +253,17 @@ fidelidade = { peso = 40, piso = 70, descricao = "Cada afirmação está nos tre
 cobertura  = { peso = 20, descricao = "Os pontos principais do tema aparecem" }
 atualidade = { peso = 20, descricao = "Usa as fontes mais recentes quando o tema muda rápido; avisa se a informação pode estar velha" }
 clareza    = { peso = 20, descricao = "Tópicos curtos e objetivos, fáceis de transformar em roteiro" }
+
+[avaliacao.video_final]
+# Spec 03, 3.6 (critérios dos juízes) + o que só quem ouve consegue avaliar. Os eliminatórios técnicos
+# (ffprobe, LUFS, legendas) ficam na montagem (K22). Por enquanto 1 juiz: só o Gemini assiste com som.
+nota_minima = 70
+num_juizes = 1
+divergencia_maxima = 20
+
+[avaliacao.video_final.criterios]
+gancho    = { peso = 30, piso = 60, descricao = "Imagem e fala fortes nos 3 primeiros segundos; prende sem enrolar" }
+fluidez   = { peso = 20, descricao = "Transições e cortes no ritmo certo, sem cortes estranhos, bruscos demais ou frequentes demais" }
+coesao    = { peso = 20, descricao = "Parece um vídeo só: estilo visual, cores e personagens consistentes entre as cenas" }
+audio     = { peso = 20, piso = 60, descricao = "Voz sempre clara; música abaixo da voz; efeitos sonoros no momento certo e sem exagero" }
+sincronia = { peso = 10, descricao = "Narração, legendas e imagens combinam no tempo (o que se fala aparece na tela)" }

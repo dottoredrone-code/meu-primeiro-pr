@@ -47,12 +47,14 @@ exemplos/               vídeos de teste da percepção
 python -m unittest discover -s tests          # testes (rodar antes de todo commit)
 python -m torralles_studio status             # cadeias e provedores prontos
 python -m torralles_studio assistir video.mp4 # relatório de percepção
+python -m torralles_studio avaliar-video video.mp4   # juiz que assiste com som (Gemini); aceita link do YouTube
 python -m torralles_studio perfil-novo meu-canal "Meu canal"   # cria perfil de projeto; 'perfis' lista
 python -m torralles_studio roteiro "tema" -p meu-canal          # gera com o perfil do projeto
 python -m torralles_studio roteiro "tema" -q                    # com juiz e loop de correção (também em pesquisa)
 python -m torralles_studio --config outro.toml status   # config alternativo (ou TORRALLES_CONFIG)
 ```
 - O `.env` é lido da **raiz do repositório** e nunca sobrescreve variáveis já definidas.
+- Teste real com chaves (no PC do Diego): `docs/teste-real.md`.
 - **FFmpeg** é necessário para `percepcao`, o vídeo `ken_burns` e alguns testes (pulados se faltar).
 
 ## Git

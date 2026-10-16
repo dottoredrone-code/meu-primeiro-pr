@@ -173,3 +173,17 @@ def analisar_video(video, pasta_saida, transcrever_audio=True):
     }
     (pasta / "percepcao.json").write_text(json.dumps(relatorio, ensure_ascii=False, indent=2))
     return relatorio
+
+
+def avaliar_video(avaliador, video, *, contexto=None, percepcao=None, gerador=None, etapa="video_final"):
+    """Nível 4 (K06): juiz que assiste o vídeo inteiro, com som, e devolve a Avaliação na régua 0–100.
+
+    video: arquivo local ou link do YouTube. percepcao: relatório de analisar_video() (níveis 1–2), que
+    vai ao juiz como dado para conferir (duração, cortes, volume, transcrição).
+    """
+    partes = [str(contexto)] if contexto else []
+    if percepcao:
+        resumo = {k: v for k, v in percepcao.items() if k not in ("quadros", "folha_contato")}
+        partes.append("Medições automáticas do vídeo (níveis 1–2):\n" + json.dumps(resumo, ensure_ascii=False)[:4000])
+    return avaliador.avaliar(etapa, "O vídeo anexado (assista inteiro, com som).",
+                             contexto="\n\n".join(partes) or None, gerador=gerador, video=video)

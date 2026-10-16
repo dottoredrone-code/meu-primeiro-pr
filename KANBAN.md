@@ -34,7 +34,9 @@
 | K16 | Pesquisa com fontes delimitadas e citações sempre conferidas (2 domínios) | [03](docs/sdd/03-parametros-avaliacao.md) |
 
 ## 🔍 Em verificação
-_(vazio)_
+| ID | Cartão | Spec |
+|---|---|---|
+| K06 | Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) — código pronto; falta o teste real no PC (`docs/teste-real.md`) | [10](docs/sdd/10-percepcao.md) |
 
 ## 🛠️ Em andamento
 _(vazio)_
@@ -49,7 +51,6 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
-| K06 | 🔒 Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) | [10](docs/sdd/10-percepcao.md) | K01 · **falta `GEMINI_API_KEY`** | Devolve JSON na régua 0–100; testado com `exemplos/demo_torralles_studio_v2.mp4` |
 
 ### Camada 2 — Referências (D17; corre em paralelo à Camada 1)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |

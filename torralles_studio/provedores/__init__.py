@@ -1,4 +1,5 @@
 from .busca import BraveBusca, TavilyBusca
+from .juiz_video import GeminiVideoJuiz
 from .imagem import FalImagem, GeminiImagem, OpenAIImagem, PollinationsImagem
 from .texto import AnthropicTexto, GeminiTexto, OpenAICompatTexto
 from .video import FalVideo, KenBurnsVideo
@@ -20,4 +21,5 @@ CLASSES = {
     "edge_tts": EdgeVoz,
     "fal_video": FalVideo,
     "ken_burns": KenBurnsVideo,
+    "gemini_video": GeminiVideoJuiz,
 }

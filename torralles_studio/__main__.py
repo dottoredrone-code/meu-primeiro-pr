@@ -46,6 +46,23 @@ def comando_perfis(args):
     return 0
 
 
+def comando_avaliar_video(args):
+    from .config import carregar_avaliador, carregar_env
+    from .percepcao import analisar_video, avaliar_video
+
+    carregar_env()
+    percepcao = None
+    if args.percepcao and not str(args.video).startswith(("http://", "https://")):
+        percepcao = analisar_video(args.video, "saidas/percepcao")
+    av = avaliar_video(carregar_avaliador(caminho=args.config), args.video, contexto=args.contexto,
+                       percepcao=percepcao)
+    print(json.dumps(av.como_dict(), ensure_ascii=False, indent=2))
+    if av.sem_juiz:
+        print("⚠ nenhum juiz de vídeo disponível (precisa de GEMINI_API_KEY)", file=sys.stderr)
+        return 1
+    return 0
+
+
 def comando_com_qualidade(args, roteador, perfil):
     """roteiro/pesquisa pelo loop de correção: mostra resultado, nota, motivo e custo."""
     from .config import carregar_loop
@@ -108,6 +125,11 @@ def main(argv=None):
     s.add_argument("-o", "--saida", default="saidas/video.mp4")
     s.add_argument("-d", "--duracao", type=int, default=5)
 
+    s = sub.add_parser("avaliar-video", help="juiz que assiste o vídeo inteiro com som e dá nota na régua 0–100")
+    s.add_argument("video", help="arquivo de vídeo ou link do YouTube")
+    s.add_argument("-c", "--contexto", help="o que o vídeo deveria ser (briefing, tema)")
+    s.add_argument("--percepcao", action="store_true", help="mede antes (cortes, volume, transcrição) e envia ao juiz")
+
     s = sub.add_parser("assistir", help="analisa um vídeo (quadros, cortes, som, transcrição) para avaliação")
     s.add_argument("video")
     s.add_argument("-o", "--saida", default="saidas/percepcao")
@@ -125,6 +147,8 @@ def main(argv=None):
         return 0
     if args.comando in ("perfis", "perfil-novo"):
         return comando_perfis(args)
+    if args.comando == "avaliar-video":
+        return comando_avaliar_video(args)
     roteador = carregar_roteador(args.config)
 
     if args.comando == "status":
