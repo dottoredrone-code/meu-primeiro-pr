@@ -9,6 +9,8 @@ categoria = "A"              # régua de referência (spec 09): A curto informat
                              # D produto/oferta · E educação · F institucional
 hermes_perfil = ""           # nome do perfil equivalente no Hermes (opcional)
 idioma = "pt-BR"
+comercial = true             # projeto monetizado (ou que vende algo)? Se false, libera fontes grátis só para
+                             # uso não comercial, como a API do Freesound (D22). Na dúvida, deixe true.
 # teto_custo_usd = 1.00      # opcional: teto menor que o do config (nunca maior)
 
 [estilo]

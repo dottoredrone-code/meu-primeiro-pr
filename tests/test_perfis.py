@@ -100,6 +100,11 @@ class TestPerfisNaoSeMisturam(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_projeto_e_comercial_por_padrao(self):
+        self.assertTrue(self.a.comercial)
+        with pasta_com(**{"loja-cha.toml": "comercial = false\n" + LOJA}) as d:
+            self.assertFalse(Perfis(d).obter("loja-cha").comercial)
+
     def test_obter_por_id_ou_pelo_perfil_do_hermes(self):
         self.assertIs(self.perfis.obter("loja"), self.b)
         with self.assertRaisesRegex(ErroPerfil, "não encontrado"):
@@ -200,6 +205,7 @@ class TestValidacao(unittest.TestCase):
             ("loja-cha.toml", LOJA.replace('palavras_evitar = ["barato"]', 'palavras_evitar = "abc"'), "lista de textos"),
             ("loja-cha.toml", LOJA + '[provedores]\nvoz_falsa = "voz"\n', "precisa ser uma tabela"),
             ("loja-cha.toml", LOJA.replace('categoria = "D"', 'categoria = ["D"]'), "precisa ser texto"),
+            ("loja-cha.toml", 'comercial = "sim"\n' + LOJA, "true ou false"),
             ("loja-cha.toml", LOJA.replace('proporcao = "1:1"', 'proporcao = ["1:1"]'), "precisa ser texto"),
             ("loja-cha.toml", 'formato = "1:1"\n' + LOJA.replace('[formato]\nproporcao = "1:1"', ''), "precisa ser uma tabela"),
             ("loja-cha.toml", LOJA.replace('paleta = ["#2E7D32"]', 'paleta = ["#2E7D32"]\nlogo = 5'), "precisa ser texto"),

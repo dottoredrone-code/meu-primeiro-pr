@@ -205,6 +205,7 @@ chave_env = "OPENVERSE_TOKEN"    # opcional: funciona sem, com limite menor
 
 [provedores.freesound_midia]
 cache = false  # links temporários e resultados que mudam: sempre busca de novo
+somente_nao_comercial = true  # D22: a API é grátis só para uso não comercial; usado só em perfis com comercial = false
 classe = "freesound"
 chave_env = "FREESOUND_API_KEY"  # grátis em freesound.org/apiv2/apply
 
@@ -235,8 +236,8 @@ cadeia = ["pexels_midia", "pixabay_midia", "openverse_midia"]
 cadeia = ["pexels_midia", "pixabay_midia"]
 
 [tarefas.midia_audio]
-# efeitos sonoros (trilhas: K21). Freesound fora até a decisão D22 (API só para uso não comercial).
-cadeia = ["openverse_midia"]
+# efeitos sonoros (trilhas: K21). Freesound só em projetos não comerciais (D22); nos demais é pulado.
+cadeia = ["freesound_midia", "openverse_midia"]
 
 [tarefas.revisao]
 cadeia = ["claude", "deepseek_reasoner", "gemini_flash", "openai_mini"]

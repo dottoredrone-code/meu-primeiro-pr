@@ -51,6 +51,7 @@ class Perfil:
     kit_visual: dict = field(default_factory=dict)   # paleta, fontes, estilo_imagem, logo, referencias
     provedores: dict = field(default_factory=dict)   # ajustes de config por provedor (ex.: voz)
     teto_custo_usd: float | None = None
+    comercial: bool = True           # projeto monetizado? (D22: fontes "só não comercial" ficam de fora)
 
     # -- prompt ---------------------------------------------------------------
     def contexto(self, etapa=None):
@@ -171,6 +172,9 @@ def _validar(dados, arquivo, pasta_raiz, provedores_conhecidos, teto_maximo=None
     prop = _texto(formato.get("proporcao"), "formato.proporcao", pid)
     if prop is not None and prop not in PROPORCOES:
         raise ErroPerfil(f"perfil {pid}: proporção {prop!r} inválida (use {', '.join(sorted(PROPORCOES))})")
+    comercial = dados.get("comercial", True)
+    if not isinstance(comercial, bool):
+        raise ErroPerfil(f"perfil {pid}: 'comercial' precisa ser true ou false")
     teto = dados.get("teto_custo_usd")
     if teto is not None and (isinstance(teto, bool) or not isinstance(teto, (int, float)) or teto < 0):
         raise ErroPerfil(f"perfil {pid}: teto_custo_usd inválido")
@@ -195,7 +199,7 @@ def _validar(dados, arquivo, pasta_raiz, provedores_conhecidos, teto_maximo=None
         hermes_perfil=_texto(dados.get("hermes_perfil"), "hermes_perfil", pid),
         idioma=_texto(dados.get("idioma"), "idioma", pid) or "pt-BR",
         estilo=estilo, formato=formato,
-        kit_visual=kit, provedores=dict(provedores), teto_custo_usd=teto,
+        kit_visual=kit, provedores=dict(provedores), teto_custo_usd=teto, comercial=comercial,
     )
     for chave in ("logo",):
         if perfil.kit_visual.get(chave):

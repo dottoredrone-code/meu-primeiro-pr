@@ -123,10 +123,30 @@ class TestBuscarMidia(unittest.TestCase):
 
     def test_pagina_html_e_extensao_estranha(self):
         fonte = FonteFalsa("openverse_midia", [[candidato("cc0", url="https://upload.wikimedia.org/a.jpg"),
-                                                 candidato("cc0", url="https://upload.wikimedia.org/b.svg")]])
-        respostas = iter([b"<!DOCTYPE html><html>erro</html>", b"bytes da imagem"])
-        ativo = buscar_midia(self.roteador(fonte), self.bib, "chá", baixar_arquivo=lambda url: next(respostas))
+                                                 candidato("cc0", url="https://upload.wikimedia.org/logo.svg"),
+                                                 candidato("cc0", url="https://upload.wikimedia.org/c.jpg"),
+                                                 candidato("cc0", url="https://upload.wikimedia.org/d")]])
+        respostas = iter([b"\xef\xbb\xbf<html>erro</html>", b"<svg xmlns='x'/>", b"bytes da imagem"])
+        baixados = []
+
+        def baixar(url):
+            baixados.append(url)
+            return next(respostas)
+
+        ativo = buscar_midia(self.roteador(fonte), self.bib, "chá", baixar_arquivo=baixar)
         self.assertEqual((ativo["tipo"], Path(ativo["caminho"]).suffix), ("imagem", ".jpg"))
+        self.assertNotIn("https://upload.wikimedia.org/logo.svg", baixados)  # .svg nem é baixado
+        self.assertEqual(self.bib.caminho(ativo).read_bytes(), b"bytes da imagem")  # SVG disfarçado também é recusado
+
+    def test_fonte_so_nao_comercial_fica_fora_de_projeto_comercial(self):
+        livre = FonteFalsa("freesound_midia", [[candidato("cc0", url="https://cdn.freesound.org/a.mp3")]] * 2)
+        livre.cfg["somente_nao_comercial"] = True
+        outra = FonteFalsa("openverse_midia", [[candidato("cc0", url="https://upload.wikimedia.org/b.mp3")]])
+        rt = Roteador({"freesound_midia": livre, "openverse_midia": outra}, {"midia_audio": ["freesound_midia", "openverse_midia"]})
+        a = buscar_midia(rt, self.bib, "passos", "audio", baixar_arquivo=lambda url: url.encode())
+        self.assertEqual((a["provedor"], livre.pedidos), ("openverse_midia", []))  # padrão: comercial
+        b = buscar_midia(rt, self.bib, "chuva", "audio", comercial=False, baixar_arquivo=lambda url: b"som")
+        self.assertEqual(b["provedor"], "freesound_midia")
 
     def test_dominios_das_fontes_estao_liberados(self):
         from torralles_studio.config import carregar_config

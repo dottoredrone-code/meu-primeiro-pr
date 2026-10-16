@@ -131,7 +131,7 @@ class FreesoundMidia(Provedor):
     """Efeitos sonoros. Baixa a prévia em alta qualidade (MP3), que não exige login OAuth.
 
     Atenção (D22): a API do Freesound é grátis só para uso NÃO comercial; uso comercial exige licença deles.
-    Por isso fica fora da cadeia padrão até a decisão do Diego.
+    Por isso só é usado em projetos não comerciais (perfil com `comercial = false`); nos demais é pulado.
     """
 
     tipo = "midia"

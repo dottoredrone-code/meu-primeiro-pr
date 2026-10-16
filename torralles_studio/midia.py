@@ -55,20 +55,26 @@ def _validar_candidatos(candidatos):
 
 
 def _extensao(url, tipo):
-    """Extensão só se combinar com o tipo pedido (.svg, .php… viram a padrão do tipo)."""
+    """Extensão do link se combinar com o tipo; sem extensão, a padrão; extensão de outro tipo (.svg) → None."""
     ext = Path(urlparse(url).path).suffix.lower()
-    return ext if ext in TIPOS[tipo] else _EXTENSAO[tipo]
+    if not ext:
+        return _EXTENSAO[tipo]
+    return ext if ext in TIPOS[tipo] else None
 
 
 def _parece_pagina(dados):
     """Página de erro (HTML) salva como mídia não entra na biblioteca."""
-    inicio = dados[:64].lstrip().lower()
-    return inicio.startswith((b"<!doctype", b"<html", b"<?xml", b"{"))
+    inicio = dados[:64].removeprefix(b"\xef\xbb\xbf").lstrip().lower()
+    return inicio.startswith((b"<!doctype", b"<html", b"<?xml", b"<svg", b"{"))
 
 
 def buscar_midia(roteador, biblioteca, consulta, tipo="imagem", *, perfil=None, proporcao=None, max_resultados=5,
-                 usar_acervo=True, baixar_arquivo=baixar):
-    """Devolve um ativo (dict da biblioteca) com `camada` = "acervo" ou "api". Lança SemMidia se não achar."""
+                 usar_acervo=True, baixar_arquivo=baixar, comercial=True):
+    """Devolve um ativo (dict da biblioteca) com `camada` = "acervo" ou "api". Lança SemMidia se não achar.
+
+    comercial: projeto monetizado (padrão, o mais seguro). Fontes com `somente_nao_comercial` no config
+    (API do Freesound, D22) só entram quando comercial=False (perfil com `comercial = false`).
+    """
     etiquetas = etiquetas_da_consulta(consulta)
     if usar_acervo and etiquetas:
         achados = biblioteca.buscar(etiquetas, tipo=tipo, perfil=perfil, limite=1)
@@ -76,27 +82,33 @@ def buscar_midia(roteador, biblioteca, consulta, tipo="imagem", *, perfil=None, 
             return {**achados[0], "camada": "acervo"}
 
     falhas, tentados = [], set()
+    bloqueados = {n for n, p in roteador.provedores.items() if comercial and p.cfg.get("somente_nao_comercial")}
     with tempfile.TemporaryDirectory() as pasta:
         while True:  # se nenhum arquivo de uma fonte baixar, tenta a próxima fonte da cadeia
             try:
                 r = roteador.executar(f"midia_{tipo}", consulta=consulta, tipo=tipo, max_resultados=max_resultados,
-                                      proporcao=proporcao, validar=_validar_candidatos, excluir=tentados,
+                                      proporcao=proporcao, validar=_validar_candidatos, excluir=tentados | bloqueados,
                                       usar_cache=False)
             except (TodosFalharam, KeyError) as e:
                 if not falhas:
                     raise SemMidia(f"nenhuma {tipo} com licença aceita para {consulta!r}: {e}") from None
                 break
             tentados.add(r.provedor)
+            tentados.update(t.provedor for t in r.tentativas if t.status == "falhou")  # não chama de novo
             for i, c in enumerate(r.valor):
+                extensao = _extensao(c["url"], tipo)
+                if extensao is None:
+                    falhas.append(f"{c.get('fonte')}: formato que não é {tipo} ({Path(urlparse(c['url']).path).suffix})")
+                    continue
                 try:
                     dados = baixar_arquivo(c["url"])
-                except ErroProvedor as e:  # domínio fora da lista, grande demais, link vencido…
+                except (ErroProvedor, ValueError) as e:  # domínio fora da lista, link vencido ou malformado…
                     falhas.append(f"{c.get('fonte')}: {e}")
                     continue
                 if _parece_pagina(dados):
                     falhas.append(f"{c.get('fonte')}: o link devolveu uma página, não um arquivo")
                     continue
-                arquivo = Path(pasta) / f"midia_{len(falhas)}_{i}{_extensao(c['url'], tipo)}"
+                arquivo = Path(pasta) / f"midia_{len(falhas)}_{i}{extensao}"
                 arquivo.write_bytes(dados)
                 try:
                     ativo = biblioteca.adicionar(

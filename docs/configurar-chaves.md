@@ -14,7 +14,7 @@
 | 3 | **OpenRouter** | Modelos grátis (50 pedidos/dia) | Grátis | openrouter.ai → *Keys* | `OPENROUTER_API_KEY` |
 | 2 | **Pexels** | Fotos e vídeos gratuitos (licença Pexels) | Grátis | pexels.com/api → *Your API key* | `PEXELS_API_KEY` |
 | 2 | **Pixabay** | Fotos e vídeos gratuitos (licença Pixabay) | Grátis | pixabay.com/api/docs (logado) | `PIXABAY_API_KEY` |
-| — | **Freesound** | Efeitos sonoros (CC0 e CC-BY) | Grátis **só para uso não comercial** (D22): fora da cadeia padrão | freesound.org/apiv2/apply → *API key* | `FREESOUND_API_KEY` |
+| — | **Freesound** | Efeitos sonoros (CC0 e CC-BY) | Grátis **só para uso não comercial** (D22): usado só em perfis com `comercial = false` | freesound.org/apiv2/apply → *API key* | `FREESOUND_API_KEY` |
 | — | **Openverse** | Imagens e sons Creative Commons | Grátis, funciona sem chave (com limite menor) | não precisa; o token do Openverse expira em horas, então deixe em branco | `OPENVERSE_TOKEN` |
 | — | **Edge TTS** | Voz grátis | Grátis, sem chave | `pip install edge-tts` | — |
 | — | **FFmpeg** | Vídeo grátis e montagem | Grátis, sem chave | já instalado | — |
