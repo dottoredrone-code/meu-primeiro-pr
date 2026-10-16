@@ -26,11 +26,10 @@
 | K07 | Avaliador na régua 0–100: eliminatórios, pesos, pisos, juízes de outra família, desempate | [03](docs/sdd/03-parametros-avaliacao.md) · D15 |
 | K08 | Checador de fatos travados (preço, link, percentual, obrigatórios) | [08](docs/sdd/08-contrato-ops-studio.md) · D15 |
 | K10 | Relatório de qualidade e custo por peça (JSON) | [01](docs/sdd/01-controle-qualidade.md) |
+| K09 | Loop de correção: refaz só a peça, feedback delimitado, limites, teto de custo, melhor tentativa | [01](docs/sdd/01-controle-qualidade.md) |
 
 ## 🔍 Em verificação
-| ID | Cartão | Spec |
-|---|---|---|
-| K09 | Loop de correção: refaz só a peça, feedback, limites, melhor tentativa | [01](docs/sdd/01-controle-qualidade.md) |
+_(vazio)_
 
 ## 🛠️ Em andamento
 _(vazio)_
@@ -41,6 +40,8 @@ _(vazio)_
 ✅ Concluída em 16/10/2026 (verificada por agente independente; ver `docs/sdd/aprendizados.md`).
 
 ### Camada 1 — Qualidade (depende da Camada 0)
+K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gemini).
+
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
 | K06 | 🔒 Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) | [10](docs/sdd/10-percepcao.md) | K01 · **falta `GEMINI_API_KEY`** | Devolve JSON na régua 0–100; testado com `exemplos/demo_torralles_studio_v2.mp4` |

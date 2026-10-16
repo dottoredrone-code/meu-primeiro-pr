@@ -24,3 +24,14 @@
   quebrar; devolvem o problema como reprovação.
 - **Conteúdo avaliado não pode fechar a marca `<conteudo>`:** neutralizar as marcas antes de montar o prompt.
 - Foram 2 rodadas de verificação independente até aprovar (K10 aprovado na 1ª, K07 na 2ª, K08 na 3ª correção).
+
+## Camada 1 — Loop de correção: K09 (16/10/2026)
+- **"Sem juiz" não é aprovação quando já houve tentativa julgada:** o teto de custo cortava o juiz na
+  2ª tentativa e uma peça não avaliada saía como aprovada no lugar de uma já avaliada. Regra: sem juiz só
+  vale na 1ª tentativa (só checagem automática + revisar); depois disso, encerra e escolhe a melhor julgada.
+- **O relatório precisa da decisão final, não da última tentativa:** senão peças que estouraram o loop
+  não aparecem como "revisar".
+- **Erro de checagem não pode jogar fora o que já foi pago:** encerra com a melhor tentativa até ali.
+- **Texto que volta do juiz também é entrada não confiável:** delimitar e trocar marcas por colchetes
+  (remover numa passada deixa remontar `</feedback>` com fragmentos).
+- Verificador encontrou 6 problemas na 1ª rodada que os 11 testes iniciais não pegavam; todos viraram testes.
