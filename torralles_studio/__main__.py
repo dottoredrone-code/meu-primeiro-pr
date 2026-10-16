@@ -51,14 +51,21 @@ def comando_avaliar_video(args):
     from .percepcao import analisar_video, avaliar_video
 
     carregar_env()
+    from urllib.parse import urlparse
+
     percepcao = None
-    if args.percepcao and not str(args.video).startswith(("http://", "https://")):
+    if args.percepcao and urlparse(str(args.video)).scheme.lower() not in ("http", "https"):
         percepcao = analisar_video(args.video, "saidas/percepcao")
     av = avaliar_video(carregar_avaliador(caminho=args.config), args.video, contexto=args.contexto,
                        percepcao=percepcao)
     print(json.dumps(av.como_dict(), ensure_ascii=False, indent=2))
     if av.sem_juiz:
-        print("⚠ nenhum juiz de vídeo disponível (precisa de GEMINI_API_KEY)", file=sys.stderr)
+        motivos = av.problemas[1:] or ["nenhum provedor na cadeia juiz_video"]
+        print("⚠ nenhum juiz de vídeo conseguiu avaliar:", file=sys.stderr)
+        for m in motivos:
+            print(f"  · {m}", file=sys.stderr)
+        if any("falta GEMINI_API_KEY" in m for m in motivos):
+            print("  Coloque GEMINI_API_KEY no .env (veja docs/configurar-chaves.md).", file=sys.stderr)
         return 1
     return 0
 

@@ -10,7 +10,7 @@ e o juiz usa todos os disponíveis (fallback, como no resto do Studio).
 | 1. **Olhos e ouvidos técnicos** | Quadros com tempo marcado (incluindo um logo após cada corte), folha de contato, cortes secos e transições suaves, telas pretas, congelamentos, volume (LUFS), pico, silêncios | FFmpeg local | Grátis | ✅ Implementado e testado |
 | 2. **Transcrição** | Fala com marcação de tempo + sons percebidos (música, efeitos) | Gemini (áudio) → Whisper local (`faster-whisper`) | Centavos / grátis | ✅ Implementado; precisa de `GEMINI_API_KEY` ou do Whisper instalado (funciona no PC; bloqueado na nuvem) |
 | 3. **Juiz que vê os quadros** | Avalia imagem, legenda, composição e consistência a partir da folha de contato e dos quadros de corte | Modelo com visão (Claude, Gemini, GPT) | ~US$ 0,01 | Especificado (spec 03); usado manualmente nesta sessão |
-| 4. **Juiz que assiste o vídeo inteiro** | Recebe o vídeo com áudio e avalia ritmo, narração, música, efeitos e sincronia como um espectador | Gemini (entende vídeo + áudio, aceita também link do YouTube) ou `video_analyze` do Hermes | ~US$ 0,02–0,10 por vídeo curto | Especificado; próximo a implementar |
+| 4. **Juiz que assiste o vídeo inteiro** | Recebe o vídeo com áudio e avalia ritmo, narração, música, efeitos e sincronia como um espectador | Gemini (entende vídeo + áudio, aceita também link do YouTube) ou `video_analyze` do Hermes | ~US$ 0,02–0,10 por vídeo curto | ✅ Implementado (K06, `avaliar-video`); falta o teste real com a chave |
 
 ## Uso
 ```bash
@@ -29,5 +29,5 @@ gerando as métricas e as âncoras para os juízes.
 ## Critérios de pronto
 - [x] Nível 1 com testes (corte, silêncio, volume, quadros, folha de contato)
 - [x] Nível 2 com fallback Gemini → Whisper e motivo explícito quando nenhum está disponível
-- [ ] Nível 4: juiz Gemini com vídeo inteiro, resposta JSON na régua da spec 03
+- [x] Nível 4: juiz Gemini com vídeo inteiro, resposta JSON na régua da spec 03 (K06; teste real pendente no PC)
 - [ ] Juiz combinando níveis 1–4 (spec 01) e relatório de qualidade por peça

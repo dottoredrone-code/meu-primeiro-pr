@@ -178,6 +178,7 @@ classe = "gemini_video"
 modelo = "gemini-3.6-flash"  # mesmo modelo da percepção; aceita vídeo + áudio e link do YouTube
 chave_env = "GEMINI_API_KEY"
 timeout = 300
+# temperatura = 0.2  # opcional: sem valor, vale o padrão da API (o Google recomenda 1.0 no Gemini 3); conferir no teste real
 
 # ================================================================ tarefas
 

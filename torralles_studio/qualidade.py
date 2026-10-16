@@ -128,11 +128,12 @@ class Avaliador:
         }
 
     # -- juízes -------------------------------------------------------------
-    def _prompt(self, rubrica, conteudo, contexto):
+    def _prompt(self, rubrica, conteudo, contexto, video=False):
         criterios = "\n".join(f'- "{nome}": {c.get("descricao", nome)}' for nome, c in rubrica.criterios.items())
+        problema = {"momento": "3.3s", "descricao": "...", "gravidade": "alta"} if video else "..."
         formato = json.dumps({
             "criterios": {nome: {"evidencia": "...", "nota": 0} for nome in rubrica.criterios},
-            "problemas": ["..."], "correcao_sugerida": "...",
+            "problemas": [problema], "correcao_sugerida": "...",
         }, ensure_ascii=False)
         partes = [f"Etapa avaliada: {rubrica.etapa}.", ESCALA, "Critérios:", criterios]
         if contexto:
@@ -157,12 +158,18 @@ class Avaliador:
                 raise ValueError(f"nota inválida para '{nome}': {nota!r}")
             notas[nome] = float(nota)
         problemas = []
-        for p in dados.get("problemas", []) or []:
+        brutos = dados.get("problemas") or []
+        if isinstance(brutos, (str, dict)):
+            brutos = [brutos]
+        for p in brutos if isinstance(brutos, list) else []:
             if isinstance(p, dict):  # {"momento": "3.3s", "descricao": "...", "gravidade": "alta"} (spec 03, 4.4)
-                desc = str(p.get("descricao", "")).strip()
+                desc = str(p.get("descricao") or p.get("description") or "").strip()
                 if not desc:
-                    continue
-                momento = f"aos {p['momento']}: " if p.get("momento") else ""
+                    desc = json.dumps(p, ensure_ascii=False)  # formato inesperado: não descarta em silêncio
+                m = p.get("momento", p.get("tempo"))
+                if isinstance(m, (int, float)) and not isinstance(m, bool):
+                    m = f"{m:g}s"
+                momento = f"aos {m}: " if m is not None and str(m).strip() else ""
                 gravidade = f" (gravidade {p['gravidade']})" if p.get("gravidade") else ""
                 problemas.append(f"{momento}{desc}{gravidade}")
             elif str(p).strip():
@@ -174,7 +181,7 @@ class Avaliador:
         extra = {"video": video} if video is not None else {}
         return self.roteador.executar(
             self.tarefa_juiz_video if video is not None else self.tarefa_juiz,
-            prompt=self._prompt(rubrica, conteudo, contexto),
+            prompt=self._prompt(rubrica, conteudo, contexto, video is not None),
             sistema=SISTEMA_JUIZ + (SISTEMA_VIDEO if video is not None else ""),
             validar=lambda t: self._validar_juiz(t, rubrica),
             excluir=excluir,
@@ -192,12 +199,14 @@ class Avaliador:
             return Avaliacao(etapa, aprovado=False, nota=0, eliminatorios=list(eliminatorios))
 
         familias = {familia(self.roteador, gerador)} if gerador else set()
-        respostas, juizes = [], []
+        respostas, juizes, motivos = [], [], []
         alvo = rubrica.num_juizes
         while len(juizes) < alvo:  # com 2+ juízes divergentes, chama mais um para desempatar (uma vez só)
             try:
                 r = self._chamar_juiz(rubrica, conteudo, contexto, self._excluidos(familias), video)
-            except TodosFalharam:
+            except TodosFalharam as e:  # guarda o motivo real (já mascarado): modelo inexistente, chave, bloqueio…
+                motivos = [f"{t.provedor}: {t.status} ({t.detalhe})" for t in e.tentativas
+                           if t.detalhe != "excluído nesta chamada"]
                 break
             juizes.append(r.provedor)
             respostas.append(r.valor)
@@ -207,7 +216,7 @@ class Avaliador:
 
         if not juizes:
             return Avaliacao(etapa, aprovado=True, nota=None, sem_juiz=True, revisar_manual=True,
-                             problemas=["nenhum juiz disponível: vale só a checagem automática"])
+                             problemas=["nenhum juiz disponível: vale só a checagem automática"] + motivos)
 
         if len(respostas) >= 3:
             criterios = {c: statistics.median(r["notas"][c] for r in respostas) for c in rubrica.criterios}

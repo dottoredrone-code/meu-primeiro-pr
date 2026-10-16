@@ -19,10 +19,12 @@ python -m unittest discover -s tests                 # deve passar; o teste real
 python -m torralles_studio status                    # quais provedores ficaram "pronto"
 python -m torralles_studio pesquisa "benefícios do chá verde" -q
 python -m torralles_studio roteiro "benefícios do chá verde" -d 30 -q
-python -m torralles_studio avaliar-video exemplos/demo_torralles_studio_v2.mp4 --percepcao \
-       -c "vídeo demonstrativo do Torralles Studio"   # K06: juiz que assiste com som
+python -m torralles_studio avaliar-video exemplos/demo_torralles_studio_v2.mp4 --percepcao -c "vídeo demonstrativo do Torralles Studio"
 python -m torralles_studio avaliar-video "https://www.youtube.com/watch?v=<um vídeo curto>"   # sem baixar
 ```
+
+Cada comando é uma linha só (funciona no PowerShell, no cmd e no terminal do Linux/Mac).
+Se o juiz de vídeo não conseguir avaliar, ele mostra o motivo real (ex.: modelo inexistente, chave, bloqueio).
 
 ## 3. O que anotar (para ajustar o config)
 | O que | Onde aparece | O que fazer |
