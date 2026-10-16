@@ -29,6 +29,9 @@ torralles_studio/
   funcoes.py      ideias, roteiro, pesquisa, imagem, voz, vídeo
   percepcao.py    "assistir" um vídeo: quadros, cortes, som, transcrição
   seguranca.py    mascarar chaves, orçamento
+  qualidade.py    avaliador 0–100 (juízes de outra família); fatos.py fatos travados
+  loop.py         loop de correção; relatorio.py relatório de qualidade e custo
+  banco.py        SQLite: projetos, peças, tentativas, custo, retomada e cache (dados/, fora do Git)
   rede.py         HTTP com erros padronizados e downloads seguros
   config.py       carrega config/fallbacks.toml e o .env
 config/fallbacks.toml   cadeias, modelos, custos, segurança

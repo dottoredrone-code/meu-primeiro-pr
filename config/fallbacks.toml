@@ -14,6 +14,10 @@ repeticoes = 1      # novas tentativas no mesmo provedor em erro temporário
 espera_base = 1.0   # segundos; dobra a cada repetição
 teto_custo_usd = 1.50  # por execução/vídeo (D20); provedores pagos que não couberem são pulados
 
+[banco]
+# Banco local (SQLite, D6): projetos, tentativas, custo, retomada e cache. Fica fora do Git.
+caminho = "dados/torralles.db"
+
 [seguranca]
 # Arquivos devolvidos pelos provedores só são baixados destes domínios (D8).
 dominios_download = ["fal.media", "storage.googleapis.com", "image.pollinations.ai"]

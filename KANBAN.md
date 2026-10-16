@@ -29,7 +29,9 @@
 | K09 | Loop de correção: refaz só a peça, feedback delimitado, limites, teto de custo, melhor tentativa | [01](docs/sdd/01-controle-qualidade.md) |
 
 ## 🔍 Em verificação
-_(vazio)_
+| ID | Cartão | Spec |
+|---|---|---|
+| K24 | SQLite: projetos, cenas, peças, tentativas, avaliações, custo; retomada e cache | [05](docs/sdd/05-dados-seguranca-memoria.md) · D6 |
 
 ## 🛠️ Em andamento
 _(vazio)_
@@ -70,7 +72,6 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 ### Camada 4 — Dados e memória (pode começar junto com a Camada 1)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
-| K24 | SQLite: projetos, cenas, ativos, tentativas, avaliações, custo; retomada e cache | [05](docs/sdd/05-dados-seguranca-memoria.md) · D6 | K02 | Retomar sem pagar de novo (teste) |
 | K25 | Biblioteca por hash com licença e busca por etiqueta | [05](docs/sdd/05-dados-seguranca-memoria.md) | K24 | Sem duplicatas; licença obrigatória |
 | K26 | Perfis por projeto (estilo, voz, formato, kit visual), ligados aos perfis do Hermes | D11 · D13 | K24 | Perfis não se misturam (teste) |
 | K27 | Exportar aprendizados para o Cérebro | D16 | K10 | Resumo gerado no formato do Cérebro |

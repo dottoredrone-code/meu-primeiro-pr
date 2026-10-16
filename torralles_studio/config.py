@@ -75,7 +75,16 @@ def carregar_loop(roteador=None, caminho=None, relatorio=None):
     return LoopCorrecao.do_config(roteador, avaliador, dados.get("avaliacao", {}).get("loop", {}), relatorio)
 
 
-def carregar_roteador(caminho=None):
+def carregar_banco(caminho=None):
+    """Banco local do config ([banco].caminho, relativo à raiz do repositório)."""
+    from .banco import Banco
+
+    destino = Path(carregar_config(caminho).get("banco", {}).get("caminho", "dados/torralles.db"))
+    return Banco(destino if destino.is_absolute() else RAIZ / destino)
+
+
+def carregar_roteador(caminho=None, banco=None):
+    """banco: opcional (carregar_banco()); com ele, resultados repetidos vêm do cache sem custo."""
     dados = carregar_config(caminho)
     provedores = montar_provedores(dados)
     cadeias = {tarefa: t["cadeia"] for tarefa, t in dados["tarefas"].items()}
@@ -89,4 +98,5 @@ def carregar_roteador(caminho=None):
         repeticoes=opcoes.get("repeticoes", 1),
         espera_base=opcoes.get("espera_base", 1.0),
         orcamento=Orcamento(opcoes.get("teto_custo_usd")),
+        cache=banco,
     )

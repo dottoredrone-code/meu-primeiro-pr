@@ -2,3 +2,4 @@
 saidas/
 __pycache__/
 *.pyc
+dados/

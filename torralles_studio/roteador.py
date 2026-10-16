@@ -46,8 +46,9 @@ class TodosFalharam(Exception):
 
 class Roteador:
     def __init__(self, provedores, cadeias, repeticoes=1, espera_base=1.0, dormir=time.sleep, relogio=time.monotonic,
-                 orcamento=None):
+                 orcamento=None, cache=None):
         self.provedores = provedores
+        self.cache = cache  # ex.: Banco (K24); resultado repetido não é pago de novo
         self.orcamento = orcamento or Orcamento()
         self.cadeias = cadeias
         self.repeticoes = repeticoes
@@ -75,6 +76,11 @@ class Roteador:
             if nome in excluir:
                 tentativas.append(Tentativa(nome, "pulado", "excluído nesta chamada"))
                 continue
+            chave = self._chave_cache(nome, provedor, kwargs)
+            guardado = self._do_cache(chave, kwargs, validar)
+            if guardado is not None:
+                tentativas.append(Tentativa(nome, "cache"))
+                return Resultado(guardado[0], nome, tentativas)
             motivo = provedor.configurado() or self._em_descanso(nome)
             if motivo:
                 tentativas.append(Tentativa(nome, "pulado", motivo))
@@ -85,9 +91,8 @@ class Roteador:
                                                              f"restam US$ {self.orcamento.restante:.3f}"))
                 continue
             try:
-                valor = self._chamar(nome, provedor, kwargs, custo)
-                if validar:
-                    valor = validar(valor)
+                bruto = self._chamar(nome, provedor, kwargs, custo)
+                valor = validar(bruto) if validar else bruto
             except (ErroProvedor, ValueError) as e:
                 tentativas.append(Tentativa(nome, "falhou", mascarar(str(e))))
                 continue
@@ -95,8 +100,39 @@ class Roteador:
                 tentativas.append(Tentativa(nome, "falhou", mascarar(f"{type(e).__name__}: {e}")))
                 continue
             tentativas.append(Tentativa(nome, "ok"))
+            self._guardar_cache(chave, nome, provedor, bruto)
             return Resultado(valor, nome, tentativas)
         raise TodosFalharam(tarefa, tentativas)
+
+    def _chave_cache(self, nome, provedor, kwargs):
+        if self.cache is None or not provedor.cfg.get("cache", True):
+            return None
+        from .banco import chave_cache
+
+        try:
+            return chave_cache(nome, provedor.modelo, kwargs)
+        except (OSError, TypeError, ValueError):
+            return None
+
+    def _do_cache(self, chave, kwargs, validar):
+        """(valor,) se houver resultado guardado que ainda passa na validação; senão None."""
+        if chave is None:
+            return None
+        try:
+            guardado = self.cache.cache_buscar(chave, kwargs.get("saida"))
+            if guardado is None:
+                return None
+            return (validar(guardado) if validar else guardado,)
+        except Exception:  # cache com defeito ou resposta antiga inválida: segue para o provedor
+            return None
+
+    def _guardar_cache(self, chave, nome, provedor, valor):
+        if chave is None:
+            return
+        try:
+            self.cache.cache_guardar(chave, nome, provedor.modelo, valor)
+        except Exception:  # falha no cache nunca derruba a geração
+            pass
 
     def _chamar(self, nome, provedor, kwargs, custo=0.0):
         for n in range(self.repeticoes + 1):
