@@ -1,0 +1,49 @@
+# Torralles Studio — guia para agentes
+
+App que transforma ideias ou briefings em **imagens e vídeos prontos para publicar**, escolhendo o melhor
+modelo de IA por etapa, com fallback, controle de qualidade com loop e teto de custo.
+
+## Antes de agir
+1. Leia `KANBAN.md` (o que está em andamento e o próximo cartão) e `docs/sdd/decisoes.md` (D1–D20).
+2. A spec de cada cartão está em `docs/sdd/` (o cartão aponta qual). **Não implemente fora de um cartão.**
+3. Siga o protocolo de execução: plano → implementação → **verificação por um agente diferente** → correção.
+
+## Regras do projeto
+- **D9 — marca:** "Torralles" é a marca de todos os projetos do Diego; o Studio é **independente**. Não use
+  exemplos, briefings ou dados de outros projetos (nada jurídico) em código, testes ou specs.
+- **Sem segredos no repositório:** chaves só em variáveis de ambiente ou no `.env` (ignorado pelo Git).
+  Mensagens de erro passam por `mascarar()`.
+- **Modelos são dados, não código:** nomes e custos ficam em `config/fallbacks.toml`. O teste
+  `tests/test_contratos.py` impede modelos aposentados. Revisão mensal: cartão KR1.
+- **Downloads** de arquivos devolvidos por provedores só via `rede.baixar()` (lista de domínios em `[seguranca]`).
+- **Teto de custo** (D20): US$ 1,50 por vídeo; provedores pagos que não couberem são pulados.
+- **Licenças:** nada AGPL ou "não comercial" no produto (D2). Cada mídia guarda fonte e licença (D18).
+- **Dependências:** o núcleo usa só a biblioteca padrão do Python + FFmpeg. Nova dependência só com motivo registrado.
+- Textos e mensagens ao usuário em **português do Brasil**, simples e diretos.
+
+## Estrutura
+```
+torralles_studio/
+  roteador.py     fallback por tarefa, descanso de provedores, teto de custo
+  provedores/     texto, busca, imagem, voz, vídeo (um arquivo por tipo)
+  funcoes.py      ideias, roteiro, pesquisa, imagem, voz, vídeo
+  percepcao.py    "assistir" um vídeo: quadros, cortes, som, transcrição
+  seguranca.py    mascarar chaves, orçamento
+  rede.py         HTTP com erros padronizados e downloads seguros
+  config.py       carrega config/fallbacks.toml e o .env
+config/fallbacks.toml   cadeias, modelos, custos, segurança
+docs/sdd/               specs (SDD) e decisões
+exemplos/               vídeos de teste da percepção
+```
+
+## Comandos
+```bash
+python -m unittest discover -s tests          # testes (rodar antes de todo commit)
+python -m torralles_studio status             # cadeias e provedores prontos
+python -m torralles_studio assistir video.mp4 # relatório de percepção
+```
+
+## Git
+- Branch de trabalho: `claude/multi-model-integration-app-g1697x`.
+- Commits pequenos, um cartão por commit, mensagem `tipo(Kxx): descrição` em português.
+- Ao concluir um cartão: atualizar `KANBAN.md` e, ao fim de cada camada, registrar aprendizados para o Cérebro (D16).
