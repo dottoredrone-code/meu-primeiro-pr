@@ -6,9 +6,10 @@ números que sustentam cada uma. Nada de chaves (tudo passa por `mascarar`) e na
 """
 
 import json
+import math
 import re
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .seguranca import mascarar
@@ -26,10 +27,36 @@ def _normalizar_problema(texto):
     return re.sub(r"\s+", " ", t).strip()[:140]
 
 
+def _wilson(aprovadas, total, z=1.64):
+    """Limite inferior da taxa de aprovação: 3 de 3 não vence 48 de 50 (amostra pequena pesa menos)."""
+    if not total:
+        return 0.0
+    p = aprovadas / total
+    centro = p + z * z / (2 * total)
+    margem = z * math.sqrt(p * (1 - p) / total + z * z / (4 * total * total))
+    return (centro - margem) / (1 + z * z / total)
+
+
+def validar_data(desde):
+    """Aceita só AAAA-MM-DD (as datas do banco são UTC)."""
+    if desde is None:
+        return None
+    try:
+        return date.fromisoformat(str(desde)).isoformat()
+    except ValueError:
+        raise ValueError(f"data inválida {desde!r}: use AAAA-MM-DD, ex.: 2026-10-01 (horário UTC)") from None
+
+
 def coletar(banco, desde=None, perfil=None):
-    """Números de produção a partir do banco: por etapa, por provedor e problemas recorrentes."""
+    """Números de produção a partir do banco: por etapa, por provedor e problemas recorrentes.
+
+    Só tentativas **julgadas** contam para aprovação, notas, recomendações e problemas (regra anti-alucinação):
+    sem juiz, erro na avaliação ou registro só de custo ficam fora — mas o custo delas entra no total.
+    """
+    desde = validar_data(desde)
     sql = ("SELECT t.etapa, t.provedor, t.status, t.custo_usd, t.custos_json, t.criado_em, "
-           "a.nota_final, a.problemas_json, a.eliminatorios_json, p.status AS status_peca, p.id AS peca_id "
+           "a.nota_final, a.problemas_json, a.eliminatorios_json, a.sem_juiz, "
+           "p.status AS status_peca, p.revisar_manual AS revisar_peca, p.id AS peca_id "
            "FROM tentativas t JOIN pecas p ON p.id = t.peca_id JOIN projetos pr ON pr.id = p.projeto_id "
            "LEFT JOIN avaliacoes a ON a.tentativa_id = t.id WHERE 1 = 1")
     args = []
@@ -43,10 +70,15 @@ def coletar(banco, desde=None, perfil=None):
     custo_total = 0.0
     for l in linhas:
         custo_total += l["custo_usd"] or 0
-        e = etapas.setdefault(l["etapa"], {"tentativas": 0, "aprovadas": 0, "custo_usd": 0.0, "notas": []})
+        pecas[l["peca_id"]] = (l["status_peca"], bool(l["revisar_peca"]))
+        e = etapas.setdefault(l["etapa"], {"tentativas": 0, "aprovadas": 0, "sem_juiz": 0, "custo_usd": 0.0,
+                                           "notas": []})
+        e["custo_usd"] += l["custo_usd"] or 0
+        if l["sem_juiz"] is None or l["sem_juiz"]:  # não julgada: só custo
+            e["sem_juiz"] += 1
+            continue
         e["tentativas"] += 1
         e["aprovadas"] += l["status"] == "aprovado"
-        e["custo_usd"] += l["custo_usd"] or 0
         if l["nota_final"] is not None:
             e["notas"].append(l["nota_final"])
         chave = (l["etapa"], l["provedor"] or "?")
@@ -57,19 +89,17 @@ def coletar(banco, desde=None, perfil=None):
             p["notas"].append(l["nota_final"])
         for campo in ("problemas_json", "eliminatorios_json"):
             for item in json.loads(l[campo] or "[]"):
-                if str(item).startswith("nenhum juiz disponível"):
-                    continue
                 problemas[(l["etapa"], _normalizar_problema(item))] += 1
-        pecas[l["peca_id"]] = l["status_peca"]
 
     media = lambda xs: round(sum(xs) / len(xs), 1) if xs else None
     return {
         "periodo_desde": desde,
         "perfil": perfil,
         "tentativas": len(linhas),
+        "tentativas_sem_juiz": sum(e["sem_juiz"] for e in etapas.values()),
         "pecas": len(pecas),
-        "pecas_aprovadas": sum(1 for s in pecas.values() if s == "aprovado"),
-        "pecas_revisar": sum(1 for s in pecas.values() if s == "revisar"),
+        "pecas_aprovadas": sum(1 for st, rev in pecas.values() if st == "aprovado" and not rev),
+        "pecas_revisar": sum(1 for st, rev in pecas.values() if st == "revisar" or (st == "aprovado" and rev)),
         "custo_total_usd": round(custo_total, 4),
         "etapas": {k: {**v, "custo_usd": round(v["custo_usd"], 4), "nota_media": media(v.pop("notas"))}
                    for k, v in sorted(etapas.items())},
@@ -90,7 +120,8 @@ def sugestoes(dados):
         if p["tentativas"] >= MIN_TENTATIVAS:
             por_etapa.setdefault(p["etapa"], []).append(p)
     for etapa, lista in sorted(por_etapa.items()):
-        melhor = max(lista, key=lambda p: (1 - p["taxa_reprovacao"], p["nota_media"] or 0))
+        melhor = max(lista, key=lambda p: (_wilson(p["aprovadas"], p["tentativas"]), p["tentativas"],
+                                           p["nota_media"] or 0))
         if not any(p["aprovadas"] for p in lista):
             total = sum(p["tentativas"] for p in lista)
             itens.append(f"Revise o prompt e a régua de {etapa}: nenhum provedor aprovou em {total} tentativas.")
@@ -121,13 +152,15 @@ def resumo_markdown(dados, data=None):
     periodo = f" desde {dados['periodo_desde']}" if dados.get("periodo_desde") else ""
     linhas += [
         f"**Produção{periodo}:** {dados['pecas']} peças ({dados['pecas_aprovadas']} aprovadas, "
-        f"{dados['pecas_revisar']} para revisão), {dados['tentativas']} tentativas, "
+        f"{dados['pecas_revisar']} para revisão), {dados['tentativas']} tentativas "
+        f"({dados['tentativas_sem_juiz']} sem juiz, fora das recomendações), "
         f"US$ {dados['custo_total_usd']:.2f} no total.", "",
-        "| Etapa | Tentativas | Aprovadas | Nota média | Custo (US$) |", "|---|---|---|---|---|",
+        "| Etapa | Julgadas | Aprovadas | Sem juiz | Nota média | Custo (US$) |", "|---|---|---|---|---|---|",
     ]
     for etapa, e in dados["etapas"].items():
         nota = "-" if e["nota_media"] is None else e["nota_media"]
-        linhas.append(f"| {etapa} | {e['tentativas']} | {e['aprovadas']} | {nota} | {e['custo_usd']:.3f} |")
+        linhas.append(f"| {etapa} | {e['tentativas']} | {e['aprovadas']} | {e['sem_juiz']} | {nota} | "
+                      f"{e['custo_usd']:.3f} |")
     itens = sugestoes(dados)
     linhas += ["", "**Faça assim nas próximas produções:**"]
     linhas += [f"- {i}" for i in itens] or ["- Continue coletando: ainda há poucos dados para recomendar mudanças."]
@@ -137,6 +170,10 @@ def resumo_markdown(dados, data=None):
 
 def exportar(banco, pasta, desde=None, perfil=None, data=None):
     """Grava o resumo em <pasta>/cerebro_<data>[_perfil].md (sem sobrescrever) e devolve o caminho."""
+    from .perfis import ID_VALIDO
+
+    if perfil is not None and not ID_VALIDO.match(str(perfil)):
+        raise ValueError(f"perfil inválido {perfil!r}: use o id do perfil (letras minúsculas, números, - ou _)")
     data = data or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     texto = resumo_markdown(coletar(banco, desde, perfil), data)
     pasta = Path(pasta)

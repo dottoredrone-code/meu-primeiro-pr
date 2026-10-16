@@ -46,6 +46,31 @@ def comando_perfis(args):
     return 0
 
 
+def comando_cerebro(args):
+    from pathlib import Path
+
+    from .banco import Banco
+    from .cerebro import exportar
+    from .config import RAIZ, carregar_config
+
+    caminho = Path(carregar_config(args.config).get("banco", {}).get("caminho", "dados/torralles.db"))
+    caminho = caminho if caminho.is_absolute() else RAIZ / caminho
+    if not caminho.exists():  # não cria banco vazio só para resumir
+        print("Sem produção registrada ainda (o banco local não existe): nada para o Cérebro.")
+        return 0
+    banco = Banco(caminho)
+    if args.perfil and not banco.projetos(args.perfil):
+        print(f"⚠ o perfil {args.perfil!r} não tem projetos no banco (confira o id com: perfis)", file=sys.stderr)
+    try:
+        destino = exportar(banco, args.pasta or RAIZ / "dados" / "cerebro", desde=args.desde, perfil=args.perfil)
+    except ValueError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    print(destino.read_text(encoding="utf-8"))
+    print(f"✓ salvo em {destino} (cole no CEREBRO_MESTRE.md)", file=sys.stderr)
+    return 0
+
+
 def comando_avaliar_video(args):
     from .config import carregar_avaliador, carregar_env
     from .percepcao import analisar_video, avaliar_video
@@ -140,7 +165,7 @@ def main(argv=None):
     s = sub.add_parser("cerebro", help="resumo dos aprendizados de produção para colar no Cérebro")
     s.add_argument("--desde", help="só tentativas a partir desta data (AAAA-MM-DD)")
     s.add_argument("-p", "--perfil", help="só um perfil de projeto")
-    s.add_argument("-o", "--pasta", default="dados/cerebro", help="pasta onde salvar o resumo")
+    s.add_argument("-o", "--pasta", help="pasta onde salvar o resumo (padrão: dados/cerebro na raiz do repositório)")
 
     s = sub.add_parser("assistir", help="analisa um vídeo (quadros, cortes, som, transcrição) para avaliação")
     s.add_argument("video")
@@ -162,13 +187,7 @@ def main(argv=None):
     if args.comando == "avaliar-video":
         return comando_avaliar_video(args)
     if args.comando == "cerebro":
-        from .cerebro import exportar
-        from .config import carregar_banco
-
-        destino = exportar(carregar_banco(args.config), args.pasta, desde=args.desde, perfil=args.perfil)
-        print(destino.read_text(encoding="utf-8"))
-        print(f"✓ salvo em {destino} (cole no CEREBRO_MESTRE.md)", file=sys.stderr)
-        return 0
+        return comando_cerebro(args)
     roteador = carregar_roteador(args.config)
 
     if args.comando == "status":

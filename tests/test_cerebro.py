@@ -10,15 +10,16 @@ from torralles_studio.loop import ResultadoLoop, TentativaPeca
 from torralles_studio.qualidade import Avaliacao
 
 
-def tentativa(n, provedor, aprovado, nota, problemas=(), custo=0.01, eliminatorios=()):
+def tentativa(n, provedor, aprovado, nota, problemas=(), custo=0.01, eliminatorios=(), sem_juiz=False):
     av = Avaliacao("roteiro", aprovado=aprovado, nota=nota, problemas=list(problemas),
-                   eliminatorios=list(eliminatorios))
+                   eliminatorios=list(eliminatorios), sem_juiz=sem_juiz, revisar_manual=sem_juiz)
     return TentativaPeca(n, provedor, f"v{n}", av, custo, {provedor: custo})
 
 
 def registrar(banco, projeto, chave, tentativas, aprovado):
     melhor = tentativas[-1]
-    resultado = ResultadoLoop(melhor.valor, melhor.provedor, melhor.avaliacao, aprovado, not aprovado,
+    revisar = (not aprovado) or melhor.avaliacao.revisar_manual  # como o loop: sem juiz aprovado vai para revisão
+    resultado = ResultadoLoop(melhor.valor, melhor.provedor, melhor.avaliacao, aprovado, revisar,
                               "aprovado" if aprovado else "limite de tentativas", tentativas)
     banco.registrar_peca(projeto, "roteiro", chave, resultado)
 
@@ -76,6 +77,48 @@ class TestCerebro(unittest.TestCase):
                                          tentativa(2, "a", False, 10, ["erro com sk-abcdefghijklmnop0123"])], False)
         self.assertNotIn("sk-abcdefghijklmnop0123", resumo_markdown(coletar(self.banco)))
 
+    # Regressões da verificação independente (K27)
+    def test_sem_juiz_nao_vira_aprovacao_nem_recomendacao(self):
+        banco = Banco()
+        pid = banco.criar_projeto("z")
+        for i in range(3):
+            registrar(banco, pid, f"s{i}", [tentativa(1, "groq", True, None, sem_juiz=True,
+                                                      problemas=["nenhum juiz disponível: vale só a checagem automática",
+                                                                 "claude: falhou (chave ausente)"])], True)
+        d = coletar(banco)
+        self.assertEqual((d["tentativas_sem_juiz"], d["pecas_aprovadas"], d["pecas_revisar"]), (3, 0, 3))
+        self.assertEqual(d["provedores"], [])
+        self.assertEqual(d["problemas_recorrentes"], [])
+        texto = resumo_markdown(d)
+        self.assertNotIn("Prefira", texto)
+        self.assertNotIn("chave ausente", texto)
+        self.assertAlmostEqual(d["custo_total_usd"], 0.03)  # o custo continua no total
+
+    def test_erro_na_avaliacao_nao_culpa_o_gerador(self):
+        banco = Banco()
+        pid = banco.criar_projeto("z")
+        for i in range(3):
+            registrar(banco, pid, f"e{i}", [tentativa(1, "flux", False, None, sem_juiz=True,
+                                                      problemas=["erro na avaliação: KeyError: x"])], False)
+        texto = resumo_markdown(coletar(banco))
+        self.assertNotIn("flux", texto)
+        self.assertNotIn("erro na avaliação", texto)
+
+    def test_amostra_pequena_nao_vence_amostra_grande(self):
+        banco = Banco()
+        pid = banco.criar_projeto("z")
+        registrar(banco, pid, "a", [tentativa(i, "pequeno", True, 90) for i in range(1, 4)], True)
+        registrar(banco, pid, "b", [tentativa(i, "grande", i != 1, 85) for i in range(1, 51)], True)
+        self.assertIn("Prefira **grande**", resumo_markdown(coletar(banco)))
+
+    def test_data_e_perfil_invalidos(self):
+        with self.assertRaisesRegex(ValueError, "AAAA-MM-DD"):
+            coletar(self.banco, desde="16/10/2026")
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaisesRegex(ValueError, "perfil inválido"):
+                exportar(self.banco, d, perfil="../../x")
+        self.assertEqual(coletar(self.banco, desde="2999-01-01")["tentativas"], 0)
+
     def test_exportar_nao_sobrescreve_e_comando(self):
         with tempfile.TemporaryDirectory() as d:
             a = exportar(self.banco, d, data="2026-10-16")
@@ -93,6 +136,7 @@ class TestCerebro(unittest.TestCase):
             with contextlib.redirect_stdout(saida), contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(main(["--config", str(cfg), "cerebro", "-o", str(Path(d) / "c")]), 0)
             self.assertIn("Sem produção registrada", saida.getvalue())
+            self.assertFalse((Path(d) / "t.db").exists())  # não cria banco vazio
 
 
 if __name__ == "__main__":
