@@ -3,6 +3,9 @@
 > Status: **rascunho para revisão**. Complementa a régua da [spec 03](03-parametros-avaliacao.md).
 > Os canais listados são **candidatos**: precisam da escolha do Diego e da conferência de que continuam ativos e no padrão.
 
+> **Atualização 16/10 (D17 ajustada):** a pesquisa de como o mercado mede qualidade e os números técnicos
+> estão em [12-pesquisa-qualidade-concorrentes](12-pesquisa-qualidade-concorrentes.md).
+
 ## Objetivo
 Dar aos juízes de IA (e aos números da spec 03) uma **base concreta do que é um vídeo e um roteiro bons**,
 tirada de canais reconhecidos, em vez de critérios só abstratos. A base serve para três coisas:

@@ -114,7 +114,7 @@ O feedback do juiz deve indicar o **momento** do problema (ex.: *"quadro de 66% 
 | Gancho visual nos 3 primeiros s | Pontuado | 30% | Juízes nos quadros iniciais | imagem forte logo no início |
 | Fluidez das transições | Pontuado | 25% | Juízes + `scdet` (cortes muito bruscos ou muito frequentes) | sem cortes estranhos |
 | Coesão geral (parece um vídeo só) | Pontuado | 25% | Juízes em quadros de todas as cenas | estilo consistente |
-| Música (se houver) não cobre a voz | Pontuado | 20% | Automático: música ≥ 12 dB abaixo da voz | voz sempre clara |
+| Música (se houver) não cobre a voz | Pontuado | 20% | Automático: voz ≥ 10 LU acima da música (alvo 12) e ≥ 15 LU acima da ambiência ([spec 12](12-pesquisa-qualidade-concorrentes.md)) | voz sempre clara |
 | **Sua aprovação** | Humano (opcional) | — | Nota de 1 a 5 no app | ≥ 4 |
 
 ## 4. Protocolo do juiz de IA
