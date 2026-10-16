@@ -13,6 +13,10 @@ Leia este arquivo antes de continuar. O trabalho até aqui foi feito numa sessã
 - **Propostas aguardando aprovação do Diego:** D13 (integração híbrida via MCP com Hermes/Ops), D14 (Studio começa no briefing da peça criativa, interface JSON), D15 (escala 0–100 + eliminatório "fatos travados"), D16 (aprendizados vão para o Cérebro).
 - Correção pendente no código (cartão futuro): 7 modelos desatualizados no `config/fallbacks.toml` (ver 00-descoberta) e download sem lista de domínios (D8).
 
+## Atualização 16/10/2026 (2)
+- D13–D16, D18 aprovadas; D17 ajustada; D19–D20 novas. Pesquisa de qualidade na spec 12.
+- **Kanban montado em `KANBAN.md`** (raiz). Próximo: Camada 0 (K01–K05), sem chaves.
+
 ## Atualização 16/10/2026
 - Estudo do Ops **concluído** pela sessão local (só leitura) e incorporado ao `07` (seção "Confirmação pelo código").
 - Proposta de contrato Ops → Studio em `08-contrato-ops-studio.md`.
