@@ -50,8 +50,17 @@ def comando_cerebro(args):
     from pathlib import Path
 
     from .banco import Banco
-    from .cerebro import exportar
+    from .cerebro import exportar, validar_data
     from .config import RAIZ, carregar_config
+    from .perfis import ID_VALIDO
+
+    try:  # valida antes de tudo, mesmo sem banco
+        validar_data(args.desde)
+        if args.perfil is not None and not ID_VALIDO.match(args.perfil):
+            raise ValueError(f"perfil inválido {args.perfil!r}: use o id do perfil (veja: perfis)")
+    except ValueError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
 
     caminho = Path(carregar_config(args.config).get("banco", {}).get("caminho", "dados/torralles.db"))
     caminho = caminho if caminho.is_absolute() else RAIZ / caminho

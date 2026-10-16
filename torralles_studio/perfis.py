@@ -21,7 +21,7 @@ from pathlib import Path
 from .roteador import Roteador
 from .seguranca import Orcamento
 
-ID_VALIDO = re.compile(r"^[a-z0-9][a-z0-9_-]{1,40}$")
+ID_VALIDO = re.compile(r"^[a-z0-9][a-z0-9_-]{1,40}\Z")  # \Z: sem quebra de linha no fim
 CATEGORIAS = {"A", "B", "C", "D", "E", "F"}  # spec 09
 PROPORCOES = {"9:16", "16:9", "1:1", "4:5"}
 # O perfil ajusta estilo do provedor (voz, tamanho…), nunca o que é regra do produto:

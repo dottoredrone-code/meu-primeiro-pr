@@ -117,6 +117,8 @@ class TestCerebro(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaisesRegex(ValueError, "perfil inválido"):
                 exportar(self.banco, d, perfil="../../x")
+            with self.assertRaisesRegex(ValueError, "perfil inválido"):
+                exportar(self.banco, d, perfil="canal\n")
         self.assertEqual(coletar(self.banco, desde="2999-01-01")["tentativas"], 0)
 
     def test_exportar_nao_sobrescreve_e_comando(self):
