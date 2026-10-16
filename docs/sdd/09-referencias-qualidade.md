@@ -26,6 +26,10 @@ tirada de canais reconhecidos, em vez de critérios só abstratos. A base serve 
 
 ## Canais candidatos
 
+> **K11 (16/10/2026):** lista base aprovada e gravada em `config/referencias.toml`. Categoria A completa
+> (Zack D. Films, TED-Ed em cortes curtos, Veritasium Shorts, Manual do Mundo, Ciência Todo Dia). Mark Rober foi
+> descartado da A por publicar quase só vídeos longos. C, D e F aguardam indicações do Diego.
+
 | Cat. | Referências internacionais | Referências em português | Por que servem de régua |
 |---|---|---|---|
 | A | Zack D. Films; TED-Ed (cortes curtos) | Manual do Mundo; Ciência Todo Dia | Gancho imediato, um fato por vídeo, visual que explica sozinho |

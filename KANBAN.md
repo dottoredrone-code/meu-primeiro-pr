@@ -33,6 +33,7 @@
 | K15 | Roteiro em JSON com clima e sons por cena (esquema + régua + fatos travados + perfil) | [03](docs/sdd/03-parametros-avaliacao.md) |
 | K16 | Pesquisa com fontes delimitadas e citações sempre conferidas (2 domínios) | [03](docs/sdd/03-parametros-avaliacao.md) |
 | K27 | Aprendizados de produção para o Cérebro (só tentativas julgadas; instruções positivas com números) | D16 |
+| K11 | Canais de referência: lista base aprovada, categoria A completa (`config/referencias.toml`); C, D e F aguardam suas indicações | [09](docs/sdd/09-referencias-qualidade.md) · D17 |
 | K20 | Mídia gratuita em 3 camadas com licença por arquivo (Freesound só em projetos não comerciais, D22) — teste real pendente com as chaves | [11](docs/sdd/11-banco-midia-gratuita.md) · D18 · D22 |
 
 ## 🔍 Em verificação
@@ -57,7 +58,6 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 ### Camada 2 — Referências (D17; corre em paralelo à Camada 1)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
-| K11 | 🔒 Escolher canais e vídeos de referência (5 bons + 2 ruins por categoria; começa pela A) | [09](docs/sdd/09-referencias-qualidade.md) · [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) | **sua aprovação da lista** | Lista aprovada no repositório |
 | K12 | `analisar_referencia(url)`: métricas + estrutura do roteiro + 4 critérios de potencial | [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) | K06 · K11 | Analisa por link, sem baixar; JSON por vídeo |
 | K13 | Perfis de referência por categoria (faixas 25º–75º) substituindo números da spec 03 | [09](docs/sdd/09-referencias-qualidade.md) | K12 | `config` com faixas medidas; spec 03 atualizada |
 | K14 | Calibração: suas notas × notas dos juízes nas referências | [03](docs/sdd/03-parametros-avaliacao.md) | K07 · K12 | Divergência medida; âncoras ajustadas |
@@ -129,5 +129,5 @@ graph LR
 | O que falta | Destrava |
 |---|---|
 | `GEMINI_API_KEY` no ambiente (Network secrets) | K06, K12, K21 (ouvir trilhas) |
-| Sua aprovação da lista de canais de referência | K11 → K12, K13, K14 |
+| Suas indicações de canais para as categorias C, D e F (`config/referencias.toml`) | K12–K14 nessas categorias (a A já pode seguir) |
 | Chaves de produção (fal.ai, ElevenLabs, DeepSeek, Tavily) | K16–K19 com provedores reais |

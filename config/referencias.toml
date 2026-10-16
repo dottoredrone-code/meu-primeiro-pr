@@ -1,0 +1,80 @@
+# Canais de referência de qualidade (K11, spec 09 · D17).
+# Lista base aprovada pelo Diego em 16/10/2026. Categoria A completa; C, D e F aguardam indicações dele.
+# Os vídeos de cada canal (3 a 5 por canal) são escolhidos no K12 e analisados pelo link do YouTube, sem baixar.
+#
+# status: "aprovado" (na lista da spec 09, aprovada) · "sugestao" (proposta, entra se o Diego não trocar)
+#         · "pendente" (espaço para indicação do Diego)
+# url: endereço a confirmar no K12 (as fontes públicas consultadas trazem endereços antigos ou nenhum).
+
+[categorias.A]
+nome = "Curto informativo / curiosidade"
+formato = "15–60 s, vertical (Shorts, Reels, TikTok)"
+porque = "Gancho imediato, um fato por vídeo, visual que explica sozinho"
+canais = [
+  { nome = "Zack D. Films", idioma = "en", status = "aprovado", obs = "100% Shorts; líder mundial de visualizações em out/2026" },
+  { nome = "TED-Ed", idioma = "en", status = "aprovado", obs = "aulas de 4–7 min: usar só os cortes curtos" },
+  { nome = "Veritasium (Shorts)", idioma = "en", status = "sugestao", obs = "completa a categoria; Mark Rober descartado (quase só vídeos longos)" },
+  { nome = "Manual do Mundo", idioma = "pt-BR", status = "aprovado", url = "https://www.youtube.com/user/iberethenorio", obs = "endereço antigo; usar os Shorts" },
+  { nome = "Ciência Todo Dia", idioma = "pt-BR", status = "aprovado", obs = "Pedro Loos; usar os cortes curtos" },
+]
+negativos = 2  # vídeos de "fábrica de conteúdo com IA", escolhidos no K12 com aprovação do Diego (sem citar canais)
+
+[categorias.B]
+nome = "Explicativo / documental"
+formato = "5–20 min, horizontal"
+porque = "Pergunta central, pesquisa com fontes, narração que dita o ritmo da animação"
+canais = [
+  { nome = "Kurzgesagt", idioma = "en", status = "aprovado" },
+  { nome = "Johnny Harris", idioma = "en", status = "aprovado" },
+  { nome = "Vox", idioma = "en", status = "aprovado" },
+  { nome = "Veritasium", idioma = "en", status = "aprovado" },
+  { nome = "Nerdologia", idioma = "pt-BR", status = "aprovado" },
+  { nome = "Meteoro Brasil", idioma = "pt-BR", status = "aprovado" },
+]
+negativos = 2
+
+[categorias.C]
+nome = "Reflexão / relacionamentos / valores"
+formato = "curto ou longo"
+porque = "Narrativa emocional sem apelação, ritmo calmo, mensagem clara"
+canais = [
+  { nome = "The School of Life", idioma = "en", status = "aprovado" },
+  { nome = "BBC Ideas", idioma = "en", status = "aprovado" },
+  { nome = "Casa do Saber", idioma = "pt-BR", status = "sugestao" },
+  { nome = "(indicação do Diego)", idioma = "pt-BR", status = "pendente" },
+]
+negativos = 2
+
+[categorias.D]
+nome = "Produto / oferta"
+formato = "15–45 s"
+porque = "Produto como protagonista, benefício antes da especificação, CTA claro"
+canais = [
+  { nome = "Apple (anúncios curtos)", idioma = "en", status = "aprovado" },
+  { nome = "Marques Brownlee (MKBHD)", idioma = "en", status = "aprovado" },
+  { nome = "Canaltech", idioma = "pt-BR", status = "sugestao", obs = "reviews" },
+  { nome = "(indicação do Diego)", idioma = "pt-BR", status = "pendente" },
+]
+negativos = 2
+
+[categorias.E]
+nome = "Educação / aula"
+formato = "3–15 min"
+porque = "Clareza didática, estrutura em passos, recapitulação"
+canais = [
+  { nome = "Khan Academy", idioma = "en", status = "aprovado" },
+  { nome = "Ali Abdaal", idioma = "en", status = "aprovado" },
+  { nome = "Me Salva!", idioma = "pt-BR", status = "aprovado" },
+  { nome = "Descomplica", idioma = "pt-BR", status = "sugestao" },
+]
+negativos = 2
+
+[categorias.F]
+nome = "Institucional / B2B"
+formato = "30–90 s"
+porque = "Credibilidade, objetividade, prova social"
+canais = [
+  { nome = "(indicação do Diego)", idioma = "en", status = "pendente" },
+  { nome = "(indicação do Diego)", idioma = "pt-BR", status = "pendente" },
+]
+negativos = 2
