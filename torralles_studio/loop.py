@@ -8,6 +8,7 @@ Uma tentativa sem juiz (orçamento acabou ou nenhum juiz de outra família) só 
 depois de tentativas julgadas, o loop encerra e escolhe entre elas (a sem juiz fica por último).
 """
 
+import hashlib
 import json
 import re
 import shutil
@@ -50,10 +51,21 @@ class ResultadoLoop:
 def _como_texto(valor):
     if isinstance(valor, str):
         return valor
+    if isinstance(valor, Path) and valor.is_file():
+        # o conteúdo entra no texto: arquivo novo no mesmo caminho não reaproveita veredito antigo do cache
+        return f"{valor} (sha256 {hashlib.sha256(valor.read_bytes()).hexdigest()})"
     try:
         return json.dumps(valor, ensure_ascii=False, indent=2)
     except (TypeError, ValueError):
         return str(valor)
+
+
+def _arquivo_livre(saida):
+    """saida.t1.png, saida.t2.png… — nunca sobrescreve o arquivo de uma tentativa anterior (histórico)."""
+    n = 1
+    while (candidato := saida.with_name(f"{saida.stem}.t{n}{saida.suffix}")).exists():
+        n += 1
+    return candidato
 
 
 def _chave_melhor(t):
@@ -133,7 +145,7 @@ class LoopCorrecao:
             kwargs = dict(montar_kwargs(embrulhar_feedback(feedback) if feedback else None))
             if kwargs.get("saida"):
                 saida_final = Path(kwargs["saida"])
-                kwargs["saida"] = saida_final.with_name(f"{saida_final.stem}.t{len(tentativas) + 1}{saida_final.suffix}")
+                kwargs["saida"] = _arquivo_livre(saida_final)
             try:
                 r = self.roteador.executar(tarefa, validar=validar, excluir=excluidos, usar_cache=not refazer, **kwargs)
             except TodosFalharam as e:

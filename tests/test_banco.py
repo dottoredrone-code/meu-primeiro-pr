@@ -187,7 +187,7 @@ class TestRetomada(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             img = Arquivo()
             juiz = JuizFixo()
-            notas = iter([60, 65, 50])
+            notas = iter([60, 65, 50, 40, 40, 40])
             juiz.executar = lambda prompt, sistema=None: nota(next(notas))
             rt = Roteador({"img": img, "juiz": juiz}, {"imagem": ["img"], "juiz": ["juiz"]}, orcamento=Orcamento())
             cfg = {"imagem": {"nota_minima": 70, "criterios": CRITERIOS}}
@@ -199,6 +199,9 @@ class TestRetomada(unittest.TestCase):
             self.assertEqual(r.nota, 65.0)
             self.assertEqual(saida.read_bytes(), r.tentativas[1].valor.read_bytes())
             self.assertEqual(len({t.valor for t in r.tentativas}), 3)
+            # refazer não sobrescreve os arquivos das tentativas anteriores
+            r2 = loop.executar("imagem", "imagem", lambda fb: {"prompt": "nova", "saida": saida}, refazer=True)
+            self.assertFalse({t.valor for t in r2.tentativas} & {t.valor for t in r.tentativas})
 
     def test_arquivo_apagado_obriga_a_refazer(self):
         with tempfile.TemporaryDirectory() as d:
