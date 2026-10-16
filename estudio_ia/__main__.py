@@ -49,7 +49,21 @@ def main(argv=None):
     s.add_argument("-o", "--saida", default="saidas/video.mp4")
     s.add_argument("-d", "--duracao", type=int, default=5)
 
+    s = sub.add_parser("assistir", help="analisa um vídeo (quadros, cortes, som, transcrição) para avaliação")
+    s.add_argument("video")
+    s.add_argument("-o", "--saida", default="saidas/percepcao")
+    s.add_argument("--sem-transcricao", action="store_true")
+
     args = p.parse_args(argv)
+    if args.comando == "assistir":
+        from .config import carregar_env
+        from .percepcao import analisar_video
+
+        carregar_env()
+        rel = analisar_video(args.video, args.saida, transcrever_audio=not args.sem_transcricao)
+        resumo = {k: v for k, v in rel.items() if k not in ("quadros",)}
+        print(json.dumps(resumo, ensure_ascii=False, indent=2))
+        return 0
     roteador = carregar_roteador(args.config)
 
     if args.comando == "status":
