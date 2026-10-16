@@ -23,13 +23,12 @@
 | K03 | Downloads seguros: domínios permitidos, redirecionamento conferido antes de seguir, limite de tamanho e prazo total | [05](docs/sdd/05-dados-seguranca-memoria.md) · D8 |
 | K04 | Chaves mascaradas + teto de custo de US$ 1,50 | D8 · D20 |
 | K05 | `CLAUDE.md` do projeto | [05](docs/sdd/05-dados-seguranca-memoria.md) |
+| K07 | Avaliador na régua 0–100: eliminatórios, pesos, pisos, juízes de outra família, desempate | [03](docs/sdd/03-parametros-avaliacao.md) · D15 |
+| K08 | Checador de fatos travados (preço, link, percentual, obrigatórios) | [08](docs/sdd/08-contrato-ops-studio.md) · D15 |
+| K10 | Relatório de qualidade e custo por peça (JSON) | [01](docs/sdd/01-controle-qualidade.md) |
 
 ## 🔍 Em verificação
-| ID | Cartão | Spec |
-|---|---|---|
-| K07 | Avaliador na régua 0–100 | [03](docs/sdd/03-parametros-avaliacao.md) · D15 |
-| K08 | Checador de fatos travados | [08](docs/sdd/08-contrato-ops-studio.md) · D15 |
-| K10 | Relatório de qualidade e custo por peça | [01](docs/sdd/01-controle-qualidade.md) |
+_(vazio)_
 
 ## 🛠️ Em andamento
 _(vazio)_
@@ -43,10 +42,7 @@ _(vazio)_
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
 | K06 | 🔒 Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) | [10](docs/sdd/10-percepcao.md) | K01 · **falta `GEMINI_API_KEY`** | Devolve JSON na régua 0–100; testado com `exemplos/demo_torralles_studio_v2.mp4` |
-| K07 | Avaliador na régua 0–100: eliminatórios, pesos, pisos, 2 juízes, divergência | [03](docs/sdd/03-parametros-avaliacao.md) · D15 | K00b | Média calculada pelo código; testes com juízes falsos |
-| K08 | Checador de **fatos travados** (preço, nome, link) | [08](docs/sdd/08-contrato-ops-studio.md) · D15 | — | Teste com o caso real de preço inventado: reprova |
 | K09 | Loop de correção: refaz só a peça, com feedback do que corrigir e manter; limites; melhor tentativa | [01](docs/sdd/01-controle-qualidade.md) | K07 · K04 | Testes: para no limite; devolve a melhor com `revisar_manual` |
-| K10 | Relatório de qualidade e custo por peça | [01](docs/sdd/01-controle-qualidade.md) | K07 | JSON por vídeo com notas, problemas, custo e tentativas |
 
 ### Camada 2 — Referências (D17; corre em paralelo à Camada 1)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
