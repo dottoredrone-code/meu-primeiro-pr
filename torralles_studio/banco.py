@@ -141,6 +141,12 @@ MIGRACOES = [
         "ALTER TABLE tentativas ADD COLUMN modelo TEXT",
         "ALTER TABLE tentativas ADD COLUMN erro TEXT",
     ],
+    # 3 — memória separada por perfil de projeto (D11, K26)
+    [
+        "ALTER TABLE memoria ADD COLUMN perfil TEXT",
+        "CREATE INDEX idx_memoria_perfil ON memoria(perfil, tipo)",
+        "CREATE INDEX idx_projetos_perfil ON projetos(perfil)",
+    ],
 ]
 # Cada migração é uma lista de comandos (sem partir por ";", que quebraria textos e gatilhos).
 
@@ -273,6 +279,12 @@ class Banco:
         dados["custo_total_usd"] = self.custo_projeto(projeto_id)["total"]
         return dados
 
+    def projetos(self, perfil):
+        """Projetos de um perfil (nunca mistura perfis)."""
+        linhas = self.con.execute("SELECT id, titulo, status, criado_em FROM projetos WHERE perfil IS ? "
+                                  "ORDER BY id", (perfil,))
+        return [dict(l) for l in linhas]
+
     def mudar_status(self, projeto_id, status):
         with self.con:
             self.con.execute("UPDATE projetos SET status = ?, atualizado_em = ? WHERE id = ?",
@@ -388,6 +400,34 @@ class Banco:
         if chave:
             sql, args = sql + " AND p.chave = ?", args + [chave]
         return [dict(l) for l in self.con.execute(sql + " ORDER BY t.id", args)]
+
+    # -- memória por perfil (D11) -------------------------------------------
+    def lembrar(self, perfil, tipo, conteudo, chave=None, origem=None, relevancia=None):
+        """Guarda uma memória do perfil (tipos da spec 05: perfil, historico, aprendizado)."""
+        if not perfil:
+            raise ValueError("toda memória pertence a um perfil")
+        agora = _agora()
+        with self.con:
+            cur = self.con.execute(
+                "INSERT INTO memoria (perfil, tipo, chave, conteudo, origem, relevancia, criado_em, atualizado_em) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (perfil, tipo, chave, conteudo, origem, relevancia, agora, agora))
+        return cur.lastrowid
+
+    def memorias(self, perfil, tipo=None, busca=None):
+        """Memórias de um perfil só. `busca` filtra por trecho do conteúdo."""
+        sql, args = "SELECT * FROM memoria WHERE perfil = ?", [perfil]
+        if tipo:
+            sql, args = sql + " AND tipo = ?", args + [tipo]
+        if busca:
+            sql, args = sql + " AND conteudo LIKE ? ESCAPE '\\'", args + [
+                "%" + busca.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"]
+        return [dict(l) for l in self.con.execute(sql + " ORDER BY id", args)]
+
+    def esquecer(self, perfil, memoria_id):
+        """Apaga uma memória, só se for do perfil informado."""
+        with self.con:
+            cur = self.con.execute("DELETE FROM memoria WHERE id = ? AND perfil = ?", (memoria_id, perfil))
+        return cur.rowcount == 1
 
     # -- custo --------------------------------------------------------------
     def custo_projeto(self, projeto_id):

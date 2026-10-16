@@ -30,7 +30,9 @@
 | K24 | SQLite: projetos, peças, tentativas, avaliações, custo; retomada sem pagar de novo e cache | [05](docs/sdd/05-dados-seguranca-memoria.md) · D6 |
 
 ## 🔍 Em verificação
-_(vazio)_
+| ID | Cartão | Spec |
+|---|---|---|
+| K26 | Perfis por projeto (estilo, voz, formato, kit visual, memória), ligados aos perfis do Hermes | D11 · D13 |
 
 ## 🛠️ Em andamento
 _(vazio)_
@@ -72,7 +74,6 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
 | K25 | Biblioteca por hash com licença e busca por etiqueta | [05](docs/sdd/05-dados-seguranca-memoria.md) | K24 | Sem duplicatas; licença obrigatória |
-| K26 | Perfis por projeto (estilo, voz, formato, kit visual), ligados aos perfis do Hermes | D11 · D13 | K24 | Perfis não se misturam (teste) |
 | K27 | Exportar aprendizados para o Cérebro | D16 | K10 | Resumo gerado no formato do Cérebro |
 
 ### Camada 5 — Integração (depende das Camadas 1, 3 e 4)

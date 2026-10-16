@@ -83,6 +83,21 @@ def carregar_banco(caminho=None):
     return Banco(destino if destino.is_absolute() else RAIZ / destino)
 
 
+MODELO_PERFIL = RAIZ / "config" / "perfil_modelo.toml"
+
+
+def pasta_perfis(caminho=None):
+    destino = Path(carregar_config(caminho).get("perfis", {}).get("pasta", "dados/perfis"))
+    return destino if destino.is_absolute() else RAIZ / destino
+
+
+def carregar_perfis(caminho=None):
+    """Perfis por projeto (K26). Ajustes só podem citar provedores que existem no config."""
+    from .perfis import Perfis
+
+    return Perfis(pasta_perfis(caminho), provedores_conhecidos=set(carregar_config(caminho)["provedores"]))
+
+
 def carregar_roteador(caminho=None, banco=None):
     """banco: opcional (carregar_banco()); com ele, resultados repetidos vêm do cache sem custo."""
     dados = carregar_config(caminho)

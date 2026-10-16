@@ -39,21 +39,28 @@ def validar_roteiro(texto):
     return roteiro
 
 
-def gerar_ideias(roteador, tema, quantidade=10):
+def _com_perfil(sistema, perfil, etapa):
+    """Acrescenta ao prompt de sistema o contexto do perfil do projeto (K26). Sem perfil, nada muda."""
+    return f"{sistema}\n\n{perfil.contexto(etapa)}" if perfil else sistema
+
+
+def gerar_ideias(roteador, tema, quantidade=10, perfil=None):
     return roteador.executar(
         "ideias",
         prompt=f"Dê {quantidade} ideias criativas de vídeos curtos sobre: {tema}. "
         "Para cada uma: título chamativo e gancho dos 3 primeiros segundos.",
-        sistema="Você é estrategista de conteúdo para redes sociais. Responda em português do Brasil.",
+        sistema=_com_perfil("Você é estrategista de conteúdo para redes sociais. Responda em português do Brasil.",
+                            perfil, "ideias"),
     )
 
 
-def gerar_roteiro(roteador, tema, duracao=30, contexto=""):
+def gerar_roteiro(roteador, tema, duracao=30, contexto="", perfil=None):
     prompt = f"Crie o roteiro de um vídeo de cerca de {duracao} segundos sobre: {tema}."
     if contexto:
         prompt += f"\n\nUse estas informações de pesquisa:\n{contexto}"
     # Resposta que não for um roteiro válido conta como falha e vai para o próximo modelo.
-    return roteador.executar("roteiro", prompt=prompt, sistema=SISTEMA_ROTEIRO, validar=validar_roteiro)
+    return roteador.executar("roteiro", prompt=prompt, sistema=_com_perfil(SISTEMA_ROTEIRO, perfil, "roteiro"),
+                             validar=validar_roteiro)
 
 
 def pesquisar(roteador, tema, max_resultados=5):
@@ -86,7 +93,9 @@ def pesquisar(roteador, tema, max_resultados=5):
     )
 
 
-def gerar_imagem(roteador, prompt, saida):
+def gerar_imagem(roteador, prompt, saida, perfil=None):
+    if perfil and perfil.visual():
+        prompt = f"{prompt}. {perfil.visual()}"
     return roteador.executar("imagem", prompt=prompt, saida=Path(saida))
 
 

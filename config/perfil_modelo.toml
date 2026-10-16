@@ -1,0 +1,37 @@
+# Modelo de perfil de projeto do Torralles Studio (K26, D11).
+# Crie um perfil com:  python -m torralles_studio perfil-novo <id> "<nome do projeto>"
+# Os perfis ficam em dados/perfis/ (fora do Git). Arquivos do kit visual ficam em dados/perfis/<id>/.
+# Um perfil nunca usa nada de outro: prompt, arquivos, voz e memória são só dele.
+
+id = "novo-projeto"          # igual ao nome do arquivo; letras minúsculas, números, - ou _
+nome = "Nome do projeto"
+categoria = "A"              # régua de referência (spec 09): A curto informativo · B explicativo · C reflexão
+                             # D produto/oferta · E educação · F institucional
+hermes_perfil = ""           # nome do perfil equivalente no Hermes (opcional)
+idioma = "pt-BR"
+# teto_custo_usd = 1.50      # opcional: teto próprio por vídeo (senão vale o de config/fallbacks.toml)
+
+[estilo]
+publico = ""                 # para quem é o conteúdo
+tom = ""                     # ex.: leve e direto
+cta_padrao = ""              # ex.: siga o perfil para mais
+palavras_evitar = []         # viram eliminatório: texto com estas palavras é reprovado
+instrucoes = ""              # regras extras para o roteiro
+
+[formato]
+proporcao = "9:16"           # 9:16, 16:9, 1:1 ou 4:5
+duracao_s = 30
+resolucao = "1080x1920"
+
+[kit_visual]
+estilo_imagem = ""           # ex.: fotografia natural, luz suave
+paleta = []                  # ex.: ["#1E3A5F", "#F2C14E"]
+fontes = []
+logo = ""                    # caminho dentro de dados/perfis/<id>/
+referencias = []             # imagens de referência (personagem, estilo) dentro de dados/perfis/<id>/
+
+# Ajustes de provedor só deste perfil (ex.: voz). Não aceita chaves, base_url nem classe.
+# [provedores.edge_tts]
+# voz = "pt-BR-AntonioNeural"
+# [provedores.elevenlabs]
+# voz_id = ""

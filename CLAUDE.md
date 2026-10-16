@@ -32,6 +32,7 @@ torralles_studio/
   qualidade.py    avaliador 0–100 (juízes de outra família); fatos.py fatos travados
   loop.py         loop de correção; relatorio.py relatório de qualidade e custo
   banco.py        SQLite: projetos, peças, tentativas, custo, retomada e cache (dados/, fora do Git)
+  perfis.py       perfis por projeto (dados/perfis/<id>.toml, fora do Git; modelo em config/perfil_modelo.toml)
   rede.py         HTTP com erros padronizados e downloads seguros
   config.py       carrega config/fallbacks.toml e o .env
 config/fallbacks.toml   cadeias, modelos, custos, segurança
@@ -44,6 +45,8 @@ exemplos/               vídeos de teste da percepção
 python -m unittest discover -s tests          # testes (rodar antes de todo commit)
 python -m torralles_studio status             # cadeias e provedores prontos
 python -m torralles_studio assistir video.mp4 # relatório de percepção
+python -m torralles_studio perfil-novo meu-canal "Meu canal"   # cria perfil de projeto; 'perfis' lista
+python -m torralles_studio roteiro "tema" -p meu-canal          # gera com o perfil do projeto
 python -m torralles_studio --config outro.toml status   # config alternativo (ou TORRALLES_CONFIG)
 ```
 - O `.env` é lido da **raiz do repositório** e nunca sobrescreve variáveis já definidas.

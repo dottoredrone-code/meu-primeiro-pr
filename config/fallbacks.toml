@@ -18,6 +18,10 @@ teto_custo_usd = 1.50  # por execução/vídeo (D20); provedores pagos que não 
 # Banco local (SQLite, D6): projetos, tentativas, custo, retomada e cache. Fica fora do Git.
 caminho = "dados/torralles.db"
 
+[perfis]
+# Perfis por projeto (D11): um <id>.toml por projeto. Fora do Git; modelo em config/perfil_modelo.toml.
+pasta = "dados/perfis"
+
 [seguranca]
 # Arquivos devolvidos pelos provedores só são baixados destes domínios (D8).
 dominios_download = ["fal.media", "storage.googleapis.com", "image.pollinations.ai"]
