@@ -199,6 +199,10 @@ class TestValidacao(unittest.TestCase):
             ("loja-cha.toml", LOJA.replace('hermes_perfil = "loja"', 'hermes_perfil = ["x"]'), "precisa ser texto"),
             ("loja-cha.toml", LOJA.replace('palavras_evitar = ["barato"]', 'palavras_evitar = "abc"'), "lista de textos"),
             ("loja-cha.toml", LOJA + '[provedores]\nvoz_falsa = "voz"\n', "precisa ser uma tabela"),
+            ("loja-cha.toml", LOJA.replace('categoria = "D"', 'categoria = ["D"]'), "precisa ser texto"),
+            ("loja-cha.toml", LOJA.replace('proporcao = "1:1"', 'proporcao = ["1:1"]'), "precisa ser texto"),
+            ("loja-cha.toml", 'formato = "1:1"\n' + LOJA.replace('[formato]\nproporcao = "1:1"', ''), "precisa ser uma tabela"),
+            ("loja-cha.toml", LOJA.replace('paleta = ["#2E7D32"]', 'paleta = ["#2E7D32"]\nlogo = 5'), "precisa ser texto"),
         ]
         for nome, texto, msg in casos:
             with self.subTest(msg=msg):
@@ -283,7 +287,7 @@ class TestCriarPerfil(unittest.TestCase):
                 criar_perfil(Path(d) / "perfis", "meu-canal", "x", MODELO_PERFIL)
             with self.assertRaisesRegex(ErroPerfil, "id inválido"):
                 criar_perfil(Path(d) / "perfis", "Meu Canal", "x", MODELO_PERFIL)
-            for ruim in ("linha1\nlinha2", "   "):
+            for ruim in ("linha1\nlinha2", "   ", "ok\ud800"):
                 with self.assertRaisesRegex(ErroPerfil, "não pode ser vazio"):
                     criar_perfil(Path(d) / "perfis", "ruim", ruim, MODELO_PERFIL)
             criar_perfil(Path(d) / "perfis", "aspas", 'Canal "Q" \\ teste', MODELO_PERFIL)

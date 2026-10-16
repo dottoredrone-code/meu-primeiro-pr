@@ -164,10 +164,11 @@ def _validar(dados, arquivo, pasta_raiz, provedores_conhecidos, teto_maximo=None
         raise ErroPerfil(f"{arquivo.name}: o nome do arquivo precisa ser igual ao id ({pid}.toml)")
     if not str(dados.get("nome", "")).strip():
         raise ErroPerfil(f"perfil {pid}: falta 'nome'")
-    cat = dados.get("categoria")
+    cat = _texto(dados.get("categoria"), "categoria", pid)
     if cat is not None and cat not in CATEGORIAS:
         raise ErroPerfil(f"perfil {pid}: categoria {cat!r} não existe (use A–F, spec 09)")
-    prop = dados.get("formato", {}).get("proporcao")
+    formato = dict(_tabela(dados.get("formato"), "formato", pid))
+    prop = _texto(formato.get("proporcao"), "formato.proporcao", pid)
     if prop is not None and prop not in PROPORCOES:
         raise ErroPerfil(f"perfil {pid}: proporção {prop!r} inválida (use {', '.join(sorted(PROPORCOES))})")
     teto = dados.get("teto_custo_usd")
@@ -186,13 +187,14 @@ def _validar(dados, arquivo, pasta_raiz, provedores_conhecidos, teto_maximo=None
     estilo = dict(_tabela(dados.get("estilo"), "estilo", pid))
     estilo["palavras_evitar"] = _lista_de_textos(estilo.get("palavras_evitar"), "estilo.palavras_evitar", pid)
     kit = dict(_tabela(dados.get("kit_visual"), "kit_visual", pid))
+    kit["logo"] = _texto(kit.get("logo"), "kit_visual.logo", pid)
     for campo in ("paleta", "fontes", "referencias"):
         kit[campo] = _lista_de_textos(kit.get(campo), f"kit_visual.{campo}", pid)
     perfil = Perfil(
         id=pid, nome=str(dados["nome"]).strip(), pasta=pasta_raiz / pid, categoria=cat,
         hermes_perfil=_texto(dados.get("hermes_perfil"), "hermes_perfil", pid),
         idioma=_texto(dados.get("idioma"), "idioma", pid) or "pt-BR",
-        estilo=estilo, formato=dict(_tabela(dados.get("formato"), "formato", pid)),
+        estilo=estilo, formato=formato,
         kit_visual=kit, provedores=dict(provedores), teto_custo_usd=teto,
     )
     for chave in ("logo",):
@@ -227,6 +229,8 @@ class Perfis:
                 candidatos.append(_validar(dados, arquivo, self.pasta, provedores_conhecidos, teto_maximo))
             except ErroPerfil as e:
                 self.erros[arquivo.stem] = str(e)
+            except (TypeError, AttributeError, ValueError) as e:  # rede de segurança: tipo inesperado no arquivo
+                self.erros[arquivo.stem] = f"{arquivo.name}: campo com tipo inválido ({type(e).__name__}: {e})"
         ids = {p.id for p in candidatos}
         for perfil in candidatos:
             h = perfil.hermes_perfil
@@ -262,8 +266,8 @@ def criar_perfil(pasta, pid, nome, modelo):
     if not ID_VALIDO.match(pid):
         raise ErroPerfil(f"id inválido: {pid!r} (use letras minúsculas, números, '-' ou '_')")
     nome = str(nome).strip()
-    if not nome or any(ord(c) < 32 or ord(c) == 127 for c in nome):
-        raise ErroPerfil("o nome do perfil não pode ser vazio nem ter quebra de linha")
+    if not nome or any(ord(c) < 32 or ord(c) == 127 or 0xD800 <= ord(c) <= 0xDFFF for c in nome):
+        raise ErroPerfil("o nome do perfil não pode ser vazio nem ter quebra de linha ou caractere inválido")
     pasta = Path(pasta)
     destino = pasta / f"{pid}.toml"
     if destino.exists():
