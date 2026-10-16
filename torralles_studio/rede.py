@@ -18,7 +18,9 @@ class ErroProvedor(Exception):
     """
 
     def __init__(self, mensagem, status=None, temporario=False):
-        super().__init__(mensagem)
+        from .seguranca import mascarar
+
+        super().__init__(mascarar(mensagem))
         self.status = status
         self.temporario = temporario
 

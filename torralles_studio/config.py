@@ -5,6 +5,7 @@ from pathlib import Path
 from .provedores import CLASSES
 from .rede import configurar_downloads
 from .roteador import Roteador
+from .seguranca import Orcamento
 
 RAIZ = Path(__file__).resolve().parent.parent
 CONFIG_PADRAO = RAIZ / "config" / "fallbacks.toml"
@@ -66,4 +67,5 @@ def carregar_roteador(caminho=None):
         cadeias,
         repeticoes=opcoes.get("repeticoes", 1),
         espera_base=opcoes.get("espera_base", 1.0),
+        orcamento=Orcamento(opcoes.get("teto_custo_usd")),
     )

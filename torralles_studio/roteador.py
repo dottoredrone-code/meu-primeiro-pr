@@ -7,6 +7,8 @@ Regras:
 - Erro definitivo (400, resposta inválida...) → passa direto para o próximo.
 - 429 (limite) e 401/403 (chave inválida) colocam o provedor em "descanso"
   por um tempo, para as próximas chamadas nem tentarem nele.
+- Teto de custo (D20): provedor cuja estimativa não cabe no que resta do orçamento
+  é pulado; os gratuitos continuam disponíveis. Mensagens passam por mascarar().
 """
 
 import time
@@ -14,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .rede import ErroProvedor
+from .seguranca import Orcamento, mascarar
 
 DESCANSO_LIMITE = 60  # segundos após um 429
 DESCANSO_CHAVE = 3600  # segundos após 401/403
@@ -42,8 +45,10 @@ class TodosFalharam(Exception):
 
 
 class Roteador:
-    def __init__(self, provedores, cadeias, repeticoes=1, espera_base=1.0, dormir=time.sleep, relogio=time.monotonic):
+    def __init__(self, provedores, cadeias, repeticoes=1, espera_base=1.0, dormir=time.sleep, relogio=time.monotonic,
+                 orcamento=None):
         self.provedores = provedores
+        self.orcamento = orcamento or Orcamento()
         self.cadeias = cadeias
         self.repeticoes = repeticoes
         self.espera_base = espera_base
@@ -69,22 +74,30 @@ class Roteador:
             if motivo:
                 tentativas.append(Tentativa(nome, "pulado", motivo))
                 continue
+            custo = self.orcamento.estimar(provedor, kwargs)
+            if not self.orcamento.cabe(custo):
+                tentativas.append(Tentativa(nome, "pulado", f"teto de custo: precisa US$ {custo:.3f}, "
+                                                             f"restam US$ {self.orcamento.restante:.3f}"))
+                continue
             try:
-                valor = self._chamar(nome, provedor, kwargs)
+                valor = self._chamar(nome, provedor, kwargs, custo)
                 if validar:
                     valor = validar(valor)
             except (ErroProvedor, ValueError) as e:
-                tentativas.append(Tentativa(nome, "falhou", str(e)))
+                tentativas.append(Tentativa(nome, "falhou", mascarar(str(e))))
                 continue
             except Exception as e:  # resposta em formato inesperado, bug no provedor...
-                tentativas.append(Tentativa(nome, "falhou", f"{type(e).__name__}: {e}"))
+                tentativas.append(Tentativa(nome, "falhou", mascarar(f"{type(e).__name__}: {e}")))
                 continue
             tentativas.append(Tentativa(nome, "ok"))
             return Resultado(valor, nome, tentativas)
         raise TodosFalharam(tarefa, tentativas)
 
-    def _chamar(self, nome, provedor, kwargs):
+    def _chamar(self, nome, provedor, kwargs, custo=0.0):
         for n in range(self.repeticoes + 1):
+            if n and not self.orcamento.cabe(custo):
+                raise ErroProvedor("teto de custo atingido antes de repetir")
+            self.orcamento.registrar(nome, custo)
             try:
                 return provedor.executar(**kwargs)
             except ErroProvedor as e:

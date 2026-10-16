@@ -4,6 +4,7 @@
 # [tarefas.Y].cadeia lista os provedores em ordem de preferência: o roteador
 # tenta o primeiro e, se faltar chave ou der erro, passa para o próximo.
 #
+# custo_usd / custo_usd_por_segundo: estimativas usadas pelo teto de custo (D20).
 # Nomes de modelos mudam com frequência: confira na documentação de cada
 # serviço e ajuste aqui, sem mexer no código. Última revisão: 16/10/2026 (K01).
 # Verificação mensal no cartão recorrente KR1 do KANBAN.md.
@@ -11,6 +12,7 @@
 [roteador]
 repeticoes = 1      # novas tentativas no mesmo provedor em erro temporário
 espera_base = 1.0   # segundos; dobra a cada repetição
+teto_custo_usd = 1.50  # por execução/vídeo (D20); provedores pagos que não couberem são pulados
 
 [seguranca]
 # Arquivos devolvidos pelos provedores só são baixados destes domínios (D8).
@@ -20,12 +22,14 @@ tamanho_maximo_download_mb = 300
 # ---------------------------------------------------------------- texto
 
 [provedores.deepseek_chat]
+custo_usd = 0.001  # estimativa (revisar no KR1)
 classe = "openai_compat"
 base_url = "https://api.deepseek.com"
 modelo = "deepseek-flash"   # V4.1-Flash; "deepseek-chat" foi aposentado em 24/07/2026
 chave_env = "DEEPSEEK_API_KEY"
 
 [provedores.deepseek_reasoner]
+custo_usd = 0.003  # estimativa (revisar no KR1)
 classe = "openai_compat"
 base_url = "https://api.deepseek.com"
 modelo = "deepseek-v4-pro"  # "deepseek-reasoner" foi aposentado; se indisponível, a cadeia segue
@@ -33,22 +37,26 @@ chave_env = "DEEPSEEK_API_KEY"
 timeout = 300
 
 [provedores.claude]
+custo_usd = 0.02  # estimativa (revisar no KR1)
 classe = "anthropic"
 modelo_env = "CLAUDE_MODEL"   # defina o modelo no .env
 chave_env = "ANTHROPIC_API_KEY"
 
 [provedores.gemini_flash]
+custo_usd = 0.003  # estimativa (revisar no KR1)
 classe = "gemini_texto"
 modelo = "gemini-3.6-flash"  # estável; "gemini-2.5-flash" desligado em 16/10/2026
 chave_env = "GEMINI_API_KEY"
 
 [provedores.openai_mini]
+custo_usd = 0.003  # estimativa (revisar no KR1)
 classe = "openai_compat"
 base_url = "https://api.openai.com/v1"
 modelo = "gpt-5.4-mini"  # substituto indicado do snapshot gpt-5-mini (desliga 11/12/2026)
 chave_env = "OPENAI_API_KEY"
 
 [provedores.openrouter_gratis]
+custo_usd = 0  # estimativa (revisar no KR1)
 # Modelos ":free" do OpenRouter mudam com frequência: openrouter.ai/models?q=free
 classe = "openai_compat"
 base_url = "https://openrouter.ai/api/v1"
@@ -65,26 +73,31 @@ timeout = 600
 # ---------------------------------------------------------------- busca
 
 [provedores.tavily]
+custo_usd = 0  # estimativa (revisar no KR1)
 classe = "tavily"
 chave_env = "TAVILY_API_KEY"
 
 [provedores.brave]
+custo_usd = 0.005  # estimativa (revisar no KR1)
 classe = "brave"
 chave_env = "BRAVE_API_KEY"
 
 # ---------------------------------------------------------------- imagem
 
 [provedores.nano_banana]
+custo_usd = 0.06  # estimativa (revisar no KR1)
 classe = "gemini_imagem"
 modelo = "gemini-3.1-flash-image"  # Nano Banana 2; "gemini-2.5-flash-image" desligado em 02/10/2026
 chave_env = "GEMINI_API_KEY"
 
 [provedores.fal_flux]
+custo_usd = 0.004  # estimativa (revisar no KR1)
 classe = "fal_imagem"
 modelo = "fal-ai/flux/schnell"
 chave_env = "FAL_KEY"
 
 [provedores.openai_imagem]
+custo_usd = 0.05  # estimativa (revisar no KR1)
 classe = "openai_imagem"
 modelo = "gpt-image-2"  # "gpt-image-1" desliga em 23/10/2026
 chave_env = "OPENAI_API_KEY"
@@ -98,12 +111,14 @@ timeout = 180
 # ---------------------------------------------------------------- voz
 
 [provedores.elevenlabs]
+custo_usd = 0.03  # estimativa (revisar no KR1)
 classe = "elevenlabs"
 modelo = "eleven_multilingual_v2"
 voz_id = "21m00Tcm4TlvDq8ikWAM"
 chave_env = "ELEVENLABS_API_KEY"
 
 [provedores.openai_voz]
+custo_usd = 0.01  # estimativa (revisar no KR1)
 classe = "openai_voz"
 modelo = "gpt-4o-mini-tts"
 voz = "alloy"
@@ -116,6 +131,7 @@ voz = "pt-BR-FranciscaNeural"
 # ---------------------------------------------------------------- vídeo
 
 [provedores.fal_kling]
+custo_usd_por_segundo = 0.084  # estimativa (revisar no KR1)
 classe = "fal_video"
 modelo = "fal-ai/kling-video/v3/standard/image-to-video"
 campo_imagem = "start_image_url"  # o Kling v3 usa este nome de parâmetro
@@ -123,6 +139,7 @@ chave_env = "FAL_KEY"
 timeout = 900
 
 [provedores.fal_wan]
+custo_usd_por_segundo = 0.05  # estimativa (revisar no KR1)
 classe = "fal_video"
 modelo = "fal-ai/wan-25-preview/image-to-video"
 chave_env = "FAL_KEY"
