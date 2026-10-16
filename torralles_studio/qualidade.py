@@ -7,6 +7,7 @@ terceiro desempata (mediana); sem terceiro, a peça vai para revisão manual.
 """
 
 import json
+import re
 import statistics
 from dataclasses import asdict, dataclass, field
 
@@ -35,6 +36,7 @@ class Rubrica:
     nota_minima: float = 70
     num_juizes: int = 1
     divergencia_maxima: float = 20
+    automatico: dict = field(default_factory=dict)  # limiares das checagens automáticas (spec 01)
 
     @classmethod
     def do_config(cls, etapa, cfg):
@@ -44,6 +46,7 @@ class Rubrica:
             nota_minima=cfg.get("nota_minima", 70),
             num_juizes=cfg.get("num_juizes", 1),
             divergencia_maxima=cfg.get("divergencia_maxima", 20),
+            automatico=dict(cfg.get("automatico", {})),
         )
 
 
@@ -91,6 +94,14 @@ class Avaliacao:
         return "\n".join(linhas)
 
 
+_MARCA = re.compile(r"<\s*(/?)\s*conteudo\s*>", re.I)
+
+
+def _neutralizar_marcas(conteudo):
+    """Impede que o conteúdo feche a marca <conteudo> e escreva instruções fora dela."""
+    return _MARCA.sub(lambda m: f"[{m.group(1)}conteudo]", str(conteudo))
+
+
 def familia(roteador, nome):
     if not nome or nome not in roteador.provedores:
         return nome
@@ -117,7 +128,7 @@ class Avaliador:
         partes = [f"Etapa avaliada: {rubrica.etapa}.", ESCALA, "Critérios:", criterios]
         if contexto:
             partes += ["Contexto (briefing e pesquisa; use para checar precisão):", str(contexto)]
-        partes += [f"<conteudo>\n{conteudo}\n</conteudo>", f"Formato obrigatório da resposta: {formato}"]
+        partes += [f"<conteudo>\n{_neutralizar_marcas(conteudo)}\n</conteudo>", f"Formato obrigatório da resposta: {formato}"]
         return "\n\n".join(partes)
 
     @staticmethod
@@ -132,7 +143,7 @@ class Avaliador:
             if not isinstance(item, dict) or not str(item.get("evidencia", "")).strip():
                 raise ValueError(f"juiz sem evidência para '{nome}'")
             nota = item.get("nota")
-            if not isinstance(nota, (int, float)) or not 0 <= nota <= 100:
+            if isinstance(nota, bool) or not isinstance(nota, (int, float)) or not 0 <= nota <= 100:
                 raise ValueError(f"nota inválida para '{nome}': {nota!r}")
             notas[nome] = float(nota)
         problemas = [str(p) for p in dados.get("problemas", []) if str(p).strip()]
@@ -160,7 +171,7 @@ class Avaliador:
         familias = {familia(self.roteador, gerador)} if gerador else set()
         respostas, juizes = [], []
         alvo = rubrica.num_juizes
-        while len(juizes) < alvo:
+        while len(juizes) < alvo:  # com 2+ juízes divergentes, chama mais um para desempatar (uma vez só)
             try:
                 r = self._chamar_juiz(rubrica, conteudo, contexto, self._excluidos(familias))
             except TodosFalharam:
@@ -169,7 +180,7 @@ class Avaliador:
             respostas.append(r.valor)
             familias.add(familia(self.roteador, r.provedor))
             if len(juizes) == alvo == rubrica.num_juizes and alvo >= 2 and self._divergentes(respostas, rubrica):
-                alvo += 1  # chama um terceiro para desempatar
+                alvo += 1
 
         if not juizes:
             return Avaliacao(etapa, aprovado=True, nota=None, sem_juiz=True, revisar_manual=True,
@@ -177,7 +188,7 @@ class Avaliador:
 
         if len(respostas) >= 3:
             criterios = {c: statistics.median(r["notas"][c] for r in respostas) for c in rubrica.criterios}
-            divergentes = []
+            divergentes = self._sem_consenso(respostas, criterios, rubrica)
         else:
             criterios = {c: statistics.mean(r["notas"][c] for r in respostas) for c in rubrica.criterios}
             divergentes = self._divergentes(respostas, rubrica)
@@ -202,6 +213,16 @@ class Avaliador:
         )
 
     @staticmethod
+    def _sem_consenso(respostas, mediana, rubrica):
+        """Com 3+ juízes: critério sem consenso quando nem dois juízes ficam perto da mediana."""
+        return [c for c in rubrica.criterios
+                if sum(abs(r["notas"][c] - mediana[c]) <= rubrica.divergencia_maxima for r in respostas) < 2]
+
+    def parametros_automaticos(self, etapa):
+        """Limiares das checagens automáticas vindos do config ([avaliacao.<etapa>.automatico])."""
+        return dict(self.rubricas[etapa].automatico) if etapa in self.rubricas else {}
+
+    @staticmethod
     def _divergentes(respostas, rubrica):
         if len(respostas) < 2:
             return []
@@ -213,24 +234,40 @@ class Avaliador:
 # -- checagens automáticas (eliminatórios) ------------------------------------
 def checar_roteiro(roteiro, duracao_alvo_s, palavras_por_segundo=2.5, tolerancia_duracao=0.20,
                    folga_narracao=1.10, segundos_por_cena=(3, 8)):
-    """Eliminatórios objetivos do roteiro (spec 03, 3.2). Devolve a lista de problemas."""
-    problemas = []
+    """Eliminatórios objetivos do roteiro (spec 03, 3.2). Devolve a lista de problemas.
+
+    Os limiares podem vir do config: checar_roteiro(r, 30, **avaliador.parametros_automaticos("roteiro")).
+    """
+    if not isinstance(roteiro, dict):
+        return ["roteiro em formato inválido"]
     cenas = roteiro.get("cenas") or []
-    if not cenas:
+    if not isinstance(cenas, list) or not cenas:
         return ["roteiro sem cenas"]
-    duracoes = [float(c.get("duracao") or 0) for c in cenas]
-    total = sum(duracoes)
-    if duracao_alvo_s and abs(total - duracao_alvo_s) > tolerancia_duracao * duracao_alvo_s:
-        problemas.append(f"duração total {total:.0f} s fora de ±{tolerancia_duracao:.0%} do pedido ({duracao_alvo_s} s)")
-    for i, (cena, dur) in enumerate(zip(cenas, duracoes), 1):
+    problemas = []
+    minimo, maximo = segundos_por_cena
+    duracoes = []
+    for i, cena in enumerate(cenas, 1):
+        if not isinstance(cena, dict):
+            problemas.append(f"cena {i} em formato inválido")
+            continue
+        try:
+            dur = float(str(cena.get("duracao", "")).strip().rstrip("sS").replace(",", "."))
+        except ValueError:
+            problemas.append(f"cena {i} com duração inválida: {cena.get('duracao')!r}")
+            continue
+        duracoes.append(dur)
         if not cena.get("narracao") or not cena.get("prompt_imagem"):
             problemas.append(f"cena {i} sem narração ou prompt de imagem")
             continue
         palavras = len(str(cena["narracao"]).split())
-        maximo = int(dur * palavras_por_segundo * folga_narracao)
-        if dur <= 0 or palavras > maximo:
-            problemas.append(f"narração da cena {i} tem {palavras} palavras para {dur:.0f} s (máx. {maximo})")
-    minimo, maximo = segundos_por_cena
+        limite = int(dur * palavras_por_segundo * folga_narracao)
+        if dur <= 0 or palavras > limite:
+            problemas.append(f"narração da cena {i} tem {palavras} palavras para {dur:.0f} s (máx. {limite})")
+        elif dur > 2 * maximo:
+            problemas.append(f"cena {i} com {dur:.0f} s: longa demais (máx. {2 * maximo} s por cena)")
+    total = sum(duracoes)
+    if duracao_alvo_s and abs(total - duracao_alvo_s) > tolerancia_duracao * duracao_alvo_s:
+        problemas.append(f"duração total {total:.0f} s fora de ±{tolerancia_duracao:.0%} do pedido ({duracao_alvo_s} s)")
     if total and not (total / maximo <= len(cenas) <= total / minimo + 1):
         problemas.append(f"{len(cenas)} cenas para {total:.0f} s (esperado 1 cena a cada {minimo}–{maximo} s)")
     return problemas

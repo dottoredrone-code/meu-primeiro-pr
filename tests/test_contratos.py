@@ -26,6 +26,17 @@ class TestContratos(unittest.TestCase):
         ruins = {m for m in usados for padrao in APOSENTADOS if re.search(padrao, m)}
         self.assertFalse(ruins, f"modelos aposentados: {ruins}")
 
+    def test_familia_do_juiz_bate_com_o_modelo(self):
+        # Juiz nunca é da família de quem gerou (D15): a família precisa ser a do MODELO, não a do serviço.
+        prefixos = {"deepseek": "deepseek", "gemini": "google", "gpt": "openai", "claude": "anthropic"}
+        for nome, cfg in self.dados["provedores"].items():
+            if "familia" not in cfg or not cfg.get("modelo"):
+                continue
+            modelo = cfg["modelo"].split("/")[-1].lower()
+            for prefixo, familia in prefixos.items():
+                if modelo.startswith(prefixo):
+                    self.assertEqual(cfg["familia"], familia, f"{nome} roda {cfg['modelo']}")
+
     def test_kling_v3_recebe_start_image_url(self):
         provedores = montar_provedores(self.dados)
         kling = provedores["fal_kling"]

@@ -61,7 +61,7 @@ modelo = "gpt-5.4-mini"  # substituto indicado do snapshot gpt-5-mini (desliga 1
 chave_env = "OPENAI_API_KEY"
 
 [provedores.openrouter_gratis]
-familia = "openrouter"  # juiz nunca é da mesma família de quem gerou
+familia = "deepseek"  # família do MODELO, não do serviço: atualize junto quando trocar o modelo
 custo_usd = 0  # estimativa (revisar no KR1)
 # Modelos ":free" do OpenRouter mudam com frequência: openrouter.ai/models?q=free
 classe = "openai_compat"
@@ -206,6 +206,7 @@ ritmo     = { peso = 15, descricao = "Início, desenvolvimento e fechamento; vir
 cta       = { peso = 10, descricao = "Fechamento com chamada para ação clara" }
 
 [avaliacao.roteiro.automatico]
+# Lidos por Avaliador.parametros_automaticos("roteiro") e passados para checar_roteiro().
 palavras_por_segundo = 2.5
 tolerancia_duracao = 0.20
 folga_narracao = 1.10

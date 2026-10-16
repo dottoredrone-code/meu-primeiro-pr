@@ -46,5 +46,5 @@ class RelatorioQualidade:
         caminho = Path(caminho)
         caminho.parent.mkdir(parents=True, exist_ok=True)
         dados = {"resumo": self.resumo(orcamento), "entradas": self.entradas}
-        caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2))
+        caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
         return caminho
