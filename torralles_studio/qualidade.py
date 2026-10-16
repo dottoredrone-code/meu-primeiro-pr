@@ -172,7 +172,7 @@ class Avaliador:
                 momento = f"aos {m}: " if m is not None and str(m).strip() else ""
                 gravidade = f" (gravidade {p['gravidade']})" if p.get("gravidade") else ""
                 problemas.append(f"{momento}{desc}{gravidade}")
-            elif str(p).strip():
+            elif str(p).strip() and str(p).strip().lower() not in ("nenhum", "nenhuma", "-", "n/a", "none"):
                 problemas.append(str(p))
         correcao = str(dados.get("correcao_sugerida", "")).strip()
         return {"notas": notas, "problemas": problemas, "correcao": correcao}

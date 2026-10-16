@@ -84,6 +84,7 @@ class TestProvedorGeminiVideo(unittest.TestCase):
     def test_somente_links_de_um_video_do_youtube(self):
         bons = ["https://www.youtube.com/watch?v=abc", "HTTPS://youtu.be/abc", "https://youtube.com/shorts/abc"]
         ruins = ["https://youtube.com.evil.com/watch?v=a", "https://www.youtube.com/@canal",
+                 "https://www.youtube.com/watch?vv=1", "https://www.youtube.com/watch?v=", "https://youtube.com/shorts/",
                  "https://www.youtube.com/playlist?list=x", "https://youtu.be/", "ftp://youtu.be/abc"]
         for url in bons:
             self.assertTrue(eh_youtube(url), url)
@@ -196,8 +197,8 @@ class TestAvaliarVideo(unittest.TestCase):
         self.assertEqual(sum(c["peso"] for c in rub.criterios.values()), 100)
 
 
-@unittest.skipUnless(os.environ.get("GEMINI_API_KEY") and DEMO.exists(),
-                     "teste real: precisa de GEMINI_API_KEY (roda no PC com a chave)")
+@unittest.skipUnless(os.environ.get("TORRALLES_TESTE_REAL") == "1" and os.environ.get("GEMINI_API_KEY") and DEMO.exists(),
+                     "teste real (pago): rode com TORRALLES_TESTE_REAL=1 e GEMINI_API_KEY (no PC)")
 class TestRealDemo(unittest.TestCase):
     def test_demo_devolve_json_na_regua(self):
         from torralles_studio.config import carregar_avaliador

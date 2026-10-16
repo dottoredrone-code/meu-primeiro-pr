@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from ..rede import ErroProvedor, post_json
 from .base import Provedor
@@ -30,7 +30,10 @@ def eh_youtube(video):
         return False
     if host == "youtu.be":
         return len(u.path.strip("/")) > 0
-    return ("v=" in u.query and u.path.rstrip("/") == "/watch") or u.path.startswith(("/shorts/", "/live/"))
+    if u.path.rstrip("/") == "/watch":
+        return bool((parse_qs(u.query).get("v") or [""])[0].strip())
+    partes = u.path.strip("/").split("/")
+    return len(partes) >= 2 and partes[0] in ("shorts", "live") and bool(partes[1])
 
 
 def versao_leve(video, pasta, altura=720):

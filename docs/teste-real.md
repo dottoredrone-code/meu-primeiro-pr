@@ -15,13 +15,17 @@ Crie `.env` na raiz (veja `docs/configurar-chaves.md`) com as chaves que você j
 
 ## 2. Rodar (na ordem)
 ```bash
-python -m unittest discover -s tests                 # deve passar; o teste real do Gemini roda se houver a chave
+python -m unittest discover -s tests                 # deve passar (os testes normais não gastam nada)
 python -m torralles_studio status                    # quais provedores ficaram "pronto"
 python -m torralles_studio pesquisa "benefícios do chá verde" -q
 python -m torralles_studio roteiro "benefícios do chá verde" -d 30 -q
 python -m torralles_studio avaliar-video exemplos/demo_torralles_studio_v2.mp4 --percepcao -c "vídeo demonstrativo do Torralles Studio"
 python -m torralles_studio avaliar-video "https://www.youtube.com/watch?v=<um vídeo curto>"   # sem baixar
 ```
+
+Teste real pago do juiz de vídeo dentro da suíte (uns US$ 0,05): defina `TORRALLES_TESTE_REAL=1` antes
+(PowerShell: `$env:TORRALLES_TESTE_REAL="1"`; Linux/Mac: `export TORRALLES_TESTE_REAL=1`) e rode
+`python -m unittest tests.test_juiz_video -v`.
 
 Cada comando é uma linha só (funciona no PowerShell, no cmd e no terminal do Linux/Mac).
 Se o juiz de vídeo não conseguir avaliar, ele mostra o motivo real (ex.: modelo inexistente, chave, bloqueio).
