@@ -192,6 +192,11 @@ cadeia = ["fal_kling", "fal_wan", "ken_burns"]
 # Pesos e pisos da spec 03 convertidos para 0–100. Faixas numéricas serão recalibradas com a base
 # de referência (spec 09/12, cartões K13–K14).
 
+[avaliacao.loop]
+# Loop de correção (spec 01): refaz só a peça reprovada. Ao estourar, fica a melhor tentativa + revisar_manual.
+tentativas_por_provedor = 2   # reprovou 2 vezes no mesmo provedor → passa ao próximo da cadeia
+tentativas_totais = 4         # por peça; o teto de custo ([roteador]) também encerra o loop
+
 [avaliacao.roteiro]
 nota_minima = 70
 num_juizes = 1

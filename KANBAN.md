@@ -28,7 +28,9 @@
 | K10 | Relatório de qualidade e custo por peça (JSON) | [01](docs/sdd/01-controle-qualidade.md) |
 
 ## 🔍 Em verificação
-_(vazio)_
+| ID | Cartão | Spec |
+|---|---|---|
+| K09 | Loop de correção: refaz só a peça, feedback, limites, melhor tentativa | [01](docs/sdd/01-controle-qualidade.md) |
 
 ## 🛠️ Em andamento
 _(vazio)_
@@ -42,7 +44,6 @@ _(vazio)_
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
 | K06 | 🔒 Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) | [10](docs/sdd/10-percepcao.md) | K01 · **falta `GEMINI_API_KEY`** | Devolve JSON na régua 0–100; testado com `exemplos/demo_torralles_studio_v2.mp4` |
-| K09 | Loop de correção: refaz só a peça, com feedback do que corrigir e manter; limites; melhor tentativa | [01](docs/sdd/01-controle-qualidade.md) | K07 · K04 | Testes: para no limite; devolve a melhor com `revisar_manual` |
 
 ### Camada 2 — Referências (D17; corre em paralelo à Camada 1)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |

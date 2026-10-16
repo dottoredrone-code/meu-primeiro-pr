@@ -65,6 +65,16 @@ def carregar_avaliador(roteador=None, caminho=None):
     return Avaliador(roteador or carregar_roteador(caminho), dados.get("avaliacao", {}))
 
 
+def carregar_loop(roteador=None, caminho=None, relatorio=None):
+    """Loop de correção (K09) com roteador e avaliador do mesmo config (mesmo orçamento)."""
+    from .loop import LoopCorrecao
+
+    roteador = roteador or carregar_roteador(caminho)
+    dados = carregar_config(caminho)
+    avaliador = carregar_avaliador(roteador, caminho)
+    return LoopCorrecao.do_config(roteador, avaliador, dados.get("avaliacao", {}).get("loop", {}), relatorio)
+
+
 def carregar_roteador(caminho=None):
     dados = carregar_config(caminho)
     provedores = montar_provedores(dados)
