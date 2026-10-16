@@ -27,11 +27,10 @@
 | K08 | Checador de fatos travados (preço, link, percentual, obrigatórios) | [08](docs/sdd/08-contrato-ops-studio.md) · D15 |
 | K10 | Relatório de qualidade e custo por peça (JSON) | [01](docs/sdd/01-controle-qualidade.md) |
 | K09 | Loop de correção: refaz só a peça, feedback delimitado, limites, teto de custo, melhor tentativa | [01](docs/sdd/01-controle-qualidade.md) |
+| K24 | SQLite: projetos, peças, tentativas, avaliações, custo; retomada sem pagar de novo e cache | [05](docs/sdd/05-dados-seguranca-memoria.md) · D6 |
 
 ## 🔍 Em verificação
-| ID | Cartão | Spec |
-|---|---|---|
-| K24 | SQLite: projetos, cenas, peças, tentativas, avaliações, custo; retomada e cache | [05](docs/sdd/05-dados-seguranca-memoria.md) · D6 |
+_(vazio)_
 
 ## 🛠️ Em andamento
 _(vazio)_

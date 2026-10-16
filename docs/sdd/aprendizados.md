@@ -35,3 +35,16 @@
 - **Texto que volta do juiz também é entrada não confiável:** delimitar e trocar marcas por colchetes
   (remover numa passada deixa remontar `</feedback>` com fragmentos).
 - Verificador encontrou 6 problemas na 1ª rodada que os 11 testes iniciais não pegavam; todos viraram testes.
+
+## Camada 4 — Banco local: K24 (16/10/2026)
+- **Cache precisa de porta de saída:** sem `usar_cache=False`, refazer uma peça rejeitada devolvia o mesmo
+  resultado de graça e em silêncio. Toda peça refeita vai ao gerador; o juiz pode usar cache porque recebe
+  o conteúdo (ou o hash do arquivo) no prompt.
+- **A chave do cache é tudo o que muda o resultado:** modelo, parâmetros e o config do provedor (voz,
+  tamanho, base_url). Fora: caminho de saída, chaves, timeout, custo.
+- **Cache vale para a cadeia inteira:** consultar todos os provedores antes de pagar o primeiro disponível.
+- **Custo pago nunca some:** até a tentativa cuja avaliação deu erro é gravada com o gasto.
+- **Arquivos por tentativa:** cada tentativa grava o seu (`saida.tN`), a escolhida é copiada para a saída;
+  senão "a melhor tentativa" aponta para o conteúdo da última.
+- **Migrações:** listas de comandos (partir por ";" quebra textos) e erro claro se o banco for mais novo.
+- 2 rodadas de verificação; os testes iniciais não pegavam o cache ligado no caminho de refazer.
