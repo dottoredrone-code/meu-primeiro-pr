@@ -20,10 +20,16 @@
 | K00c | Planejamento: specs 00–12 e decisões D1–D20 | [decisões](docs/sdd/decisoes.md) |
 
 ## 🔍 Em verificação
-_(vazio)_
+| ID | Cartão | Commit |
+|---|---|---|
+| K01 | Modelos atualizados + Kling v3 `start_image_url` | b05f07b |
+| K02 | Pacote renomeado para `torralles_studio` | 1dfc12d |
+| K03 | Downloads só de domínios permitidos | b713005 |
+| K04 | Chaves mascaradas + teto de custo | 2bb53ef |
+| K05 | `CLAUDE.md` do projeto | 9327df2 |
 
 ## 🛠️ Em andamento
-_(vazio — aguardando o sinal para começar a Camada 0)_
+_(vazio)_
 
 ## 📋 Especificado (pronto para começar)
 
