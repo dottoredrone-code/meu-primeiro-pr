@@ -41,7 +41,10 @@ exemplos/               vídeos de teste da percepção
 python -m unittest discover -s tests          # testes (rodar antes de todo commit)
 python -m torralles_studio status             # cadeias e provedores prontos
 python -m torralles_studio assistir video.mp4 # relatório de percepção
+python -m torralles_studio --config outro.toml status   # config alternativo (ou TORRALLES_CONFIG)
 ```
+- O `.env` é lido da **raiz do repositório** e nunca sobrescreve variáveis já definidas.
+- **FFmpeg** é necessário para `percepcao`, o vídeo `ken_burns` e alguns testes (pulados se faltar).
 
 ## Git
 - Branch de trabalho: `claude/multi-model-integration-app-g1697x`.

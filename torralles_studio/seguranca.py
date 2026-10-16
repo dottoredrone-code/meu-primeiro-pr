@@ -12,7 +12,7 @@ _SUFIXOS_SECRETOS = ("_KEY", "_TOKEN", "_SECRET")
 
 
 def _encurtar(valor):
-    return f"{valor[:3]}…{valor[-4:]}" if len(valor) > 8 else "…"
+    return f"…{valor[-4:]}" if len(valor) >= 16 else "…"
 
 
 def mascarar(texto):
@@ -21,7 +21,7 @@ def mascarar(texto):
         return texto
     texto = str(texto)
     for nome, valor in os.environ.items():
-        if nome.upper().endswith(_SUFIXOS_SECRETOS) and len(valor) >= 8 and valor in texto:
+        if nome.upper().endswith(_SUFIXOS_SECRETOS) and len(valor) >= 6 and valor in texto:
             texto = texto.replace(valor, _encurtar(valor))
     for padrao in _PADROES:
         texto = padrao.sub(lambda m: _encurtar(m.group(0)), texto)
@@ -41,10 +41,17 @@ class Orcamento:
         self.gasto_usd = 0.0
         self.lancamentos = []
 
-    @staticmethod
-    def estimar(provedor, kwargs):
+    DURACAO_PADRAO_S = 5  # mesma duração padrão dos provedores de vídeo
+
+    @classmethod
+    def estimar(cls, provedor, kwargs):
         cfg = provedor.cfg
-        return float(cfg.get("custo_usd", 0)) + float(cfg.get("custo_usd_por_segundo", 0)) * float(kwargs.get("duracao", 0) or 0)
+        por_segundo = float(cfg.get("custo_usd_por_segundo", 0))
+        try:
+            duracao = float(kwargs.get("duracao") or cls.DURACAO_PADRAO_S)
+        except (TypeError, ValueError):
+            duracao = cls.DURACAO_PADRAO_S
+        return float(cfg.get("custo_usd", 0)) + por_segundo * duracao
 
     def cabe(self, valor):
         return self.teto_usd is None or self.gasto_usd + valor <= self.teto_usd + 1e-9
@@ -53,6 +60,13 @@ class Orcamento:
         if valor:
             self.gasto_usd += valor
             self.lancamentos.append((provedor, round(valor, 4)))
+
+    def reiniciar(self, teto_usd=None):
+        """Começa um orçamento novo (ex.: a cada vídeo), mantendo o teto atual se nenhum for dado."""
+        if teto_usd is not None:
+            self.teto_usd = teto_usd
+        self.gasto_usd = 0.0
+        self.lancamentos = []
 
     @property
     def restante(self):

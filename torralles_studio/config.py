@@ -54,7 +54,7 @@ def validar_cadeias(provedores, cadeias):
 
 def carregar_roteador(caminho=None):
     carregar_env()
-    caminho = Path(caminho or os.environ.get("ESTUDIO_CONFIG") or CONFIG_PADRAO)
+    caminho = Path(caminho or os.environ.get("TORRALLES_CONFIG") or os.environ.get("ESTUDIO_CONFIG") or CONFIG_PADRAO)
     dados = tomllib.loads(caminho.read_text())
     provedores = montar_provedores(dados)
     cadeias = {tarefa: t["cadeia"] for tarefa, t in dados["tarefas"].items()}

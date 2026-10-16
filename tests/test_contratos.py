@@ -1,16 +1,16 @@
+import re
 import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from torralles_studio.config import CONFIG_PADRAO, montar_provedores
-from torralles_studio.provedores.video import FalVideo
 
-# Modelos já desligados ou aposentados pelos fornecedores (ver docs/sdd/00-descoberta.md).
-APOSENTADOS = {
-    "deepseek-chat", "deepseek-reasoner", "gemini-2.5-flash", "gemini-2.5-flash-image",
-    "gpt-image-1", "fal-ai/kling-video/v2.1/standard/image-to-video", "fal-ai/wan-i2v",
-}
+# Modelos (ou famílias) já desligados/aposentados pelos fornecedores (ver docs/sdd/00-descoberta.md).
+APOSENTADOS = [
+    r"^deepseek-chat$", r"^deepseek-reasoner$", r"^gemini-2\.5-", r"^gpt-image-1$",
+    r"kling-video/v[12](\.\d)?/", r"^fal-ai/wan-i2v$",
+]
 
 
 class TestContratos(unittest.TestCase):
@@ -18,8 +18,13 @@ class TestContratos(unittest.TestCase):
         self.dados = tomllib.loads(Path(CONFIG_PADRAO).read_text())
 
     def test_config_sem_modelos_aposentados(self):
-        usados = {cfg.get("modelo") for cfg in self.dados["provedores"].values()}
-        self.assertFalse(usados & APOSENTADOS, f"modelos aposentados no config: {usados & APOSENTADOS}")
+        from torralles_studio import percepcao
+
+        usados = {cfg.get("modelo") for cfg in self.dados["provedores"].values() if cfg.get("modelo")}
+        padrao_percepcao = re.search(r'GEMINI_MODELO_PERCEPCAO", "([^"]+)"', Path(percepcao.__file__).read_text())
+        usados.add(padrao_percepcao.group(1))
+        ruins = {m for m in usados for padrao in APOSENTADOS if re.search(padrao, m)}
+        self.assertFalse(ruins, f"modelos aposentados: {ruins}")
 
     def test_kling_v3_recebe_start_image_url(self):
         provedores = montar_provedores(self.dados)
@@ -44,7 +49,7 @@ class TestContratos(unittest.TestCase):
         self.assertNotIn("image_url", enviado["corpo"])
 
     def test_wan_continua_com_image_url(self):
-        wan = FalVideo("wan", {"modelo": "fal-ai/wan-25-preview/image-to-video", "enviar_duracao": False})
+        wan = montar_provedores(self.dados)["fal_wan"]
         corpo = {}
         with mock.patch("torralles_studio.provedores.video.post_json",
                         lambda u, c, h, t: corpo.update(c) or {"video": {"url": "u"}}), \

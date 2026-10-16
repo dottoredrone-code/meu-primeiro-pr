@@ -18,29 +18,22 @@
 | K00a | Roteador com fallback por função, provedores e CLI (protótipo) | — |
 | K00b | Percepção níveis 1 e 2: quadros, cortes, som, transcrição com fallback | [10](docs/sdd/10-percepcao.md) |
 | K00c | Planejamento: specs 00–12 e decisões D1–D20 | [decisões](docs/sdd/decisoes.md) |
+| K01 | Modelos atualizados + Kling v3 `start_image_url` (teste de contrato por família) | [00](docs/sdd/00-descoberta.md) |
+| K02 | Pacote renomeado para `torralles_studio` | D1 |
+| K03 | Downloads seguros: domínios permitidos, redirecionamento conferido antes de seguir, limite de tamanho e prazo total | [05](docs/sdd/05-dados-seguranca-memoria.md) · D8 |
+| K04 | Chaves mascaradas + teto de custo de US$ 1,50 | D8 · D20 |
+| K05 | `CLAUDE.md` do projeto | [05](docs/sdd/05-dados-seguranca-memoria.md) |
 
 ## 🔍 Em verificação
-| ID | Cartão | Commit |
-|---|---|---|
-| K01 | Modelos atualizados + Kling v3 `start_image_url` | b05f07b |
-| K02 | Pacote renomeado para `torralles_studio` | 1dfc12d |
-| K03 | Downloads só de domínios permitidos | b713005 |
-| K04 | Chaves mascaradas + teto de custo | 2bb53ef |
-| K05 | `CLAUDE.md` do projeto | 9327df2 |
+_(vazio)_
 
 ## 🛠️ Em andamento
 _(vazio)_
 
 ## 📋 Especificado (pronto para começar)
 
-### Camada 0 — Fundação (sem chaves; os 5 podem rodar em paralelo)
-| ID | Cartão | Spec | Critérios de aceite |
-|---|---|---|---|
-| K01 | Corrigir os 7 modelos desatualizados no config e o parâmetro do Kling v3 (`start_image_url`) | [00](docs/sdd/00-descoberta.md) | Config com nomes atuais; teste de contrato por provedor; `status` sem modelos aposentados |
-| K02 | Renomear o pacote `estudio_ia` → `torralles_studio` | D1 | CLI `python -m torralles_studio`; todos os testes passando |
-| K03 | Downloads só de domínios permitidos, com limite de tamanho e tempo | [05](docs/sdd/05-dados-seguranca-memoria.md) · D8 | Teste: URL fora da lista é recusada; arquivo grande demais é recusado |
-| K04 | Logs com chaves mascaradas + teto de custo que interrompe a execução | [05](docs/sdd/05-dados-seguranca-memoria.md) · D8 · D20 | Teste: chave nunca aparece no log; execução para ao estourar US$ 1,50 |
-| K05 | `CLAUDE.md` do projeto (regras, D9, comandos, como testar) | [05](docs/sdd/05-dados-seguranca-memoria.md) | Nova sessão entende o projeto só lendo o arquivo |
+### Camada 0 — Fundação
+✅ Concluída em 16/10/2026 (verificada por agente independente; ver `docs/sdd/aprendizados.md`).
 
 ### Camada 1 — Qualidade (depende da Camada 0)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
