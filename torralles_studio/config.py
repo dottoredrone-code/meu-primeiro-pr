@@ -95,7 +95,9 @@ def carregar_perfis(caminho=None):
     """Perfis por projeto (K26). Ajustes só podem citar provedores que existem no config."""
     from .perfis import Perfis
 
-    return Perfis(pasta_perfis(caminho), provedores_conhecidos=set(carregar_config(caminho)["provedores"]))
+    dados = carregar_config(caminho)
+    return Perfis(pasta_perfis(caminho), provedores_conhecidos=set(dados["provedores"]),
+                  teto_maximo=dados.get("roteador", {}).get("teto_custo_usd"))
 
 
 def carregar_roteador(caminho=None, banco=None):

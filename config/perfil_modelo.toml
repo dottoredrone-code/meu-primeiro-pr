@@ -9,7 +9,7 @@ categoria = "A"              # régua de referência (spec 09): A curto informat
                              # D produto/oferta · E educação · F institucional
 hermes_perfil = ""           # nome do perfil equivalente no Hermes (opcional)
 idioma = "pt-BR"
-# teto_custo_usd = 1.50      # opcional: teto próprio por vídeo (senão vale o de config/fallbacks.toml)
+# teto_custo_usd = 1.00      # opcional: teto menor que o do config (nunca maior)
 
 [estilo]
 publico = ""                 # para quem é o conteúdo
@@ -30,7 +30,8 @@ fontes = []
 logo = ""                    # caminho dentro de dados/perfis/<id>/
 referencias = []             # imagens de referência (personagem, estilo) dentro de dados/perfis/<id>/
 
-# Ajustes de provedor só deste perfil (ex.: voz). Não aceita chaves, base_url nem classe.
+# Ajustes de provedor só deste perfil (ex.: voz). Não aceita chaves, base_url, classe, modelo, custo nem timeout
+# (modelo e custo são regra do produto: teto D20 e revisão mensal KR1).
 # [provedores.edge_tts]
 # voz = "pt-BR-AntonioNeural"
 # [provedores.elevenlabs]

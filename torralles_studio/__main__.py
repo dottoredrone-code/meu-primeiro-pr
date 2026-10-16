@@ -36,6 +36,8 @@ def comando_perfis(args):
     except ErroPerfil as e:
         print(f"✗ {e}", file=sys.stderr)
         return 1
+    for pid, motivo in sorted(carregar_perfis(args.config).erros.items()):
+        print(f"⚠ {pid}: {motivo}", file=sys.stderr)
     if not perfis:
         print("Nenhum perfil ainda. Crie com: python -m torralles_studio perfil-novo <id> \"<nome>\"")
     for pf in perfis:

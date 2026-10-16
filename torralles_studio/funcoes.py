@@ -59,8 +59,16 @@ def gerar_roteiro(roteador, tema, duracao=30, contexto="", perfil=None):
     if contexto:
         prompt += f"\n\nUse estas informações de pesquisa:\n{contexto}"
     # Resposta que não for um roteiro válido conta como falha e vai para o próximo modelo.
+    validar = validar_roteiro
+    if perfil:
+        def validar(texto):  # palavra proibida pelo perfil conta como resposta inválida (vai ao próximo modelo)
+            roteiro = validar_roteiro(texto)
+            problemas = perfil.checar(roteiro)
+            if problemas:
+                raise ValueError("; ".join(problemas))
+            return roteiro
     return roteador.executar("roteiro", prompt=prompt, sistema=_com_perfil(SISTEMA_ROTEIRO, perfil, "roteiro"),
-                             validar=validar_roteiro)
+                             validar=validar)
 
 
 def pesquisar(roteador, tema, max_resultados=5):

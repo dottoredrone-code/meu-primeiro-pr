@@ -171,8 +171,7 @@ class TestPerfisNaoSeMisturam(unittest.TestCase):
             self.a.arquivo("../loja-cha/logo.png")
         invasor = CURIOSIDADES.replace('logo = "logo.png"', 'logo = "../loja-cha/logo.png"')
         with pasta_com(**{"canal-curiosidades.toml": invasor}) as d:
-            with self.assertRaisesRegex(ErroPerfil, "própria pasta"):
-                Perfis(d)
+            self.assertIn("própria pasta", Perfis(d).erros["canal-curiosidades"])
 
     def test_roteiro_e_imagem_recebem_o_contexto_do_perfil(self):
         texto = TextoFalso()
@@ -184,11 +183,11 @@ class TestPerfisNaoSeMisturam(unittest.TestCase):
 
 
 class TestValidacao(unittest.TestCase):
-    def carregar(self, nome, texto, provedores=None):
+    def carregar(self, nome, texto, provedores=None, teto_maximo=None):
         with pasta_com(**{nome: texto}) as d:
-            return Perfis(d, provedores_conhecidos=provedores)
+            return Perfis(d, provedores_conhecidos=provedores, teto_maximo=teto_maximo)
 
-    def test_erros_claros(self):
+    def test_erros_claros_e_perfil_com_defeito_fica_de_fora(self):
         casos = [
             ("outro-nome.toml", LOJA, "igual ao id"),
             ("loja-cha.toml", LOJA.replace('categoria = "D"', 'categoria = "Z"'), "categoria"),
@@ -197,20 +196,70 @@ class TestValidacao(unittest.TestCase):
             ("loja-cha.toml", LOJA + '[provedores.voz_falsa]\nchave_env = "OUTRA_CHAVE"\n', "não pode mudar"),
             ("loja-cha.toml", LOJA + "[provedores.inexistente]\nvoz = 'x'\n", "provedor desconhecido"),
             ("loja-cha.toml", "id = ", "TOML inválido"),
+            ("loja-cha.toml", LOJA.replace('hermes_perfil = "loja"', 'hermes_perfil = ["x"]'), "precisa ser texto"),
+            ("loja-cha.toml", LOJA.replace('palavras_evitar = ["barato"]', 'palavras_evitar = "abc"'), "lista de textos"),
+            ("loja-cha.toml", LOJA + '[provedores]\nvoz_falsa = "voz"\n', "precisa ser uma tabela"),
         ]
         for nome, texto, msg in casos:
-            with self.subTest(msg=msg), self.assertRaisesRegex(ErroPerfil, msg):
-                self.carregar(nome, texto, provedores={"voz_falsa"})
+            with self.subTest(msg=msg):
+                perfis = self.carregar(nome, texto, provedores={"voz_falsa"})
+                self.assertEqual(list(perfis), [])
+                self.assertIn(msg, " ".join(perfis.erros.values()))
+                with self.assertRaisesRegex(ErroPerfil, "não encontrado|tem um problema"):
+                    perfis.obter(Path(nome).stem)
+
+    def test_perfil_com_defeito_nao_derruba_os_outros(self):
+        with pasta_com(**{"canal-curiosidades.toml": "id = ", "loja-cha.toml": LOJA}) as d:
+            perfis = Perfis(d)
+            self.assertEqual([p.id for p in perfis], ["loja-cha"])
+            with self.assertRaisesRegex(ErroPerfil, "tem um problema"):
+                perfis.obter("canal-curiosidades")
+
+    # Regressões da verificação independente (K26): o perfil não fura regras do produto
+    def test_perfil_nao_muda_custo_modelo_nem_timeout(self):
+        for campo in ("custo_usd = 0", "custo_usd_por_segundo = 0", 'modelo = "modelo-aposentado"', "timeout = 1"):
+            with self.subTest(campo=campo):
+                perfis = self.carregar("loja-cha.toml", LOJA + f"[provedores.voz_falsa]\n{campo}\n")
+                self.assertIn("não pode mudar", perfis.erros["loja-cha"])
+
+    def test_teto_do_perfil_nao_passa_do_teto_do_config(self):
+        perfis = self.carregar("loja-cha.toml", "teto_custo_usd = 999\n" + LOJA, teto_maximo=1.5)
+        self.assertIn("passa do teto", perfis.erros["loja-cha"])
+        perfil = self.carregar("loja-cha.toml", "teto_custo_usd = 999\n" + LOJA).obter("loja-cha")
+        self.assertEqual(perfil.roteador(Roteador({}, {}, orcamento=Orcamento(1.5))).orcamento.teto_usd, 1.5)
 
     def test_mesmo_perfil_do_hermes_em_dois_perfis(self):
         dup = CURIOSIDADES.replace('hermes_perfil = "curiosidades"', 'hermes_perfil = "loja"')
         with pasta_com(**{"canal-curiosidades.toml": dup, "loja-cha.toml": LOJA}) as d:
-            with self.assertRaisesRegex(ErroPerfil, "ligado a dois perfis"):
-                Perfis(d)
+            perfis = Perfis(d)
+            self.assertIn("já aponta", perfis.erros["loja-cha"])
+            self.assertEqual([p.id for p in perfis], ["canal-curiosidades"])
+
+    def test_perfil_do_hermes_igual_ao_id_de_outro_perfil(self):
+        conflito = CURIOSIDADES.replace('hermes_perfil = "curiosidades"', 'hermes_perfil = "loja-cha"')
+        with pasta_com(**{"canal-curiosidades.toml": conflito, "loja-cha.toml": LOJA}) as d:
+            perfis = Perfis(d)
+            self.assertIn("canal-curiosidades", perfis.erros)
+            self.assertEqual(perfis.obter("loja-cha").id, "loja-cha")
+
+    def test_palavra_proibida_reprova_roteiro_do_perfil(self):
+        class Texto(TextoFalso):
+            def executar(self, prompt, sistema=None):
+                return '{"titulo": "Chá barato", "cenas": [{"narracao": "a", "prompt_imagem": "b", "duracao": 5}]}'
+
+        with pasta_com(**{"loja-cha.toml": LOJA}) as d:
+            perfil = Perfis(d).obter("loja-cha")
+        rt = Roteador({"texto_falso": Texto()}, {"roteiro": ["texto_falso"]})
+        from torralles_studio.roteador import TodosFalharam
+        with self.assertRaisesRegex(TodosFalharam, "barato"):
+            funcoes.gerar_roteiro(rt, "chá", perfil=perfil)
+        self.assertEqual(funcoes.gerar_roteiro(rt, "chá").valor["titulo"], "Chá barato")  # sem perfil, passa
+        self.assertTrue(perfil.checar({"titulo": "x", "cenas": [{"narracao": "muito barato"}]}))
 
     def test_arquivos_com_sublinhado_e_pasta_inexistente_sao_ignorados(self):
         with pasta_com(**{"_rascunho.toml": "id = "}) as d:
             self.assertEqual(list(Perfis(d)), [])
+            self.assertEqual(Perfis(d).erros, {})
         self.assertEqual(list(Perfis("/caminho/que/nao/existe")), [])
 
 
@@ -234,6 +283,11 @@ class TestCriarPerfil(unittest.TestCase):
                 criar_perfil(Path(d) / "perfis", "meu-canal", "x", MODELO_PERFIL)
             with self.assertRaisesRegex(ErroPerfil, "id inválido"):
                 criar_perfil(Path(d) / "perfis", "Meu Canal", "x", MODELO_PERFIL)
+            for ruim in ("linha1\nlinha2", "   "):
+                with self.assertRaisesRegex(ErroPerfil, "não pode ser vazio"):
+                    criar_perfil(Path(d) / "perfis", "ruim", ruim, MODELO_PERFIL)
+            criar_perfil(Path(d) / "perfis", "aspas", 'Canal "Q" \\ teste', MODELO_PERFIL)
+            self.assertEqual(Perfis(Path(d) / "perfis").obter("aspas").nome, 'Canal "Q" \\ teste')
 
 
 if __name__ == "__main__":
