@@ -3,6 +3,7 @@ import tomllib
 from pathlib import Path
 
 from .provedores import CLASSES
+from .rede import configurar_downloads
 from .roteador import Roteador
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -57,6 +58,8 @@ def carregar_roteador(caminho=None):
     provedores = montar_provedores(dados)
     cadeias = {tarefa: t["cadeia"] for tarefa, t in dados["tarefas"].items()}
     validar_cadeias(provedores, cadeias)
+    seguranca = dados.get("seguranca", {})
+    configurar_downloads(seguranca.get("dominios_download"), seguranca.get("tamanho_maximo_download_mb"))
     opcoes = dados.get("roteador", {})
     return Roteador(
         provedores,

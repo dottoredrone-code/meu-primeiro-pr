@@ -12,6 +12,11 @@
 repeticoes = 1      # novas tentativas no mesmo provedor em erro temporário
 espera_base = 1.0   # segundos; dobra a cada repetição
 
+[seguranca]
+# Arquivos devolvidos pelos provedores só são baixados destes domínios (D8).
+dominios_download = ["fal.media", "storage.googleapis.com", "image.pollinations.ai"]
+tamanho_maximo_download_mb = 300
+
 # ---------------------------------------------------------------- texto
 
 [provedores.deepseek_chat]

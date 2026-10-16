@@ -34,7 +34,7 @@ class TestContratos(unittest.TestCase):
         img.write_bytes(b"\x89PNG\r\n\x1a\n")
         try:
             with mock.patch("torralles_studio.provedores.video.post_json", falso_post), \
-                 mock.patch("torralles_studio.provedores.video.requisitar", return_value=b"mp4"), \
+                 mock.patch("torralles_studio.provedores.video.baixar", return_value=b"mp4"), \
                  mock.patch("torralles_studio.provedores.video.salvar", side_effect=lambda s, d: s):
                 kling.executar(img, "câmera avança", Path("/tmp/x.mp4"), duracao=5)
         finally:
@@ -48,7 +48,7 @@ class TestContratos(unittest.TestCase):
         corpo = {}
         with mock.patch("torralles_studio.provedores.video.post_json",
                         lambda u, c, h, t: corpo.update(c) or {"video": {"url": "u"}}), \
-             mock.patch("torralles_studio.provedores.video.requisitar", return_value=b""), \
+             mock.patch("torralles_studio.provedores.video.baixar", return_value=b""), \
              mock.patch("torralles_studio.provedores.video.salvar", side_effect=lambda s, d: s), \
              mock.patch("torralles_studio.provedores.video.data_uri", return_value="data:"):
             wan.executar("img.png", "p", Path("/tmp/y.mp4"))

@@ -2,7 +2,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ..rede import ErroProvedor, post_json, requisitar
+from ..rede import ErroProvedor, baixar, post_json
 from .base import Provedor, data_uri, salvar
 
 
@@ -17,7 +17,7 @@ class FalVideo(Provedor):
         if self.cfg.get("enviar_duracao", True):
             corpo["duration"] = str(duracao)
         r = post_json(f"https://fal.run/{self.modelo}", corpo, {"Authorization": f"Key {self.chave}"}, self.timeout)
-        return salvar(saida, requisitar(r["video"]["url"], timeout=self.timeout))
+        return salvar(saida, baixar(r["video"]["url"], timeout=self.timeout))
 
 
 class KenBurnsVideo(Provedor):

@@ -1,7 +1,7 @@
 import base64
 import urllib.parse
 
-from ..rede import ErroProvedor, post_json, requisitar
+from ..rede import ErroProvedor, baixar, post_json
 from .base import Provedor, salvar
 
 
@@ -48,7 +48,7 @@ class FalImagem(Provedor):
             {"Authorization": f"Key {self.chave}"},
             self.timeout,
         )
-        return salvar(saida, requisitar(r["images"][0]["url"], timeout=self.timeout))
+        return salvar(saida, baixar(r["images"][0]["url"], timeout=self.timeout))
 
 
 class PollinationsImagem(Provedor):
@@ -61,4 +61,4 @@ class PollinationsImagem(Provedor):
             {"width": self.cfg.get("largura", 1280), "height": self.cfg.get("altura", 720), "nologo": "true"}
         )
         url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt)}?{q}"
-        return salvar(saida, requisitar(url, timeout=self.timeout))
+        return salvar(saida, baixar(url, timeout=self.timeout))
