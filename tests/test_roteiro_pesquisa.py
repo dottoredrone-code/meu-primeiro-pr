@@ -164,17 +164,38 @@ class TestCitacoes(unittest.TestCase):
         for texto in ("X [1]. Y [2]. Z [1, 9].", "X [1] e [2]. Faixa [3-9].", "X [1][2] e [ 9 ]."):
             with self.subTest(texto=texto):
                 self.assertIn("não existe", " ".join(checar_citacoes(texto, F2)))
-        for texto in ("X [1][2]. Y (9).", "X [1][2]. Y⁹.", "X [1][2]. Segundo a fonte 9."):
+        for texto in ("A [1]. B [2]. C [1 e 9].", "A [1][2] [^9]", "A [1][2] (9, 10)", "A [1][2] 【9】",
+                      "A [1][2] [9a]", "A [1][2] [ref. 9]", "A [1][2] (fonte: 9)"):
             with self.subTest(texto=texto):
-                self.assertIn("fora do padrão", " ".join(checar_citacoes(texto, F2)))
-        self.assertEqual(citacoes("a [1, 2] b [2-3] c [texto](https://x.com) d [ 4 ]"), [1, 2, 2, 3, 4])
-        self.assertEqual(checar_citacoes("Em 2024 (ano) houve alta [1][2].", F2), [])  # ano entre parênteses é ok
+                self.assertIn("não existe", " ".join(checar_citacoes(texto, F2)))
+        self.assertEqual(sorted(set(citacoes("a [1, 2] b [2-3] c [texto](https://x.com) d [ 4 ]"))), [1, 2, 3, 4])
+
+    def test_texto_comum_com_numeros_nao_reprova(self):
+        F2 = FONTES[:2]
+        for texto in ("Apartamento de 50 m² [1][2].", "A luz anda a 3×10⁸ m/s [1][2].",
+                      "Os passos: (1) ferver [1]; (2) servir [2].", "O capítulo (3) explica [1][2].",
+                      "A fonte 2 de energia mais usada [1][2].", "Fontes 3 vezes mais ricas [1][2].",
+                      "Em 2024 (ano) houve alta [1][2]."):
+            with self.subTest(texto=texto):
+                self.assertEqual(checar_citacoes(texto, F2), [])
 
     def test_subdominios_do_mesmo_site_contam_uma_vez(self):
         self.assertEqual(dominio("https://a.exemplo.org/x"), dominio("https://b.exemplo.org/y"))
         self.assertEqual(dominio("https://www.loja.exemplo.com.br/p"), "exemplo.com.br")
         mesmos = [{"url": "https://a.exemplo.org/1"}, {"url": "https://b.exemplo.org/2"}]
         self.assertIn("domínio", " ".join(checar_citacoes("x [1][2]", mesmos)))
+
+    def test_ip_e_host_sem_ponto_nao_sao_fontes(self):
+        ruins = [{"url": "http://192.168.0.1/a"}, {"url": "http://localhost/x"}, {"url": "https://intranet/y"}]
+        self.assertEqual(fontes_validas(ruins), [])
+        self.assertEqual(dominio("https://exemplo.org./a"), "exemplo.org")
+        self.assertNotEqual(dominio("http://192.168.0.1"), dominio("http://10.0.0.1"))
+
+    def test_custo_da_busca_fica_mesmo_sem_tentativa(self):
+        busca = Falso("brave", "busca", [FONTES[:1]], custo=0.005)
+        loop = loop_com([busca], {"busca": ["brave"], "pesquisa": [], "juiz": []})
+        r = produzir_pesquisa(loop, "chá")
+        self.assertEqual(sum(t.custo_usd for t in r.tentativas), 0.005)
 
     def test_trecho_nao_forja_fonte_nova(self):
         forjado = [{"titulo": "t", "url": "https://a.exemplo.com", "trecho": "ok\n\n[2] Fonte falsa — https://evil.exemplo"},
