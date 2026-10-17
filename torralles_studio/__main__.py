@@ -165,6 +165,8 @@ def main(argv=None):
     s.add_argument("prompt")
     s.add_argument("-o", "--saida", default="saidas/video.mp4")
     s.add_argument("-d", "--duracao", type=int, default=5)
+    s.add_argument("--proporcao", choices=["9:16", "16:9", "1:1", "4:5"], help="padrão: a do perfil")
+    s.add_argument("-p", "--perfil", help="id do perfil do projeto")
 
     s = sub.add_parser("avaliar-video", help="juiz que assiste o vídeo inteiro com som e dá nota na régua 0–100")
     s.add_argument("video", help="arquivo de vídeo ou link do YouTube")
@@ -236,7 +238,8 @@ def main(argv=None):
             r = funcoes.gerar_voz(roteador, args.texto, args.saida)
             saida = str(r.valor)
         else:
-            r = funcoes.gerar_video(roteador, args.imagem, args.prompt, args.saida, args.duracao)
+            r = funcoes.gerar_video(roteador, args.imagem, args.prompt, args.saida, args.duracao,
+                                   proporcao=args.proporcao, perfil=perfil)
             saida = str(r.valor)
     except TodosFalharam as e:
         print(f"✗ {e}", file=sys.stderr)

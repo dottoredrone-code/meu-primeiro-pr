@@ -7,7 +7,7 @@ from pathlib import Path
 from torralles_studio.config import CONFIG_PADRAO, carregar_roteador, validar_cadeias
 from torralles_studio.funcoes import gerar_roteiro, pesquisar
 from torralles_studio.provedores.base import Provedor
-from torralles_studio.provedores.video import KenBurnsVideo
+from torralles_studio.provedores.video import KenBurnsVideo, movimento, tamanho_do_formato
 from torralles_studio.rede import ErroProvedor
 from torralles_studio.roteador import Roteador, TodosFalharam
 
@@ -152,6 +152,44 @@ class TestKenBurns(unittest.TestCase):
             )
             KenBurnsVideo("kb", {"largura": 320, "altura": 180}).executar(img, "", saida, duracao=1)
             self.assertGreater(saida.stat().st_size, 0)
+
+    def test_segue_a_proporcao_pedida(self):  # K19: o zoom não fica preso em 1280×720
+        with tempfile.TemporaryDirectory() as d:
+            img, saida = Path(d) / "img.png", Path(d) / "out.mp4"
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=800x600",
+                            "-frames:v", "1", str(img)], check=True)
+            KenBurnsVideo("kb", {}).executar(img, "pan right", saida, duracao=0.4, proporcao="9:16")
+            r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                "stream=width,height", "-of", "csv=p=0", str(saida)],
+                               capture_output=True, text=True, check=True)
+            self.assertEqual(r.stdout.strip(), "1080,1920")
+
+
+class TestMovimentoKenBurns(unittest.TestCase):
+    def test_le_o_movimento_do_prompt(self):
+        self.assertIn("1.2-0.2", movimento("slow zoom out", 10)[0])
+        self.assertIn("1.2-0.2", movimento("Afastar devagar", 10)[0])
+        self.assertIn("iw-iw/zoom", movimento("pan right", 10)[1])
+        self.assertIn("(1-", movimento("câmera vai para a esquerda", 10)[1])
+        self.assertIn("ih-ih/zoom", movimento("tilt up", 10)[2])
+        self.assertEqual(movimento("", 10)[0], "1+0.2*(on/10)")  # padrão: aproximar
+
+    def test_proporcoes(self):
+        self.assertEqual(tamanho_do_formato("16:9"), (1920, 1080))
+        self.assertEqual(tamanho_do_formato("4:5"), (1080, 1350))
+        with self.assertRaises(ValueError):
+            tamanho_do_formato("2:1")
+
+    def test_gerar_video_usa_a_proporcao_do_perfil(self):
+        from types import SimpleNamespace
+        from torralles_studio import funcoes
+
+        chamadas = []
+        rt = SimpleNamespace(executar=lambda tarefa, **kw: chamadas.append(kw))
+        perfil = SimpleNamespace(formato={"proporcao": "9:16"})
+        funcoes.gerar_video(rt, "a.png", "zoom", "b.mp4", perfil=perfil)
+        funcoes.gerar_video(rt, "a.png", "zoom", "b.mp4", proporcao="16:9", perfil=perfil)
+        self.assertEqual([c["proporcao"] for c in chamadas], ["9:16", "16:9"])
 
 
 if __name__ == "__main__":

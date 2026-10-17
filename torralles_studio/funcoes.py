@@ -105,5 +105,8 @@ def gerar_voz(roteador, texto, saida):
     return roteador.executar("voz", texto=texto, saida=Path(saida))
 
 
-def gerar_video(roteador, imagem, prompt, saida, duracao=5):
-    return roteador.executar("video", imagem=Path(imagem), prompt=prompt, saida=Path(saida), duracao=duracao)
+def gerar_video(roteador, imagem, prompt, saida, duracao=5, proporcao=None, perfil=None):
+    """proporcao explícita vence; sem ela, vale a do perfil (formato.proporcao)."""
+    proporcao = proporcao or (perfil.formato.get("proporcao") if perfil else None)
+    return roteador.executar("video", imagem=Path(imagem), prompt=prompt, saida=Path(saida), duracao=duracao,
+                             proporcao=proporcao)
