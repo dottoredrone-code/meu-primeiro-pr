@@ -128,6 +128,6 @@ graph LR
 ## Bloqueios atuais
 | O que falta | Destrava |
 |---|---|
-| `GEMINI_API_KEY` no ambiente (Network secrets) | K06, K12, K21 (ouvir trilhas) |
+| Teste real com `GEMINI_API_KEY` no PC (`.env`; os segredos da nuvem não servem ao Gemini) | K06, K12, K21 (ouvir trilhas) |
 | Suas indicações de canais para as categorias C, D e F (`config/referencias.toml`) | K12–K14 nessas categorias (a A já pode seguir) |
 | Chaves de produção (fal.ai, ElevenLabs, DeepSeek, Tavily) | K16–K19 com provedores reais |
