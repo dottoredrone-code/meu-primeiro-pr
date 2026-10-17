@@ -71,9 +71,16 @@ class TestLegendas(unittest.TestCase):
         texto = "Primeira parte da frase aqui, segunda parte da frase ali."
         legendas = distribuir_legendas(texto, 1.0, 5.0, [(3.4, 3.7)], max_chars=16)
         self.assertEqual(len(legendas), 2)
-        self.assertAlmostEqual(legendas[0][1], 3.7)   # sai até 0,4 s depois que a fala para
+        self.assertAlmostEqual(legendas[0][1], 3.6)   # sai quando a seguinte entra (pausa curta)
         self.assertAlmostEqual(legendas[1][0], 3.6)   # entra quando a fala volta (0,1 s antes)
         self.assertEqual(legendas[0][0], 1.0)
+
+    def test_pausa_curta_nao_sobrepoe_legendas(self):  # verificador, 2ª rodada
+        legendas = distribuir_legendas("Primeira frase completa. Segunda frase completa.", 0.2, 3.5,
+                                       [(1.7, 2.0)], 28, 3.85)
+        self.assertEqual(len(legendas), 2)
+        self.assertLessEqual(legendas[0][1], legendas[1][0])
+        self.assertEqual(checar_legendas(legendas, 28), [])
 
     def test_frase_curta_fica_ao_menos_1_s(self):  # verificador: "Sim, claro." ficava 0,9 s
         legendas = distribuir_legendas("Sim, claro.", 0.2, 0.7, fim_cena=1.5, max_chars=28)

@@ -226,8 +226,9 @@ def distribuir_legendas(texto, inicio_fala, fim_fala, pausas_internas=(), max_ch
                  if max(a - estimado, estimado - b, 0) <= 0.6 and b - 0.1 > inis[-1] + 0.3]
         if perto:
             a, b = min(perto, key=lambda x: max(x[0] - estimado, estimado - x[1], 0))
-            fins.append(min(a + 0.4, b))
-            inis.append(max(a, b - 0.1))
+            entra = max(a, b - 0.1)
+            fins.append(min(a + 0.4, entra))  # nunca depois que o seguinte entra (pausa curta)
+            inis.append(entra)
         else:
             fins.append(estimado)
             inis.append(estimado)
