@@ -104,6 +104,42 @@ def comando_avaliar_video(args):
     return 0
 
 
+def comando_montar(args):
+    import tempfile
+    from pathlib import Path
+
+    from .config import carregar_config
+    from .montagem import ErroMontagem, montar, verificar_montagem
+    from .rede import ErroProvedor
+
+    projeto = Path(args.projeto)
+    try:
+        dados = json.loads(projeto.read_text(encoding="utf-8-sig"))
+        base = projeto.resolve().parent  # caminhos relativos valem a partir do JSON
+
+        def caminho(valor):
+            return str(base / valor) if valor else None
+
+        cenas = [{**c, "video": caminho(c.get("video")), "voz": caminho(c.get("voz"))} for c in dados["cenas"]]
+        with tempfile.TemporaryDirectory() as temporaria:  # sem --trabalho, a voz fica até conferir a sincronia
+            r = montar(cenas, args.saida, proporcao=dados.get("proporcao", "9:16"),
+                       trilha=caminho(dados.get("trilha")), bpm=dados.get("bpm"),
+                       cfg=carregar_config(args.config).get("montagem"), pasta_trabalho=args.trabalho or temporaria,
+                       duracao_alvo=dados.get("duracao"))
+            v = verificar_montagem(r, duracao_pedida=dados.get("duracao"))
+    except KeyError as e:
+        print(f"✗ o projeto não tem o campo {e}", file=sys.stderr)
+        return 1
+    except (OSError, TypeError, ValueError, ErroMontagem, ErroProvedor) as e:
+        print(f"✗ não deu para montar: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(v["medidas"], ensure_ascii=False))
+    for problema in v["problemas"]:
+        print(f"✗ {problema}")
+    print(f"{'✓' if v['aprovado'] else '⚠'} {r['arquivo']}")
+    return 0 if v["aprovado"] else 2
+
+
 def comando_com_qualidade(args, roteador, perfil):
     """roteiro/pesquisa pelo loop de correção: mostra resultado, nota, motivo e custo."""
     from .config import carregar_loop
@@ -183,7 +219,14 @@ def main(argv=None):
     s.add_argument("-o", "--saida", default="saidas/percepcao")
     s.add_argument("--sem-transcricao", action="store_true")
 
+    s = sub.add_parser("montar", help="monta o vídeo final (cenas, narração, legendas, trilha) e confere a régua")
+    s.add_argument("projeto", help="arquivo JSON com as cenas (veja docs/montagem.md)")
+    s.add_argument("-o", "--saida", default="saidas/final.mp4")
+    s.add_argument("--trabalho", help="pasta para guardar clipes, áudios e legendas (para o CapCut)")
+
     args = p.parse_args(argv)
+    if args.comando == "montar":
+        return comando_montar(args)
     if args.comando == "assistir":
         from .config import carregar_env
         from .percepcao import analisar_video

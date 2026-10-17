@@ -254,6 +254,20 @@ cadeia = ["elevenlabs", "openai_voz", "edge_tts"]
 [tarefas.video]
 cadeia = ["fal_kling", "fal_wan", "ken_burns"]
 
+# ================================================================ montagem final (K22, spec 03 §3.6)
+# Valores que faltarem usam o padrão de torralles_studio/montagem.py (PADROES).
+
+[montagem]
+fps = 30
+transicao = "fade"           # tipo de transição do FFmpeg (xfade)
+transicao_s = 0.4
+folga_inicio_s = 0.2         # respiro antes da fala de cada cena
+folga_fim_s = 0.35           # respiro depois da fala
+lufs = -14.0                 # volume final
+pico_dbtp = -1.5             # alvo com margem; o eliminatório é −1 dBTP
+trilha_lu_abaixo = 12.0      # trilha 12 LU abaixo da voz (mínimo 10)
+fonte = "Arial"
+
 # ================================================================ avaliação (régua 0–100, D15)
 # Pesos e pisos da spec 03 convertidos para 0–100. Faixas numéricas serão recalibradas com a base
 # de referência (spec 09/12, cartões K13–K14).
