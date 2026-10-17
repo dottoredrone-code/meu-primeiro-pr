@@ -173,6 +173,11 @@ class TestMovimentoKenBurns(unittest.TestCase):
         self.assertIn("(1-", movimento("câmera vai para a esquerda", 10)[1])
         self.assertIn("ih-ih/zoom", movimento("tilt up", 10)[2])
         self.assertEqual(movimento("", 10)[0], "1+0.2*(on/10)")  # padrão: aproximar
+        # Verificador: destino vale em "da X para a Y"; palavras inteiras (sem "descobre" → descer).
+        self.assertIn("(1-", movimento("pan da direita para a esquerda", 10)[1])
+        self.assertEqual(movimento("câmera descobre a cidade", 10)[0], "1+0.2*(on/10)")
+        self.assertEqual(movimento("zoom in revelando o recurso", 10)[0], "1+0.2*(on/10)")
+        self.assertIn("ih-ih/zoom", movimento("a câmera sobe devagar", 10)[2])
 
     def test_proporcoes(self):
         self.assertEqual(tamanho_do_formato("16:9"), (1920, 1080))

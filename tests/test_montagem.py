@@ -71,8 +71,21 @@ class TestLegendas(unittest.TestCase):
         texto = "Primeira parte da frase aqui, segunda parte da frase ali."
         legendas = distribuir_legendas(texto, 1.0, 5.0, [(3.4, 3.7)], max_chars=16)
         self.assertEqual(len(legendas), 2)
-        self.assertAlmostEqual(legendas[0][1], 3.55)  # meio da pausa, não a estimativa proporcional
+        self.assertAlmostEqual(legendas[0][1], 3.7)   # sai até 0,4 s depois que a fala para
+        self.assertAlmostEqual(legendas[1][0], 3.6)   # entra quando a fala volta (0,1 s antes)
         self.assertEqual(legendas[0][0], 1.0)
+
+    def test_frase_curta_fica_ao_menos_1_s(self):  # verificador: "Sim, claro." ficava 0,9 s
+        legendas = distribuir_legendas("Sim, claro.", 0.2, 0.7, fim_cena=1.5, max_chars=28)
+        self.assertEqual(legendas, [(0.2, 1.2, ["Sim, claro."])])
+        self.assertEqual(checar_legendas(legendas), [])
+
+    def test_texto_na_tela_quebra_linhas(self):
+        from torralles_studio.montagem import linhas_tela
+
+        linhas = linhas_tela("Um texto na tela bem mais comprido que o normal", "9:16")
+        self.assertGreater(len(linhas), 1)
+        self.assertTrue(all(len(linha) <= 24 for linha in linhas))
 
     def test_checa_legibilidade(self):
         ruins = [(0.0, 0.5, ["curta demais"]), (0.4, 2.0, ["a" * 50]), (2.0, 3.0, ["um", "dois", "tres"]),
@@ -172,6 +185,55 @@ class TestMontagem(unittest.TestCase):
         self.assertNotIn("longe da fala", " ".join(verificar_montagem(r)["problemas"]))
         r["legendas"][0]["inicio"] = 1.9  # aparece depois que a fala acabou
         self.assertIn("longe da fala", " ".join(verificar_montagem(r)["problemas"]))
+
+    def voz_com_pausa(self, nome, silencio_inicio, fala1, pausa, fala2, volume_db=-8):
+        arq = self.d / nome
+        _ff("-f", "lavfi", "-i", f"sine=f=300:d={fala1}", "-f", "lavfi", "-i", f"sine=f=300:d={fala2}",
+            "-filter_complex", f"[0:a]adelay={int(silencio_inicio * 1000)},apad=pad_dur={pausa}[a];"
+                               f"[a][1:a]concat=n=2:v=0:a=1,apad=pad_dur=0.4,volume={volume_db}dB",
+            "-ar", "48000", str(arq))
+        return arq
+
+    def test_silencio_no_comeco_da_voz_e_pausa_entre_frases(self):  # verificador: itens 1 e 3
+        cenas = [
+            {"video": self.clipe("a.mp4", 4), "voz": self.voz_com_pausa("v1.wav", 1.0, 1.5, 0.8, 1.5),
+             "narracao": "Primeira frase completa. Segunda frase completa."},
+            {"video": self.clipe("b.mp4", 3), "voz": self.voz("v2.wav", 2.0, pausa_inicio=0.5),
+             "narracao": "Terceira frase depois."},
+        ]
+        r = montar(cenas, self.d / "f.mp4", cfg=self.RAPIDO, pasta_trabalho=self.d / "t")
+        v = verificar_montagem(r)
+        self.assertEqual(v["problemas"], [])
+        self.assertLessEqual(v["medidas"]["sincronia_max_s"], 0.3)
+        self.assertEqual(len(r["legendas"]), 3)
+        self.assertEqual(r["legendas"][0]["inicio"], 0.2)  # o silêncio de 1 s do arquivo foi cortado
+        self.assertAlmostEqual(r["tempos"][0]["duracao"], 0.2 + 3.8 + 0.35, places=1)
+
+    def test_voz_baixa_ainda_conta_como_fala(self):  # verificador: item 7 (pico perto de −48 dBFS)
+        cenas = [{"video": self.clipe("a.mp4", 2), "voz": self.voz("forte.wav", 1.5), "narracao": "Fala forte."},
+                 {"video": self.clipe("b.mp4", 2), "voz": self.voz_com_pausa("baixa.wav", 0.3, 1.5, 0.1, 0.1, -30),
+                  "narracao": "Fala bem baixa."}]
+        r = montar(cenas, self.d / "f.mp4", tamanho=(180, 320), cfg=self.RAPIDO, pasta_trabalho=self.d / "t")
+        self.assertEqual(len(r["legendas"]), 2)
+        self.assertNotIn("longe da fala", " ".join(verificar_montagem(r)["problemas"]))
+
+    def test_voz_muda_com_narracao_e_erro(self):
+        muda = self.d / "muda.wav"
+        _ff("-f", "lavfi", "-i", "anullsrc=r=48000:cl=mono", "-t", "1", str(muda))
+        with self.assertRaises(ErroMontagem):
+            montar([{"video": self.clipe("a.mp4", 1), "voz": muda, "narracao": "Oi."}], self.d / "f.mp4",
+                   tamanho=(180, 320), cfg=self.RAPIDO)
+
+    def test_sem_faixa_de_voz_nao_aprova_sem_medir(self):  # verificador: item 2
+        cenas = [{"video": self.clipe("a.mp4", 2), "voz": self.voz("v.wav", 1.5), "narracao": "Teste.",
+                  "texto_tela": "Um texto na tela bem mais comprido que o normal, sem quebra nenhuma aqui"}]
+        r = montar(cenas, self.d / "f.mp4", tamanho=(180, 320), cfg=self.RAPIDO)  # pasta temporária apagada
+        self.assertIsNotNone(r["sincronia"])  # medida durante a montagem
+        problemas = " ".join(verificar_montagem(r)["problemas"])
+        self.assertNotIn("não medida", problemas)
+        self.assertRegex(problemas, r"texto na tela 1 com \d linhas \(máx\. 2\)")  # verificador: item 5
+        r["sincronia"] = None
+        self.assertIn("não medida", " ".join(verificar_montagem(r)["problemas"]))
 
     def test_comando_montar(self):
         import io

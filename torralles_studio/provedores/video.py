@@ -1,3 +1,4 @@
+import re
 import shutil
 import subprocess
 import unicodedata
@@ -71,19 +72,26 @@ class KenBurnsVideo(Provedor):
 
 
 # Movimento lido do prompt_movimento do roteiro (pt-BR ou inglês). Padrão: aproximar devagar.
+# Palavras inteiras; em "da direita para a esquerda" vale o destino.
 _MOVIMENTOS = [
-    ("afastar", ("zoom out", "afast", "recu", "abrir")),
-    ("direita", ("pan right", "direita")),
-    ("esquerda", ("pan left", "esquerda")),
-    ("subir", ("tilt up", "para cima", "sobe", "subi")),
-    ("descer", ("tilt down", "para baixo", "desce", "desc")),
+    ("afastar", r"\bzoom out\b|\bafast\w*|\brecu(ar|a|ando)\b"),
+    ("direita", r"\b(pan|move|moves) right\b|\bdireita\b"),
+    ("esquerda", r"\b(pan|move|moves) left\b|\besquerda\b"),
+    ("subir", r"\btilt up\b|\bs[uo]b(ir|indo|e)\b|\bpara cima\b"),
+    ("descer", r"\btilt down\b|\bdesc(er|endo|e)\b|\bpara baixo\b"),
 ]
+_DESTINO = {"direita": "direita", "esquerda": "esquerda", "cima": "subir", "baixo": "descer",
+            "right": "direita", "left": "esquerda"}
 
 
 def movimento(prompt, ultimo):
     """Expressões (z, x, y) do zoompan para o movimento pedido; `on` vai de 0 a `ultimo`."""
     t = "".join(c for c in unicodedata.normalize("NFD", str(prompt or "").lower()) if unicodedata.category(c) != "Mn")
-    tipo = next((nome for nome, chaves in _MOVIMENTOS if any(k in t for k in chaves)), "aproximar")
+    destino = re.search(r"\b(?:para|pra|to)(?: a| o| the)? (direita|esquerda|cima|baixo|right|left)\b", t)
+    if destino:
+        tipo = _DESTINO[destino.group(1)]
+    else:
+        tipo = next((nome for nome, padrao in _MOVIMENTOS if re.search(padrao, t)), "aproximar")
     p = f"(on/{max(1, ultimo)})"  # progresso 0 → 1
     cx, cy = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
     return {

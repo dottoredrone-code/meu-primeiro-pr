@@ -47,6 +47,7 @@ CHARS_LINHA = {"9:16": 28, "4:5": 32, "1:1": 32, "16:9": 42}  # menos que 42 no 
 AREA_SEGURA = {"9:16": (0.10, 0.20)}  # (cima, baixo) ocupados pela interface das redes; demais formatos: 5%
 _IMAGENS = {".png", ".jpg", ".jpeg", ".webp"}
 TOLERANCIA_SINCRONIA_S = 0.3
+VOZ_LUFS = -18.0  # nível comum das falas antes da mistura (o volume final vem depois)
 
 
 class ErroMontagem(Exception):
@@ -93,10 +94,17 @@ def pausas(arquivo, ruido_db=-35, minimo_s=0.15):
     return [(max(0.0, a), b) for a, b in zip(inicios, fins)]
 
 
+def limiar_silencio(arquivo):
+    """Limiar de silêncio relativo ao pico (voz baixa não vira "sem fala"): −35 dB ou 25 dB abaixo do pico."""
+    log = _ff(["-i", str(arquivo), "-vn", "-af", "volumedetect", "-f", "null", "-"])
+    m = re.search(r"max_volume:\s*(-?[\d.]+) dB", log)
+    return max(-60.0, min(-35.0, float(m.group(1)) - 25)) if m else -35.0  # abaixo de −60 dB é silêncio
+
+
 def trecho_falado(arquivo):
     """(início, fim, pausas internas) da fala dentro do arquivo de voz."""
     total = duracao(arquivo)
-    silencios = pausas(arquivo)
+    silencios = pausas(arquivo, limiar_silencio(arquivo))
     ini, fim, internas = 0.0, total, []
     for a, b in silencios:
         if a <= 0.05:
@@ -198,37 +206,54 @@ def quebrar_texto(texto, max_chars):
 
 
 def distribuir_legendas(texto, inicio_fala, fim_fala, pausas_internas=(), max_chars=42, fim_cena=None):
-    """[(inicio, fim, [linhas])] no tempo da fala. Cortes entre blocos vão para a pausa real mais próxima."""
+    """[(inicio, fim, [linhas])] no tempo da fala.
+
+    O corte entre blocos vai para uma pausa real perto da estimativa: o bloco seguinte entra quando a fala
+    volta e o anterior sai até 0,4 s depois que ela para. Cada bloco fica na tela pelo menos 1 s e o
+    bastante para ≤ 17 caracteres/s, sem invadir o bloco seguinte nem passar do fim da cena.
+    """
     blocos = quebrar_texto(texto, max_chars)
     if not blocos or fim_fala <= inicio_fala:
         return []
+    lim = LIMITES_LEGENDA
     pesos = [sum(len(l) for l in b) for b in blocos]
     total, dur = sum(pesos), fim_fala - inicio_fala
-    limites, acumulado = [inicio_fala], 0
-    meios = [(a + b) / 2 for a, b in pausas_internas]
+    inis, fins, acumulado = [inicio_fala], [], 0
     for p in pesos[:-1]:
         acumulado += p
         estimado = inicio_fala + dur * acumulado / total
-        perto = min(meios, key=lambda m: abs(m - estimado), default=None)
-        corte = perto if perto is not None and abs(perto - estimado) <= 0.6 and perto > limites[-1] + 0.3 else estimado
-        limites.append(corte)
-    fim_ultimo = fim_fala + 0.4 if fim_cena is None else min(fim_fala + 0.4, fim_cena)
-    limites.append(max(fim_ultimo, fim_fala))
+        perto = [(a, b) for a, b in pausas_internas
+                 if max(a - estimado, estimado - b, 0) <= 0.6 and b - 0.1 > inis[-1] + 0.3]
+        if perto:
+            a, b = min(perto, key=lambda x: max(x[0] - estimado, estimado - x[1], 0))
+            fins.append(min(a + 0.4, b))
+            inis.append(max(a, b - 0.1))
+        else:
+            fins.append(estimado)
+            inis.append(estimado)
+    teto = fim_fala + 0.8 if fim_cena is None else max(fim_fala, fim_cena)
+    fins.append(min(fim_fala + 0.4, teto))
     # Bloco que ficaria menos de 1 s na tela junta com o vizinho, se os dois couberem em 2 linhas.
     i = 0
     while len(blocos) > 1 and i < len(blocos):
-        if limites[i + 1] - limites[i] >= LIMITES_LEGENDA["min_s"]:
+        if fins[i] - inis[i] >= lim["min_s"]:
             i += 1
             continue
         j = i if i + 1 < len(blocos) else i - 1  # junta j com j+1
         juntas = _linhas(" ".join(blocos[j] + blocos[j + 1]), max_chars, por_frase=False)
-        if len(juntas) > LIMITES_LEGENDA["linhas"]:
+        if len(juntas) > lim["linhas"]:
             i += 1
             continue
         blocos[j:j + 2] = [juntas]
-        del limites[j + 1]
+        del fins[j], inis[j + 1]
         i = max(0, j - 1)
-    return [(round(limites[i], 3), round(limites[i + 1], 3), b) for i, b in enumerate(blocos)]
+    # Tempo mínimo de leitura: estica o fim até o próximo bloco (ou o fim da cena, no máx. 0,8 s após a fala).
+    for i, b in enumerate(blocos):
+        precisa = max(lim["min_s"], sum(len(l) for l in b) / lim["cps"])
+        limite = inis[i + 1] if i + 1 < len(blocos) else min(teto, fim_fala + 0.8)
+        if fins[i] - inis[i] < precisa:
+            fins[i] = max(fins[i], min(inis[i] + precisa, limite))
+    return [(round(inis[i], 3), round(fins[i], 3), b) for i, b in enumerate(blocos)]
 
 
 def checar_legendas(legendas, max_chars=LIMITES_LEGENDA["chars_linha"]):
@@ -249,6 +274,11 @@ def checar_legendas(legendas, max_chars=LIMITES_LEGENDA["chars_linha"]):
         if n > 1 and ini < legendas[n - 2][1] - 1e-6:
             problemas.append(f"legenda {n} começa antes da anterior acabar")
     return problemas
+
+
+def linhas_tela(texto, proporcao):
+    """texto_tela quebrado para a letra maior do alto da tela (pode passar de 2 linhas: a conferência acusa)."""
+    return _linhas(texto, int(CHARS_LINHA.get(proporcao, 42) / 1.15), por_frase=False)
 
 
 def estilo_legenda(largura, altura, proporcao):
@@ -287,7 +317,8 @@ def gerar_ass(legendas, textos_tela, largura, altura, proporcao, fonte="Arial"):
     quebra = "\\N"  # quebra de linha do ASS
     eventos = [f"Dialogue: 0,{_tempo_ass(a)},{_tempo_ass(b)},Legenda,,0,0,0,,{quebra.join(map(_texto_ass, linhas))}"
                for a, b, linhas in legendas]
-    eventos += [f"Dialogue: 1,{_tempo_ass(a)},{_tempo_ass(b)},Tela,,0,0,0,,{_texto_ass(t)}" for a, b, t in textos_tela]
+    eventos += [f"Dialogue: 1,{_tempo_ass(a)},{_tempo_ass(b)},Tela,,0,0,0,,{quebra.join(map(_texto_ass, linhas))}"
+                for a, b, linhas in textos_tela]
     return cab + "\n".join(eventos) + "\n"
 
 
@@ -336,6 +367,14 @@ def _loudnorm(origem, destino, c):
     medido = (f"measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}:"
               f"measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true")
     _ff(["-i", str(origem), "-af", f"loudnorm={alvo}:{medido},aresample=48000", "-c:a", "pcm_f32le", str(destino)])
+    # O loudnorm mede diferente do ebur128 em áudio com muitas pausas: corrige o resto se o pico permitir.
+    v = medir_volume(destino)
+    if v["lufs"] is not None and abs(v["lufs"] - c["lufs"]) > 0.3:
+        ganho = c["lufs"] - v["lufs"]
+        if v["pico_dbtp"] is None or v["pico_dbtp"] + ganho <= c["pico_dbtp"]:
+            ajustado = destino.with_name(destino.stem + "_ajuste.wav")
+            _ff(["-i", str(destino), "-af", f"volume={ganho:.2f}dB", "-c:a", "pcm_f32le", str(ajustado)])
+            ajustado.replace(destino)
 
 
 def montar(cenas, saida, *, proporcao="9:16", trilha=None, bpm=None, primeira_batida_s=0.0, cfg=None,
@@ -396,8 +435,13 @@ def completar_duracao(tempos, duracao_alvo, extra_final_s=1.5, extra_cena_s=0.3)
 def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primeira_batida_s, c, duracao_alvo):
     # 1. Fala útil de cada cena e tempos
     falas = []
-    for cena in cenas:
-        falas.append(trecho_falado(cena["voz"]) if cena.get("voz") else None)
+    for i, cena in enumerate(cenas, 1):
+        fala = trecho_falado(cena["voz"]) if cena.get("voz") else None
+        if fala and fala[1] <= fala[0]:
+            if cena.get("narracao"):
+                raise ErroMontagem(f"cena {i}: não encontrei fala no arquivo de voz (está mudo?)")
+            fala = None
+        falas.append(fala)
     tempos = planejar_tempos([(f[1] - f[0]) if f else 0 for f in falas], [cena.get("duracao") for cena in cenas], c)
     tempos = alinhar_ao_tempo(completar_duracao(tempos, duracao_alvo), bpm, primeira_batida_s, c)
     total = round(tempos[-1]["inicio"] + tempos[-1]["duracao"], 3)
@@ -422,7 +466,7 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
                 cena["narracao"], fala[0] + deslocamento, fala[1] + deslocamento,
                 [(a + deslocamento, b + deslocamento) for a, b in fala[2]], estilo["max_chars"], fim_cena)
         if cena.get("texto_tela"):
-            textos_tela.append((tp["inicio"] + 0.1, fim_cena, cena["texto_tela"]))
+            textos_tela.append((tp["inicio"] + 0.1, fim_cena, linhas_tela(cena["texto_tela"], proporcao)))
     (pasta / "legendas.ass").write_text(gerar_ass(legendas, textos_tela, largura, altura, proporcao, c["fonte"]),
                                         encoding="utf-8")
     (pasta / "legendas.srt").write_text(gerar_srt(legendas), encoding="utf-8")
@@ -433,10 +477,14 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
     for i, (cena, tp, fala) in enumerate(zip(cenas, tempos, falas)):
         if not fala:
             continue
-        atraso = max(0, round((tp["inicio"] + tp["fala_em"] - fala[0]) * 1000))
-        n = len(entradas) // 2
-        entradas += ["-i", str(cena["voz"])]
-        filtros.append(f"[{n}:a]aformat=sample_rates=48000:channel_layouts=stereo,adelay={atraso}:all=1[v{n}]")
+        atraso = round((tp["inicio"] + tp["fala_em"]) * 1000)
+        n = len(entradas) // 4
+        entradas += ["-ss", f"{fala[0]:.3f}", "-i", str(cena["voz"])]  # pula o silêncio do começo da voz
+        # Iguala o nível das falas (provedores de voz diferentes saem com volumes diferentes).
+        nivel = medir_volume(cena["voz"])["lufs"]
+        ganho = 0.0 if nivel is None else max(-20.0, min(30.0, VOZ_LUFS - nivel))
+        filtros.append(f"[{n}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={ganho:.2f}dB,"
+                       f"adelay={atraso}:all=1[v{n}]")
         rotulos.append(f"[v{n}]")
     if rotulos:
         filtros.append(f"{''.join(rotulos)}amix=inputs={len(rotulos)}:normalize=0:duration=longest,"
@@ -458,7 +506,7 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
         referencia = medida_voz["lufs"] if medida_voz["lufs"] is not None else c["lufs"] + c["trilha_lu_abaixo"]
         ganho = referencia - c["trilha_lu_abaixo"] - nivel
         final_trilha = pasta / "trilha.wav"
-        for _ in range(3):  # o abaixamento muda o nível: mede e corrige até ficar perto do alvo
+        for volta in range(3):  # o abaixamento muda o nível: mede e corrige até ficar perto do alvo
             saida_fade = max(0.0, total - 1.5)
             _ff(["-i", str(bruta), "-i", str(voz), "-filter_complex",
                  f"[0:a]volume={ganho:.2f}dB[m];[m][1:a]sidechaincompress=threshold=0.02:ratio=6:attack=15:"
@@ -466,7 +514,7 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
                  "-map", "[t]", "-c:a", "pcm_f32le", str(final_trilha)])
             medida = medir_volume(final_trilha)["lufs"]
             diferenca = None if medida is None or medida_voz["lufs"] is None else medida_voz["lufs"] - medida
-            if diferenca is None or c["trilha_lu_minimo"] <= diferenca <= c["trilha_lu_abaixo"] + 1.5:
+            if diferenca is None or c["trilha_lu_minimo"] <= diferenca <= c["trilha_lu_abaixo"] + 1.5 or volta == 2:
                 break
             ganho += diferenca - c["trilha_lu_abaixo"]
         info_trilha = {"arquivo": str(trilha), "ganho_db": round(ganho, 2), "lufs": medida,
@@ -507,7 +555,9 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
         "duracao_s": total, "tempos": tempos, "congelado_s": congelados,
         "cortes_na_batida": sum(1 for tp in tempos if tp.get("na_batida")),
         "legendas": [{"inicio": a, "fim": b, "linhas": linhas} for a, b, linhas in legendas],
+        "textos_tela": [{"inicio": a, "fim": b, "linhas": linhas} for a, b, linhas in textos_tela],
         "estilo_legenda": estilo, "voz": medida_voz, "trilha": info_trilha,
+        "sincronia": dict(zip(("desvios", "problemas"), sincronia(legendas, voz))) if legendas else None,
         "pasta_trabalho": str(pasta),
     }
 
@@ -576,20 +626,27 @@ def verificar_montagem(resultado, duracao_pedida=None, voz=None):
         if dif is not None and dif < PADROES["trilha_lu_minimo"]:
             problemas.append(f"trilha só {dif} LU abaixo da voz (mín. 10)")
 
+    for n, t in enumerate(resultado.get("textos_tela", []), 1):
+        if len(t["linhas"]) > LIMITES_LEGENDA["linhas"]:
+            problemas.append(f"texto na tela {n} com {len(t['linhas'])} linhas (máx. 2): encurte")
+
     voz = Path(voz) if voz else Path(resultado.get("pasta_trabalho", "")) / "voz.wav"
-    if legendas and voz.is_file():
-        desvios, problemas_sinc = sincronia(legendas, voz)
+    if legendas:
+        if voz.is_file():  # mede de novo (as legendas podem ter mudado depois da montagem)
+            desvios, problemas_sinc = sincronia(legendas, voz)
+        elif resultado.get("sincronia"):
+            desvios, problemas_sinc = resultado["sincronia"]["desvios"], resultado["sincronia"]["problemas"]
+        else:
+            desvios, problemas_sinc = [], ["sincronia das legendas não medida (falta a faixa de voz)"]
         medidas["sincronia_max_s"] = round(max(desvios), 2) if desvios else None
         problemas += problemas_sinc
-    elif legendas:
-        medidas["sincronia_max_s"] = None  # sem a faixa de voz não dá para medir
     return {"aprovado": not problemas, "problemas": problemas, "medidas": medidas}
 
 
 def sincronia(legendas, voz, tolerancia=TOLERANCIA_SINCRONIA_S):
     """(desvios, problemas): cada legenda começa perto de fala real e não aparece durante silêncio longo."""
     total = duracao(voz)
-    silencios = pausas(voz, minimo_s=0.15)
+    silencios = pausas(voz, limiar_silencio(voz), minimo_s=0.15)
     # Entradas de fala = fins de silêncio (e o começo do arquivo, se já começa falando).
     entradas = [b for a, b in silencios if b < total - 0.05]
     if not silencios or silencios[0][0] > 0.05:
@@ -601,7 +658,8 @@ def sincronia(legendas, voz, tolerancia=TOLERANCIA_SINCRONIA_S):
         desvios.append(desvio)
         if desvio > tolerancia:
             problemas.append(f"legenda {n} começa {desvio:.2f} s longe da fala (máx. {tolerancia} s)")
-        longos = [(a, b) for a, b in silencios if b - a >= 0.7 and min(fim, b) - max(ini, a) > 0.6]
+        # Legenda pode ficar um pouco após a fala (leitura); mais de 1 s num silêncio longo é erro.
+        longos = [(a, b) for a, b in silencios if b - a >= 1.0 and min(fim, b) - max(ini, a) > 1.0]
         if longos:
             problemas.append(f"legenda {n} fica na tela durante silêncio de {longos[0][1] - longos[0][0]:.1f} s")
     return desvios, problemas
