@@ -103,3 +103,18 @@
   próxima; resultados de mídia não vão para o cache (links temporários).
 - **Conteúdo também se confere:** página HTML ou SVG com extensão de imagem não entra na biblioteca.
 - 2 rodadas de verificação; teste real com as chaves de Pexels/Pixabay pendente.
+
+## Camada 3 — Montagem final: K22 e zoom do K19 (17/10/2026)
+- **Tempo da cena vem da fala medida, não do roteiro:** os silêncios de 1,8 s do teste local sumiram ao
+  medir a fala real (silencedetect) e somar só folgas curtas. A duração pedida é completada segurando a
+  última cena, nunca com silêncio.
+- **Voz de TTS traz silêncio no começo:** cortar antes de posicionar (`-ss` na entrada; `atrim`+`asetpts`
+  antes do `adelay` perdia o atraso no FFmpeg 6.1) e igualar o nível das falas antes de mixar.
+- **Limiar de silêncio relativo ao pico:** limiar fixo tratava voz baixa como "sem fala".
+- **Medir no fim, com a mesma régua:** trilha ajustada até ficar 12 LU abaixo da voz (o abaixamento muda o
+  nível, por isso mede de novo); loudnorm em 2 passadas + correção residual pelo ebur128.
+- **Conferência que não mediu não aprova:** sincronia medida já na montagem; sem medida, reprova.
+- **Legenda nunca sobrepõe:** o bloco anterior sai no máximo quando o seguinte entra (pausas de 0,2–0,4 s
+  são o caso comum de TTS).
+- **Zoom segue o formato do perfil;** movimento lido por palavra inteira e pelo destino da frase.
+- 3 rodadas de verificação (9 problemas na 1ª, 1 regressão na 2ª, aprovado na 3ª).

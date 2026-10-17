@@ -230,6 +230,7 @@ def distribuir_legendas(texto, inicio_fala, fim_fala, pausas_internas=(), max_ch
             fins.append(min(a + 0.4, entra))  # nunca depois que o seguinte entra (pausa curta)
             inis.append(entra)
         else:
+            estimado = max(estimado, inis[-1] + 0.3)  # nunca antes do bloco anterior (fala rápida demais)
             fins.append(estimado)
             inis.append(estimado)
     teto = fim_fala + 0.8 if fim_cena is None else max(fim_fala, fim_cena)

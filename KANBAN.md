@@ -35,12 +35,12 @@
 | K27 | Aprendizados de produção para o Cérebro (só tentativas julgadas; instruções positivas com números) | D16 |
 | K11 | Canais de referência: lista base aprovada, categoria A completa (`config/referencias.toml`); C, D e F aguardam suas indicações | [09](docs/sdd/09-referencias-qualidade.md) · D17 |
 | K20 | Mídia gratuita em 3 camadas com licença por arquivo (Freesound só em projetos não comerciais, D22) — teste real pendente com as chaves | [11](docs/sdd/11-banco-midia-gratuita.md) · D18 · D22 |
+| K22 | Montagem final (`montagem.py`, comando `montar`): tempo da fala, cortes na batida, legendas sincronizadas na área segura, trilha 12 LU abaixo da voz, −14 LUFS e conferência automática. A escolha da trilha (K21) e a voz com fallback (K18) entram depois | [03](docs/sdd/03-parametros-avaliacao.md) · [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) |
 
 ## 🔍 Em verificação
 | ID | Cartão | Spec |
 |---|---|---|
 | K06 | Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) — código pronto; falta o teste real no PC (`docs/teste-real.md`) | [10](docs/sdd/10-percepcao.md) |
-| K22 | Montagem final (`montagem.py`, comando `montar`): tempo da fala, cortes na batida, legendas na área segura, trilha 12 LU abaixo da voz, −14 LUFS, conferência automática. Escolha da trilha (K21) e voz com fallback (K18) entram depois | [03](docs/sdd/03-parametros-avaliacao.md) · [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) |
 
 ## 🛠️ Em andamento
 _(vazio)_
