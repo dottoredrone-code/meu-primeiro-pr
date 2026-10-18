@@ -56,6 +56,7 @@ class Roteador:
         self._dormir = dormir
         self._relogio = relogio
         self._descanso_ate = {}
+        self.aviso = None  # função(texto) para mostrar o andamento (o CLI liga; testes e servidor não)
 
     def tipo_da_tarefa(self, tarefa):
         return self.provedores[self.cadeias[tarefa][0]].tipo
@@ -69,6 +70,7 @@ class Roteador:
         ser da mesma família de quem gerou a peça).
         usar_cache: False para pedir um resultado novo (ex.: refazer peça rejeitada, variações).
         """
+        self._tarefa = tarefa
         if tarefa not in self.cadeias:
             raise KeyError(f"tarefa desconhecida: {tarefa}")
         tentativas = []
@@ -145,6 +147,10 @@ class Roteador:
             if n and not self.orcamento.cabe(custo):
                 raise ErroProvedor("teto de custo atingido antes de repetir")
             self.orcamento.registrar(nome, custo)
+            if self.aviso:
+                espera = getattr(provedor, "timeout", None)
+                self.aviso(f"… {getattr(self, '_tarefa', '')}: {nome}{' (repetindo)' if n else ''}"
+                           + (f" (até {espera} s)" if espera else ""))
             try:
                 return provedor.executar(**kwargs)
             except ErroProvedor as e:

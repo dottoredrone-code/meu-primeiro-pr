@@ -132,6 +132,7 @@ class Perfil:
         novo = Roteador(provedores, base.cadeias, repeticoes=base.repeticoes, espera_base=base.espera_base,
                         dormir=base._dormir, relogio=base._relogio, orcamento=orcamento, cache=base.cache)
         novo._descanso_ate = base._descanso_ate  # descanso de provedor (429/401) vale para todos
+        novo.aviso = base.aviso
         return novo
 
 

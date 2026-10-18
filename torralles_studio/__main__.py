@@ -247,6 +247,7 @@ def main(argv=None):
     if args.comando == "cerebro":
         return comando_cerebro(args)
     roteador = carregar_roteador(args.config)
+    roteador.aviso = lambda texto: print(texto, file=sys.stderr, flush=True)  # mostra quem está trabalhando
 
     if args.comando == "status":
         mostrar_status(roteador)

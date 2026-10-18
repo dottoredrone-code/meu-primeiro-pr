@@ -144,7 +144,8 @@ def produzir_pesquisa(loop, tema, *, max_resultados=5, peca="pesquisa", refazer=
         lambda feedback: {"prompt": montar_prompt(tema, fontes, feedback), "sistema": SISTEMA_PESQUISA},
         checar=lambda resumo: checar_citacoes(resumo, fontes),
         contexto=f"Tema: {tema}\n\nFontes (trechos):\n" + "\n".join(
-            f"[{i}] {_limpo(f.get('url'), 300)}: {_limpo(f.get('trecho'), 600)}" for i, f in enumerate(fontes, 1)),
+            f"[{i}] {_limpo(f.get('url'), 300)}: {_limpo(f.get('trecho'))}" for i, f in enumerate(fontes, 1)),
+        # o juiz vê o mesmo trecho que o redator (com 600 caracteres ele reprovava o que estava na fonte)
         peca=peca,
         refazer=refazer,
     )

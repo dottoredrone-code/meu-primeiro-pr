@@ -232,6 +232,16 @@ class TestProduzirPesquisa(unittest.TestCase):
         self.assertIn("<fontes>", gen.pedidos[0]["prompt"])
         self.assertIn("[7]", gen.pedidos[1]["prompt"])  # o feedback aponta a citação inexistente
 
+    def test_juiz_ve_o_mesmo_trecho_que_o_redator(self):  # teste real: com 600 caracteres o juiz reprovava o que estava na fonte
+        longo = [{**f, "trecho": f["trecho"] + " " + "x" * 900 + " FIM-DO-TRECHO"} for f in FONTES]
+        busca = Falso("tavily", "busca", [longo])
+        gen = Falso("deepseek_reasoner", "texto", ["Tem cafeína [1] e antioxidantes [2]."], familia="deepseek")
+        juiz = Falso("claude", "texto", [nota(PESQUISA_CRIT)], familia="anthropic")
+        loop = loop_com([busca, gen, juiz], {"busca": ["tavily"], "pesquisa": ["deepseek_reasoner"], "juiz": ["claude"]})
+        produzir_pesquisa(loop, "chá verde")
+        self.assertIn("FIM-DO-TRECHO", gen.pedidos[0]["prompt"])
+        self.assertIn("FIM-DO-TRECHO", juiz.pedidos[0]["prompt"])
+
     def test_sem_busca_devolve_resumo_para_revisao_com_custo(self):
         gen = Falso("deepseek_reasoner", "texto", ["Resumo sem fontes."], familia="deepseek", custo=0.003)
         loop = loop_com([gen], {"busca": [], "pesquisa": ["deepseek_reasoner"], "juiz": []})
