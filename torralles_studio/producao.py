@@ -46,11 +46,21 @@ def _pronto(arquivo):
         return False
 
 
+_MIDIA_DA_CENA = re.compile(r"(cena_\d{2}(\.parte)?\.(png|mp4)|voz_\d{2}(\.parte)?\.mp3)")
+
+
+def _apagar(arquivo):
+    try:
+        Path(arquivo).unlink(missing_ok=True)
+    except OSError:  # no Windows, um ffmpeg interrompido pode ainda segurar o arquivo: fica para a próxima
+        pass
+
+
 def _gerar(destino, fazer):
     """Gera em `nome.parte.ext` e só renomeia para o nome final se ficar completo."""
     destino = Path(destino)
     parte = destino.with_name(f"{destino.stem}.parte{destino.suffix}")
-    parte.unlink(missing_ok=True)
+    _apagar(parte)
     try:
         r = fazer(parte)
         if not _pronto(parte):
@@ -59,7 +69,7 @@ def _gerar(destino, fazer):
         os.replace(parte, destino)
         return r
     finally:
-        parte.unlink(missing_ok=True)
+        _apagar(parte)
 
 
 def _ler_json(arquivo):
@@ -146,8 +156,9 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
              "roteiro": roteiro}, ensure_ascii=False, indent=2), encoding="utf-8")
         etapa("roteiro", r.provedor, nota=r.nota, aprovado=r.aprovado,
               problemas=list(getattr(r.avaliacao, "problemas", None) or [])[:5])
-        for nome in [p.name for p in pasta.glob("cena_*")] + [p.name for p in pasta.glob("voz_*")]:
-            (pasta / nome).unlink(missing_ok=True)  # roteiro novo: mídia das cenas antigas não serve mais
+        for arq in pasta.iterdir():  # roteiro novo: mídia das cenas antigas não serve mais (só os nomes do Studio)
+            if arq.is_file() and _MIDIA_DA_CENA.fullmatch(arq.name):
+                _apagar(arq)
 
     # 3. Cada cena: imagem → voz → cena animada com a duração da fala
     cenas, total = [], len(roteiro["cenas"])
