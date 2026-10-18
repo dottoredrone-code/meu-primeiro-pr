@@ -92,12 +92,27 @@ def _quadros(video, pasta, tempos):
     return arquivos
 
 
+# Fontes comuns em Linux, Windows e Mac (o drawtext do FFmpeg no Windows não acha fonte sozinho).
+_FONTES = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "C:/Windows/Fonts/arialbd.ttf",
+           "C:/Windows/Fonts/arial.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+           "/Library/Fonts/Arial.ttf"]
+
+
+def _fonte():
+    """Caminho de uma fonte que existe, escapado para filtro do FFmpeg; None se não houver."""
+    for f in _FONTES:
+        if Path(f).is_file():
+            return f.replace("\\", "/").replace(":", "\\:")
+    return None
+
+
 def _folha_contato(video, saida, duracao, colunas=6):
     passo = max(duracao / (colunas * 2), 0.5)
-    fonte = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    texto = f"drawtext=fontfile={fonte}:text='%{{pts\\:hms}}':x=10:y=10:fontsize=36:fontcolor=white:box=1:boxcolor=black@0.6"
+    fonte = _fonte()
+    texto = (f"drawtext=fontfile='{fonte}':text='%{{pts\\:hms}}':x=10:y=10:fontsize=36:fontcolor=white:box=1:"
+             "boxcolor=black@0.6," if fonte else "")  # sem fonte: folha sem o tempo escrito, mas sai
     _ff("-y", "-loglevel", "error", "-i", str(video), "-vf",
-        f"fps=1/{passo:.3f},scale=360:-2,{texto},tile={colunas}x2:padding=6:color=white", "-frames:v", "1", str(saida))
+        f"fps=1/{passo:.3f},scale=360:-2,{texto}tile={colunas}x2:padding=6:color=white", "-frames:v", "1", str(saida))
     return str(saida)
 
 

@@ -49,3 +49,16 @@ class TestPercepcao(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFonteDaFolha(unittest.TestCase):
+    def test_caminho_do_windows_escapado_para_o_ffmpeg(self):  # achado no teste do PC (Windows)
+        from unittest import mock
+
+        from torralles_studio import percepcao
+
+        with mock.patch.object(percepcao, "_FONTES", ["C:\\Windows\\Fonts\\arial.ttf"]), \
+                mock.patch.object(percepcao.Path, "is_file", return_value=True):
+            self.assertEqual(percepcao._fonte(), "C\\:/Windows/Fonts/arial.ttf")
+        with mock.patch.object(percepcao, "_FONTES", []):
+            self.assertIsNone(percepcao._fonte())  # sem fonte: folha sai sem o tempo escrito

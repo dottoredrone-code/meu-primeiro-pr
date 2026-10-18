@@ -237,10 +237,9 @@ class TestConfigDaBiblioteca(unittest.TestCase):
         from torralles_studio.config import carregar_biblioteca
 
         with tempfile.TemporaryDirectory() as d:
-            banco = Banco(Path(d) / "t.db")
-            bib = carregar_biblioteca(banco=banco)
-            self.assertTrue(str(bib.raiz).endswith("dados/biblioteca"))
-            banco.fechar()
+            with Banco(Path(d) / "t.db") as banco:
+                bib = carregar_biblioteca(banco=banco)
+                self.assertEqual(Path(bib.raiz).parts[-2:], ("dados", "biblioteca"))  # vale no Windows também
 
 
 if __name__ == "__main__":

@@ -268,7 +268,11 @@ class Banco:
         self.con.execute("PRAGMA foreign_keys = ON")
         if self.caminho != ":memory:":
             self.con.execute("PRAGMA journal_mode = WAL")
-        self.migrar()
+        try:
+            self.migrar()
+        except BaseException:
+            self.con.close()  # não deixa o arquivo preso (no Windows ele não poderia ser apagado nem movido)
+            raise
 
     # -- esquema ------------------------------------------------------------
     @property
@@ -289,6 +293,20 @@ class Banco:
 
     def fechar(self):
         self.con.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.fechar()
+
+    def __del__(self):
+        con = getattr(self, "con", None)
+        if con is not None:
+            try:
+                con.close()
+            except Exception:
+                pass
 
     # -- projetos e cenas ---------------------------------------------------
     def criar_projeto(self, titulo, briefing=None, formato=None, perfil=None):
