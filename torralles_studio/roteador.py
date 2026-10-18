@@ -103,9 +103,11 @@ class Roteador:
                 valor = validar(bruto) if validar else bruto
             except (ErroProvedor, ValueError) as e:
                 tentativas.append(Tentativa(nome, "falhou", mascarar(str(e))))
+                self._avisar_falha(tentativas[-1])
                 continue
             except Exception as e:  # resposta em formato inesperado, bug no provedor...
                 tentativas.append(Tentativa(nome, "falhou", mascarar(f"{type(e).__name__}: {e}")))
+                self._avisar_falha(tentativas[-1])
                 continue
             tentativas.append(Tentativa(nome, "ok"))
             self._guardar_cache(chave, nome, provedor, bruto)
@@ -141,6 +143,11 @@ class Roteador:
             self.cache.cache_guardar(chave, nome, provedor.modelo, valor)
         except Exception:  # falha no cache nunca derruba a geração
             pass
+
+    def _avisar_falha(self, tentativa):
+        if self.aviso:  # mostra a falha mesmo quando o próximo provedor resolve (senão o motivo some)
+            detalhe = " ".join(tentativa.detalhe.split())
+            self.aviso(f"  ✗ {tentativa.provedor}: {detalhe[:220]}")
 
     def _chamar(self, nome, provedor, kwargs, custo=0.0):
         for n in range(self.repeticoes + 1):
