@@ -161,6 +161,10 @@ def comando_com_qualidade(args, roteador, perfil):
     nota = f", nota {r.nota:.0f}" if r.nota is not None else ""
     custo = sum(t.custo_usd for t in r.tentativas)
     print(f"{estado} ({r.motivo}{nota}, {len(r.tentativas)} tentativa(s), US$ {custo:.3f})", file=sys.stderr)
+    av = r.avaliacao
+    if av is not None and (getattr(av, "sem_juiz", False) or not r.aprovado):
+        for problema in (getattr(av, "problemas", None) or [])[:8]:  # por que não houve juiz ou o que reprovou
+            print(f"  · {problema}", file=sys.stderr)
     if saida:
         print(saida)
     return 0 if r.valor is not None else 1
