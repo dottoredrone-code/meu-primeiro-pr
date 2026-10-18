@@ -118,3 +118,16 @@
   são o caso comum de TTS).
 - **Zoom segue o formato do perfil;** movimento lido por palavra inteira e pelo destino da frase.
 - 3 rodadas de verificação (9 problemas na 1ª, 1 regressão na 2ª, aprovado na 3ª).
+
+## Teste real com chaves no PC (18/10/2026)
+- **Windows pega o que a nuvem não pega:** FFmpeg sem fonte padrão (drawtext precisa de `fontfile`
+  com `C\:/...` escapado), arquivo SQLite preso quando a abertura falha, caminho com `\`. Rodar a suíte
+  no PC antes de cada camada.
+- **Falha do juiz precisa aparecer na tela:** "sem juiz" sem motivo escondia três causas diferentes
+  (saldo zerado no DeepSeek, juiz da mesma família do redator, JSON com aspas na evidência).
+- **Juiz e redator veem a mesma fonte:** com trecho menor para o juiz, ele reprovava o que estava na fonte.
+- **Juiz é crítico útil:** apontou fontes fracas (blogs comerciais), afirmação de saúde sem ressalva e
+  repetição. Nota 69 na pesquisa; o loop parou no limite e marcou para revisão, como previsto.
+- **Juiz de vídeo (Gemini) funciona com chave real:** nota 90 no vídeo de demonstração, talvez generoso
+  (nenhum problema apontado). Calibrar com suas notas no K14.
+- **Loop leva minutos:** mostrar o andamento (provedor e prazo) para não parecer travado.

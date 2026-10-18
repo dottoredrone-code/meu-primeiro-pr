@@ -1,6 +1,6 @@
 # Kanban — Torralles Studio
 
-> Atualizado em 17/10/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
+> Atualizado em 18/10/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
 > Fluxo de cada cartão: **Backlog → Especificado → Em andamento → Em verificação → Pronto**.
 
 ## Regras do quadro
@@ -17,6 +17,7 @@
 |---|---|---|
 | K00a | Roteador com fallback por função, provedores e CLI (protótipo) | — |
 | K00b | Percepção níveis 1 e 2: quadros, cortes, som, transcrição com fallback | [10](docs/sdd/10-percepcao.md) |
+| K06 | Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) — teste real no PC em 18/10: nota 90/100 no vídeo de demonstração | [10](docs/sdd/10-percepcao.md) |
 | K00c | Planejamento: specs 00–12 e decisões D1–D20 | [decisões](docs/sdd/decisoes.md) |
 | K01 | Modelos atualizados + Kling v3 `start_image_url` (teste de contrato por família) | [00](docs/sdd/00-descoberta.md) |
 | K02 | Pacote renomeado para `torralles_studio` | D1 |
@@ -40,7 +41,6 @@
 ## 🔍 Em verificação
 | ID | Cartão | Spec |
 |---|---|---|
-| K06 | Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) — código pronto; falta o teste real no PC (`docs/teste-real.md`) | [10](docs/sdd/10-percepcao.md) |
 
 ## 🛠️ Em andamento
 _(vazio)_
