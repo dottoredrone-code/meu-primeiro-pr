@@ -115,7 +115,11 @@ def comando_produzir(args, roteador, perfil):
         rel = produzir_video(roteador, carregar_loop(roteador, args.config), args.tema, pasta, duracao=args.duracao,
                              perfil=perfil, pesquisar=args.pesquisa, trilha=args.trilha, bpm=args.bpm,
                              cfg_montagem=carregar_config(args.config).get("montagem"),
-                             aviso=lambda t: print(t, file=sys.stderr, flush=True))
+                             aviso=lambda t: print(t, file=sys.stderr, flush=True),
+                             refazer_roteiro=args.refazer_roteiro)
+    except KeyboardInterrupt:
+        print(f"\n✗ interrompido. O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
+        return 130
     except (ErroProducao, ErroMontagem, ErroProvedor, OSError) as e:
         print(f"✗ parou: {e}\n  O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
         return 1
@@ -257,6 +261,7 @@ def main(argv=None):
     s.add_argument("--trilha", help="arquivo de música (opcional)")
     s.add_argument("--bpm", type=float, help="batidas por minuto da trilha (opcional)")
     s.add_argument("-o", "--pasta", help="pasta do vídeo (padrão: saidas/<tema>)")
+    s.add_argument("--refazer-roteiro", action="store_true", help="faz um roteiro novo (e cenas novas) mesmo se já houver")
 
     s = sub.add_parser("montar", help="monta o vídeo final (cenas, narração, legendas, trilha) e confere a régua")
     s.add_argument("projeto", help="arquivo JSON com as cenas (veja docs/montagem.md)")

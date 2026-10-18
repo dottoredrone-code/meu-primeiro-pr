@@ -112,6 +112,31 @@ class TestProduzirVideo(unittest.TestCase):
             self.assertTrue(all(e["reaproveitado"] for e in rel2["etapas"]))
             self.assertEqual(rel2["custo_usd"], 0)
 
+    def test_arquivo_pela_metade_nao_e_reaproveitado(self):  # verificador: retomada com arquivo parcial
+        rt, loop = self.montar()
+        with tempfile.TemporaryDirectory() as d:
+            pasta = Path(d) / "v"
+            produzir_video(rt, loop, "chá verde", pasta, duracao=8, cfg_montagem={"preset": "ultrafast"})
+            (pasta / "cena_02.mp4").write_bytes(b"\x00" * 262)  # vídeo quebrado (ex.: Ctrl+C na codificação)
+            (pasta / "voz_01.mp3").write_bytes(b"lixo")           # narração cortada
+            (pasta / "cena_01.png").write_bytes(b"<html>erro</html>")
+            rt2, loop2 = self.montar(roteiros=[])
+            rel = produzir_video(rt2, loop2, "chá verde", pasta, duracao=8, cfg_montagem={"preset": "ultrafast"})
+            refeitas = sorted(e["etapa"] for e in rel["etapas"] if not e["reaproveitado"])
+            self.assertEqual(refeitas, ["cena 1: imagem", "cena 1: voz", "cena 2: vídeo"])
+            self.assertFalse(list(pasta.glob("*.parte.*")))  # nada provisório sobrando
+
+    def test_roteiro_de_outro_tema_ou_duracao_nao_e_reaproveitado(self):
+        rt, loop = self.montar()
+        with tempfile.TemporaryDirectory() as d:
+            pasta = Path(d) / "v"
+            produzir_video(rt, loop, "chá verde", pasta, duracao=8, cfg_montagem={"preset": "ultrafast"})
+            rt2, loop2 = self.montar()  # tem um roteiro novo para dar
+            rel = produzir_video(rt2, loop2, "chá preto", pasta, duracao=8, cfg_montagem={"preset": "ultrafast"})
+            self.assertFalse(next(e for e in rel["etapas"] if e["etapa"] == "roteiro")["reaproveitado"])
+            self.assertEqual(self.voz.chamadas, 2)  # cenas do roteiro antigo foram descartadas
+            self.assertEqual(json.loads((pasta / "roteiro.json").read_text(encoding="utf-8"))["tema"], "chá preto")
+
     def test_roteiro_que_nao_sai_para_com_mensagem(self):
         rt, loop = self.montar(roteiros=["não é JSON"] * 4)
         with tempfile.TemporaryDirectory() as d, self.assertRaises(ErroProducao):
@@ -121,6 +146,32 @@ class TestProduzirVideo(unittest.TestCase):
 class TestAjudantes(unittest.TestCase):
     def test_pasta_do_tema(self):
         self.assertEqual(pasta_do_tema("Benefícios do Chá Verde!"), Path("saidas") / "beneficios-do-cha-verde")
+        self.assertEqual(pasta_do_tema("CON"), Path("saidas") / "video-con")  # nome proibido no Windows
+
+    def test_gemini_sem_opcao_de_proporcao_refaz_sem_ela(self):  # verificador: recuo em HTTP 400
+        import base64
+        import os
+        from unittest import mock
+
+        from torralles_studio.provedores import imagem
+        from torralles_studio.rede import ErroProvedor
+
+        corpos = []
+
+        def falso(url, corpo, cab, timeout):
+            corpos.append(dict(corpo))
+            if "generationConfig" in corpo:
+                raise ErroProvedor("HTTP 400: aspectRatio not supported", status=400)
+            return {"candidates": [{"content": {"parts": [{"inlineData": {"data": base64.b64encode(b"x").decode()}}]}}]}
+
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"CHAVE_TESTE": "k"}), \
+                mock.patch.object(imagem, "post_json", falso):
+            rt = Roteador({"g": imagem.GeminiImagem("g", {"custo_usd": 0.06, "modelo": "m", "chave_env": "CHAVE_TESTE"})},
+                          {"imagem": ["g"]}, orcamento=Orcamento(1.5))
+            rt.executar("imagem", prompt="x", saida=Path(d) / "a.png", proporcao="9:16")
+        self.assertEqual([("generationConfig" in c) for c in corpos], [True, False])
+        self.assertEqual(corpos[0]["generationConfig"], {"imageConfig": {"aspectRatio": "9:16"}})
+        self.assertAlmostEqual(rt.orcamento.gasto_usd, 0.06)  # lançado uma vez só
 
     def test_prompt_pede_formato_e_nenhum_texto(self):
         p = prompt_da_imagem({"prompt_imagem": "xícara de chá"}, "9:16")
