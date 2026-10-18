@@ -214,3 +214,24 @@ class TestConfigDaAvaliacao(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestJsonDoJuiz(unittest.TestCase):
+    """Teste no PC: o juiz citou um trecho com aspas duplas dentro da evidência e o JSON quebrou."""
+
+    def test_aspas_dentro_da_evidencia_sao_consertadas(self):
+        from torralles_studio.funcoes import extrair_json
+
+        texto = '```json\n{"criterios": {"precisao": {"evidencia": "diz "previne câncer" sem fonte", "nota": 4}}}\n```'
+        self.assertEqual(extrair_json(texto)["criterios"]["precisao"]["evidencia"], 'diz "previne câncer" sem fonte')
+
+    def test_quebra_de_linha_crua_e_escape_valido(self):
+        from torralles_studio.funcoes import extrair_json
+
+        self.assertEqual(extrair_json('{"a": "um\ndois", "b": "x \\"y\\""}'), {"a": "um\ndois", "b": 'x "y"'})
+
+    def test_json_quebrado_de_verdade_continua_erro(self):
+        from torralles_studio.funcoes import extrair_json
+
+        with self.assertRaises(ValueError):
+            extrair_json('{"a": 1,, }')

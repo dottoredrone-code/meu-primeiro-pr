@@ -16,10 +16,45 @@ def extrair_json(texto):
     inicio, fim = texto.find("{"), texto.rfind("}")
     if inicio == -1 or fim == -1:
         raise ValueError("resposta sem JSON")
+    trecho = texto[inicio : fim + 1]
     try:
-        return json.loads(texto[inicio : fim + 1])
+        return json.loads(trecho)
     except json.JSONDecodeError as e:
-        raise ValueError(f"JSON inválido: {e}") from e
+        try:  # modelo citou trecho com aspas duplas dentro de um texto: "diz "isso"" → tenta consertar
+            return json.loads(_consertar_aspas(trecho))
+        except json.JSONDecodeError:
+            raise ValueError(f"JSON inválido: {e}") from e
+
+
+def _consertar_aspas(t):
+    """Escapa aspas duplas soltas dentro de textos do JSON e quebras de linha cruas.
+
+    Uma aspa dentro de um texto só fecha o texto se depois dela vier , : } ] (ou o fim).
+    """
+    saida, dentro, i = [], False, 0
+    while i < len(t):
+        c = t[i]
+        if dentro:
+            if c == "\\":
+                saida.append(t[i:i + 2])
+                i += 2
+                continue
+            if c == '"':
+                resto = t[i + 1:].lstrip()
+                if not resto or resto[0] in ",:}]":
+                    dentro = False
+                    saida.append(c)
+                else:
+                    saida.append('\\"')
+            elif c == "\n":
+                saida.append("\\n")
+            else:
+                saida.append(c)
+        else:
+            dentro = c == '"'
+            saida.append(c)
+        i += 1
+    return "".join(saida)
 
 
 def validar_roteiro(texto):
