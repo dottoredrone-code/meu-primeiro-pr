@@ -62,6 +62,10 @@ class TestLegendas(unittest.TestCase):
         self.assertEqual(quebrar_texto("Gostou? Siga para mais curiosidades.", 28),  # frase curta segue junto
                          [["Gostou? Siga para mais", "curiosidades."]])
 
+    def test_palavra_solta_nao_fica_sozinha(self):  # visto no vídeo do chá verde: "hábitos." sozinho
+        blocos = quebrar_texto("Mas não faz milagre: funciona junto com bons hábitos.", 28)
+        self.assertEqual(blocos, [["Mas não faz milagre:"], ["funciona junto com bons", "hábitos."]])
+
     def test_bloco_curto_demais_junta_com_o_vizinho(self):
         legendas = distribuir_legendas("Primeira frase bem comprida aqui. Fim.", 0.0, 2.2, max_chars=20)
         self.assertEqual(len(legendas), 1)

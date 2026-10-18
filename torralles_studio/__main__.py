@@ -104,6 +104,32 @@ def comando_avaliar_video(args):
     return 0
 
 
+def comando_produzir(args, roteador, perfil):
+    from .config import carregar_config, carregar_loop
+    from .montagem import ErroMontagem
+    from .producao import ErroProducao, pasta_do_tema, produzir_video
+    from .rede import ErroProvedor
+
+    pasta = args.pasta or pasta_do_tema(args.tema)
+    try:
+        rel = produzir_video(roteador, carregar_loop(roteador, args.config), args.tema, pasta, duracao=args.duracao,
+                             perfil=perfil, pesquisar=args.pesquisa, trilha=args.trilha, bpm=args.bpm,
+                             cfg_montagem=carregar_config(args.config).get("montagem"),
+                             aviso=lambda t: print(t, file=sys.stderr, flush=True))
+    except (ErroProducao, ErroMontagem, ErroProvedor, OSError) as e:
+        print(f"✗ parou: {e}\n  O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
+        return 1
+    for e in rel["etapas"]:
+        if not e["reaproveitado"] and e["etapa"] in ("pesquisa", "roteiro"):
+            nota = f"nota {e['nota']:.0f}" if e.get("nota") is not None else "sem juiz"
+            print(f"  {e['etapa']}: {e['provedor']} · {nota}", file=sys.stderr)
+    for problema in rel["problemas"]:
+        print(f"✗ {problema}")
+    print(f"{'✓' if rel['aprovado'] else '⚠'} {rel['video']} · {rel['duracao_s']:.1f} s · US$ {rel['custo_usd']:.3f}"
+          f" · {rel['tempo_s']} s")
+    return 0 if rel["aprovado"] else 2
+
+
 def comando_montar(args):
     import tempfile
     from pathlib import Path
@@ -223,6 +249,15 @@ def main(argv=None):
     s.add_argument("-o", "--saida", default="saidas/percepcao")
     s.add_argument("--sem-transcricao", action="store_true")
 
+    s = sub.add_parser("produzir", help="vídeo completo: roteiro com juiz, imagens, narração, cenas e montagem")
+    s.add_argument("tema")
+    s.add_argument("-d", "--duracao", type=int, default=30, help="segundos (padrão 30)")
+    s.add_argument("-p", "--perfil", help="id do perfil do projeto (formato, estilo, voz)")
+    s.add_argument("--pesquisa", action="store_true", help="pesquisa na web antes do roteiro (fontes reais)")
+    s.add_argument("--trilha", help="arquivo de música (opcional)")
+    s.add_argument("--bpm", type=float, help="batidas por minuto da trilha (opcional)")
+    s.add_argument("-o", "--pasta", help="pasta do vídeo (padrão: saidas/<tema>)")
+
     s = sub.add_parser("montar", help="monta o vídeo final (cenas, narração, legendas, trilha) e confere a régua")
     s.add_argument("projeto", help="arquivo JSON com as cenas (veja docs/montagem.md)")
     s.add_argument("-o", "--saida", default="saidas/final.mp4")
@@ -265,6 +300,8 @@ def main(argv=None):
             return 1
         roteador = perfil.roteador(roteador)
 
+    if args.comando == "produzir":
+        return comando_produzir(args, roteador, perfil)
     if getattr(args, "qualidade", False):
         return comando_com_qualidade(args, roteador, perfil)
 

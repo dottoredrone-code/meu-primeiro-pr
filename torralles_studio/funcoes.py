@@ -130,10 +130,12 @@ def pesquisar(roteador, tema, max_resultados=5):
     )
 
 
-def gerar_imagem(roteador, prompt, saida, perfil=None):
+def gerar_imagem(roteador, prompt, saida, perfil=None, proporcao=None):
     if perfil and perfil.visual():
         prompt = f"{prompt}. {perfil.visual()}"
-    return roteador.executar("imagem", prompt=prompt, saida=Path(saida))
+    proporcao = proporcao or (perfil.formato.get("proporcao") if perfil else None)
+    extra = {"proporcao": proporcao} if proporcao else {}
+    return roteador.executar("imagem", prompt=prompt, saida=Path(saida), **extra)
 
 
 def gerar_voz(roteador, texto, saida):

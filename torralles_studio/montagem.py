@@ -202,6 +202,11 @@ def quebrar_texto(texto, max_chars):
         else:
             blocos.append([linhas[i]])
             i += 1
+    # Bloco de uma palavra solta ("hábitos.") puxa a última linha do bloco anterior para ficar junto.
+    for k in range(1, len(blocos)):
+        if len(blocos[k]) == 1 and len(blocos[k][0]) < 12 and len(blocos[k - 1]) == 2 \
+                and not blocos[k - 1][1].endswith((".", "!", "?")):
+            blocos[k] = [blocos[k - 1].pop(), blocos[k][0]]
     return blocos
 
 

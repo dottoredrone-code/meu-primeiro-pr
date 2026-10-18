@@ -30,6 +30,15 @@ Teste real pago do juiz de vídeo dentro da suíte (uns US$ 0,05): defina `TORRA
 Cada comando é uma linha só (funciona no PowerShell, no cmd e no terminal do Linux/Mac).
 Se o juiz de vídeo não conseguir avaliar, ele mostra o motivo real (ex.: modelo inexistente, chave, bloqueio).
 
+## 2b. Vídeo completo (K32)
+Precisa de uma voz: `pip install edge-tts` (grátis) ou chave da ElevenLabs/OpenAI.
+```bash
+python -m torralles_studio produzir "benefícios do chá verde" -d 30 --pesquisa
+```
+O vídeo sai em `saidas/beneficios-do-cha-verde/video_final.mp4`, com `relatorio.json` (custo, provedores, notas).
+Se parar no meio, rode o mesmo comando: o que já ficou pronto é reaproveitado sem pagar de novo.
+Para refazer do zero, apague a pasta do tema.
+
 ## 3. O que anotar (para ajustar o config)
 | O que | Onde aparece | O que fazer |
 |---|---|---|

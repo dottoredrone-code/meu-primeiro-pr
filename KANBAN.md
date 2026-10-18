@@ -43,7 +43,9 @@
 |---|---|---|
 
 ## 🛠️ Em andamento
-_(vazio)_
+| ID | Cartão | Spec |
+|---|---|---|
+| K32 | Primeiro vídeo real ponta a ponta: comando `produzir` (pesquisa → roteiro com juiz → imagem, voz e cena → montagem, com retomada). Falta rodar no PC e sua aprovação | D19 |
 
 ## 📋 Especificado (pronto para começar)
 
