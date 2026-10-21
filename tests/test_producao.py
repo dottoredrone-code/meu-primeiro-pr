@@ -164,6 +164,13 @@ class TestProduzirVideo(unittest.TestCase):
             self.assertEqual(set(rel["fotos_gratuitas"]), {"1", "2"})
             self.assertIn("Fulano", rel["creditos"])
             self.assertIn("CC BY", (Path(d) / "v" / "creditos.txt").read_text(encoding="utf-8"))
+            self.assertEqual(len(self.img.pedidos), 1)  # a IA falhou na cena 1: a cena 2 foi direto para a foto
+
+            rt2, loop2 = self.montar()  # IA de imagem voltou e o roteiro é refeito: crédito antigo some
+            rel2 = produzir_video(rt2, loop2, "chá verde", Path(d) / "v", duracao=8, biblioteca=bib,
+                                  refazer_roteiro=True, cfg_montagem={"preset": "ultrafast"})
+            self.assertEqual(rel2["fotos_gratuitas"], {})
+            self.assertFalse((Path(d) / "v" / "creditos.txt").exists())
 
     def test_sem_ia_de_imagem_e_sem_biblioteca_para_com_mensagem(self):
         rt, loop = self.montar()

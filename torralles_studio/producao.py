@@ -22,6 +22,13 @@ _RESERVADOS = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)), *
 _ASSINATURAS = (b"\x89PNG", b"\xff\xd8\xff", b"RIFF", b"GIF8")  # PNG, JPEG, WebP, GIF
 
 
+# Palavras de estilo dos prompts de imagem que atrapalham a busca em bancos de fotos.
+_PALAVRAS_DE_ESTILO = {"cinematic", "close", "up", "closeup", "shot", "photo", "photograph", "photography",
+                       "realistic", "photorealistic", "lighting", "light", "vertical", "horizontal", "composition",
+                       "4k", "8k", "hd", "ultra", "detailed", "high", "quality", "style", "soft", "warm", "bokeh",
+                       "background", "view", "angle", "wide", "macro", "image", "scene", "frame", "slow"}
+
+
 class ErroProducao(Exception):
     """Uma etapa não pôde ser feita (a mensagem diz qual e por quê)."""
 
@@ -103,13 +110,22 @@ def _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
     """Reserva quando nenhuma IA de imagem funcionar: foto de banco gratuito, com licença conferida (K20, D18)."""
     from .midia import SemMidia, buscar_midia, etiquetas_da_consulta
 
-    consulta = " ".join(etiquetas_da_consulta(cena["prompt_imagem"])[:5]) or cena["prompt_imagem"]
-    avisar(f"  … sem IA de imagem: buscando foto gratuita para '{consulta}'")
-    try:
-        ativo = buscar_midia(roteador, biblioteca, consulta, "imagem", perfil=perfil.id if perfil else None,
-                             proporcao=proporcao, comercial=perfil.comercial if perfil else True)
-    except SemMidia as e:
-        raise ErroProducao(f"nem IA de imagem nem foto gratuita: {e}") from None
+    palavras = [p for p in etiquetas_da_consulta(cena["prompt_imagem"]) if p not in _PALAVRAS_DE_ESTILO]
+    ultimo = None
+    for n in (5, 3, 2):  # bancos de fotos exigem todas as palavras: tenta com menos se não achar
+        consulta = " ".join(palavras[:n]) or cena["prompt_imagem"]
+        if consulta == ultimo:
+            continue
+        ultimo = consulta
+        avisar(f"  … buscando foto gratuita para '{consulta}'")
+        try:
+            ativo = buscar_midia(roteador, biblioteca, consulta, "imagem", perfil=perfil.id if perfil else None,
+                                 proporcao=proporcao, comercial=perfil.comercial if perfil else True)
+            break
+        except SemMidia as e:
+            motivo = e
+    else:
+        raise ErroProducao(f"nem IA de imagem nem foto gratuita: {motivo}") from None
     origem = biblioteca.caminho(ativo)
     _gerar(img, lambda saida: shutil.copyfile(origem, saida))
     return {c: ativo.get(c) for c in ("hash", "caminho", "licenca", "fonte", "autor", "link", "titulo", "camada")}
@@ -179,19 +195,25 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
             if arq.is_file() and _MIDIA_DA_CENA.fullmatch(arq.name):
                 _apagar(arq)
         _apagar(pasta / "fotos.json")
+        _apagar(pasta / "creditos.txt")
 
     # 3. Cada cena: imagem → voz → cena animada com a duração da fala
     cenas, total = [], len(roteiro["cenas"])
     fotos = _ler_json(pasta / "fotos.json") or {}  # cena → foto gratuita usada (fonte, autor, licença)
+    so_fotos = False  # depois que a IA de imagem falha numa cena, as próximas vão direto para a foto
     folga = c["folga_inicio_s"] + c["folga_fim_s"] + c["transicao_s"] + 0.5  # + pausa extra que a montagem dá
     for i, cena in enumerate(roteiro["cenas"], 1):
         img, voz, video = pasta / f"cena_{i:02d}.png", pasta / f"voz_{i:02d}.mp3", pasta / f"cena_{i:02d}.mp4"
         try:
             if _pronto(img):
-                etapa(f"cena {i}: imagem", reaproveitado=True)
+                foto = fotos.get(str(i))
+                etapa(f"cena {i}: imagem", f"foto gratuita ({foto['fonte']})" if foto else None, reaproveitado=True,
+                      **({"licenca": foto["licenca"]} if foto else {}))
             else:
                 avisar(f"== cena {i}/{total}: imagem")
                 try:
+                    if so_fotos and biblioteca is not None:
+                        raise ErroProducao("IA de imagem já falhou nesta rodada")
                     r = _gerar(img, lambda saida: funcoes.gerar_imagem(
                         roteador, prompt_da_imagem(cena, proporcao), saida, perfil=perfil, proporcao=proporcao))
                     fotos.pop(str(i), None)
@@ -199,6 +221,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
                 except (TodosFalharam, ErroProducao):
                     if biblioteca is None:
                         raise
+                    so_fotos = True
                     fotos[str(i)] = _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar)
                     etapa(f"cena {i}: imagem", f"foto gratuita ({fotos[str(i)]['fonte']})",
                           licenca=fotos[str(i)]["licenca"])
@@ -241,5 +264,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         creditos = biblioteca.creditos(list(relatorio["fotos_gratuitas"].values()))
         relatorio["creditos"] = creditos  # vai na descrição do vídeo (CC-BY exige crédito)
         (pasta / "creditos.txt").write_text(creditos or "Nenhuma foto exige crédito.\n", encoding="utf-8")
+    elif not relatorio["fotos_gratuitas"]:
+        _apagar(pasta / "creditos.txt")  # sem fotos de terceiros: crédito antigo não pode ir para a descrição
     (pasta / "relatorio.json").write_text(json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8")
     return relatorio
