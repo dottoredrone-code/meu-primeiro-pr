@@ -105,7 +105,7 @@ def comando_avaliar_video(args):
 
 
 def comando_produzir(args, roteador, perfil):
-    from .config import carregar_config, carregar_loop
+    from .config import carregar_biblioteca, carregar_config, carregar_loop
     from .montagem import ErroMontagem
     from .producao import ErroProducao, pasta_do_tema, produzir_video
     from .rede import ErroProvedor
@@ -116,7 +116,7 @@ def comando_produzir(args, roteador, perfil):
                              perfil=perfil, pesquisar=args.pesquisa, trilha=args.trilha, bpm=args.bpm,
                              cfg_montagem=carregar_config(args.config).get("montagem"),
                              aviso=lambda t: print(t, file=sys.stderr, flush=True),
-                             refazer_roteiro=args.refazer_roteiro)
+                             refazer_roteiro=args.refazer_roteiro, biblioteca=carregar_biblioteca(args.config))
     except KeyboardInterrupt:
         print(f"\n✗ interrompido. O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
         return 130

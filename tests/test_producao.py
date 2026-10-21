@@ -55,8 +55,14 @@ class Imagem(Provedor):
     def configurado(self):
         return None
 
+    falhar = False
+
     def executar(self, prompt, saida, proporcao=None):
         self.pedidos.append({"prompt": prompt, "proporcao": proporcao})
+        if self.falhar:
+            from torralles_studio.rede import ErroProvedor
+
+            raise ErroProvedor("HTTP 402 no download")
         _ff("-f", "lavfi", "-i", "testsrc=size=540x960", "-frames:v", "1", str(saida))
         return Path(saida)
 
@@ -136,6 +142,34 @@ class TestProduzirVideo(unittest.TestCase):
             self.assertFalse(next(e for e in rel["etapas"] if e["etapa"] == "roteiro")["reaproveitado"])
             self.assertEqual(self.voz.chamadas, 2)  # cenas do roteiro antigo foram descartadas
             self.assertEqual(json.loads((pasta / "roteiro.json").read_text(encoding="utf-8"))["tema"], "chá preto")
+
+    def test_sem_ia_de_imagem_usa_foto_gratuita_com_credito(self):  # teste real: Gemini sem faturamento, Pollinations 402
+        from torralles_studio.banco import Banco
+        from torralles_studio.biblioteca import Biblioteca
+
+        rt, loop = self.montar()
+        self.img.falhar = True
+        with tempfile.TemporaryDirectory() as d, Banco(Path(d) / "b.db") as banco:
+            bib = Biblioteca(Path(d) / "bib", banco)
+            for nome, tags in (("a.png", ["cup", "green", "tea"]), ("b.png", ["tea", "field"])):
+                _ff("-f", "lavfi", "-i", f"color=c={'green' if nome == 'a.png' else 'olive'}:s=540x960", "-frames:v", "1",
+                    str(Path(d) / nome))
+                bib.adicionar(Path(d) / nome, "cc-by", "Openverse", autor="Fulano", link="https://exemplo.org/f",
+                              tags=tags, titulo=f"foto {nome}")
+            rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, biblioteca=bib,
+                                 cfg_montagem={"preset": "ultrafast"})
+            self.assertTrue(Path(rel["video"]).is_file())
+            imagens = [e for e in rel["etapas"] if e["etapa"].endswith("imagem")]
+            self.assertEqual([e["provedor"] for e in imagens], ["foto gratuita (Openverse)"] * 2)
+            self.assertEqual(set(rel["fotos_gratuitas"]), {"1", "2"})
+            self.assertIn("Fulano", rel["creditos"])
+            self.assertIn("CC BY", (Path(d) / "v" / "creditos.txt").read_text(encoding="utf-8"))
+
+    def test_sem_ia_de_imagem_e_sem_biblioteca_para_com_mensagem(self):
+        rt, loop = self.montar()
+        self.img.falhar = True
+        with tempfile.TemporaryDirectory() as d, self.assertRaises(ErroProducao):
+            produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8)
 
     def test_roteiro_que_nao_sai_para_com_mensagem(self):
         rt, loop = self.montar(roteiros=["não é JSON"] * 4)

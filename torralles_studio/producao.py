@@ -99,9 +99,28 @@ def prompt_da_imagem(cena, proporcao):
             "sem nenhum texto, letra ou logotipo na imagem.")
 
 
+def _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
+    """Reserva quando nenhuma IA de imagem funcionar: foto de banco gratuito, com licença conferida (K20, D18)."""
+    from .midia import SemMidia, buscar_midia, etiquetas_da_consulta
+
+    consulta = " ".join(etiquetas_da_consulta(cena["prompt_imagem"])[:5]) or cena["prompt_imagem"]
+    avisar(f"  … sem IA de imagem: buscando foto gratuita para '{consulta}'")
+    try:
+        ativo = buscar_midia(roteador, biblioteca, consulta, "imagem", perfil=perfil.id if perfil else None,
+                             proporcao=proporcao, comercial=perfil.comercial if perfil else True)
+    except SemMidia as e:
+        raise ErroProducao(f"nem IA de imagem nem foto gratuita: {e}") from None
+    origem = biblioteca.caminho(ativo)
+    _gerar(img, lambda saida: shutil.copyfile(origem, saida))
+    return {c: ativo.get(c) for c in ("hash", "caminho", "licenca", "fonte", "autor", "link", "titulo", "camada")}
+
+
 def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesquisar=False, trilha=None, bpm=None,
-                   cfg_montagem=None, aviso=None, refazer_roteiro=False):
-    """Produz o vídeo e devolve o relatório (também salvo em pasta/relatorio.json)."""
+                   cfg_montagem=None, aviso=None, refazer_roteiro=False, biblioteca=None):
+    """Produz o vídeo e devolve o relatório (também salvo em pasta/relatorio.json).
+
+    biblioteca: com ela, cena cuja imagem nenhuma IA conseguiu gerar usa uma foto gratuita com licença.
+    """
     for programa in ("ffmpeg", "ffprobe"):
         if not shutil.which(programa):
             raise ErroProducao(f"{programa} não encontrado: instale o FFmpeg (ele traz o ffprobe) e abra um "
@@ -159,9 +178,11 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         for arq in pasta.iterdir():  # roteiro novo: mídia das cenas antigas não serve mais (só os nomes do Studio)
             if arq.is_file() and _MIDIA_DA_CENA.fullmatch(arq.name):
                 _apagar(arq)
+        _apagar(pasta / "fotos.json")
 
     # 3. Cada cena: imagem → voz → cena animada com a duração da fala
     cenas, total = [], len(roteiro["cenas"])
+    fotos = _ler_json(pasta / "fotos.json") or {}  # cena → foto gratuita usada (fonte, autor, licença)
     folga = c["folga_inicio_s"] + c["folga_fim_s"] + c["transicao_s"] + 0.5  # + pausa extra que a montagem dá
     for i, cena in enumerate(roteiro["cenas"], 1):
         img, voz, video = pasta / f"cena_{i:02d}.png", pasta / f"voz_{i:02d}.mp3", pasta / f"cena_{i:02d}.mp4"
@@ -170,9 +191,18 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
                 etapa(f"cena {i}: imagem", reaproveitado=True)
             else:
                 avisar(f"== cena {i}/{total}: imagem")
-                r = _gerar(img, lambda saida: funcoes.gerar_imagem(
-                    roteador, prompt_da_imagem(cena, proporcao), saida, perfil=perfil, proporcao=proporcao))
-                etapa(f"cena {i}: imagem", r.provedor)
+                try:
+                    r = _gerar(img, lambda saida: funcoes.gerar_imagem(
+                        roteador, prompt_da_imagem(cena, proporcao), saida, perfil=perfil, proporcao=proporcao))
+                    fotos.pop(str(i), None)
+                    etapa(f"cena {i}: imagem", r.provedor)
+                except (TodosFalharam, ErroProducao):
+                    if biblioteca is None:
+                        raise
+                    fotos[str(i)] = _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar)
+                    etapa(f"cena {i}: imagem", f"foto gratuita ({fotos[str(i)]['fonte']})",
+                          licenca=fotos[str(i)]["licenca"])
+                (pasta / "fotos.json").write_text(json.dumps(fotos, ensure_ascii=False, indent=2), encoding="utf-8")
             if _pronto(voz):
                 etapa(f"cena {i}: voz", reaproveitado=True)
             else:
@@ -205,6 +235,11 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         "medidas": conferencia["medidas"], "custo_usd": round(roteador.orcamento.gasto_usd - gasto_inicial, 4),
         "tempo_s": round(time.monotonic() - inicio), "etapas": etapas,
         "titulo": roteiro.get("titulo"), "cta": roteiro.get("cta"),
+        "fotos_gratuitas": {k: v for k, v in fotos.items() if int(k) <= total},
     }
+    if biblioteca is not None and relatorio["fotos_gratuitas"]:
+        creditos = biblioteca.creditos(list(relatorio["fotos_gratuitas"].values()))
+        relatorio["creditos"] = creditos  # vai na descrição do vídeo (CC-BY exige crédito)
+        (pasta / "creditos.txt").write_text(creditos or "Nenhuma foto exige crédito.\n", encoding="utf-8")
     (pasta / "relatorio.json").write_text(json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8")
     return relatorio
