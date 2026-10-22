@@ -27,7 +27,8 @@ from .rede import ErroProvedor
 
 PADROES = {
     "fps": 30,
-    "transicao": "fade",          # tipo do xfade do FFmpeg
+    "transicao": "auto",          # "auto" escolhe pelo clima da cena; ou um tipo fixo do xfade ("fade"…)
+    "karaoke": True,              # legenda acende palavra por palavra no ritmo da fala
     "transicao_s": 0.4,
     "folga_inicio_s": 0.2,        # respiro antes da fala de cada cena
     "folga_fim_s": 0.35,          # respiro depois da fala
@@ -307,24 +308,55 @@ def _texto_ass(t):
     return str(t).replace("\\", "/").replace("{", "(").replace("}", ")").replace("\n", " ")
 
 
-def gerar_ass(legendas, textos_tela, largura, altura, proporcao, fonte="Arial"):
+# Transição de entrada de cada cena pelo clima do roteiro (só tipos do xfade do FFmpeg 5+).
+TRANSICAO_POR_CLIMA = {"curioso": "slideleft", "inspirador": "smoothup", "calmo": "fade", "reflexivo": "dissolve",
+                       "alegre": "circleopen", "epico": "zoomin", "tenso": "wipeleft"}
+
+
+def transicao_da_cena(clima, padrao="fade"):
+    return TRANSICAO_POR_CLIMA.get(str(clima or "").strip().lower(), padrao)
+
+
+def _karaoke(linhas, duracao):
+    """Texto ASS com cada palavra acendendo no seu tempo (\\k em centésimos, proporcional ao tamanho)."""
+    falado = max(duracao * 0.85, 0.1)  # o fim do bloco é só leitura: as palavras acendem antes
+    palavras = [w for linha in linhas for w in linha.split()]
+    total = sum(len(w) + 1 for w in palavras) or 1
+    partes, acumulado, feito = [], 0.0, 0
+    for n, linha in enumerate(linhas):
+        trechos = []
+        for w in linha.split():
+            acumulado += (len(w) + 1) / total * falado
+            cs = max(1, round(acumulado * 100) - feito)
+            feito += cs
+            trechos.append(f"{{\\k{cs}}}{_texto_ass(w)}")
+        partes.append(" ".join(trechos))
+    return "\\N".join(partes)
+
+
+def gerar_ass(legendas, textos_tela, largura, altura, proporcao, fonte="Arial", karaoke=False):
+    """karaoke: a palavra fica amarela quando é falada; sem ele, a legenda inteira aparece branca."""
     e = estilo_legenda(largura, altura, proporcao)
+    primaria = "&H0000E5FF" if karaoke else "&H00FFFFFF"  # depois de falada (amarelo) / antes (branco)
     cab = (
         "[Script Info]\nScriptType: v4.00+\nWrapStyle: 2\nScaledBorderAndShadow: yes\n"
         f"PlayResX: {largura}\nPlayResY: {altura}\n\n[V4+ Styles]\n"
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, "
         "Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
         "MarginR, MarginV, Encoding\n"
-        f"Style: Legenda,{fonte},{e['tamanho']},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,"
+        f"Style: Legenda,{fonte},{e['tamanho']},{primaria},&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,"
         f"{max(2, e['tamanho'] // 14)},0,2,{round(largura * 0.05)},{round(largura * 0.05)},{e['margem_baixo']},1\n"
         f"Style: Tela,{fonte},{e['tamanho_tela']},&H0000E5FF,&H0000E5FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,"
         f"{max(2, e['tamanho_tela'] // 14)},0,8,{round(largura * 0.05)},{round(largura * 0.05)},{e['margem_cima']},1\n"
         "\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
     quebra = "\\N"  # quebra de linha do ASS
-    eventos = [f"Dialogue: 0,{_tempo_ass(a)},{_tempo_ass(b)},Legenda,,0,0,0,,{quebra.join(map(_texto_ass, linhas))}"
+    entrada = "{\\fad(120,80)}"  # legenda surge e some suave
+    pulo = "{\\fad(200,150)\\fscx80\\fscy80\\t(0,250,\\fscx100\\fscy100)}"  # título cresce ao entrar
+    eventos = [f"Dialogue: 0,{_tempo_ass(a)},{_tempo_ass(b)},Legenda,,0,0,0,,{entrada}"
+               + (_karaoke(linhas, b - a) if karaoke else quebra.join(map(_texto_ass, linhas)))
                for a, b, linhas in legendas]
-    eventos += [f"Dialogue: 1,{_tempo_ass(a)},{_tempo_ass(b)},Tela,,0,0,0,,{quebra.join(map(_texto_ass, linhas))}"
+    eventos += [f"Dialogue: 1,{_tempo_ass(a)},{_tempo_ass(b)},Tela,,0,0,0,,{pulo}{quebra.join(map(_texto_ass, linhas))}"
                 for a, b, linhas in textos_tela]
     return cab + "\n".join(eventos) + "\n"
 
@@ -474,7 +506,8 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
                 [(a + deslocamento, b + deslocamento) for a, b in fala[2]], estilo["max_chars"], fim_cena)
         if cena.get("texto_tela"):
             textos_tela.append((tp["inicio"] + 0.1, fim_cena, linhas_tela(cena["texto_tela"], proporcao)))
-    (pasta / "legendas.ass").write_text(gerar_ass(legendas, textos_tela, largura, altura, proporcao, c["fonte"]),
+    (pasta / "legendas.ass").write_text(gerar_ass(legendas, textos_tela, largura, altura, proporcao, c["fonte"],
+                                                  karaoke=bool(c.get("karaoke"))),
                                         encoding="utf-8")
     (pasta / "legendas.srt").write_text(gerar_srt(legendas), encoding="utf-8")
 
@@ -548,7 +581,8 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
     else:
         partes, ultimo = [], "[0:v]"
         for k in range(1, len(clipes)):
-            partes.append(f"{ultimo}[{k}:v]xfade=transition={c['transicao']}:duration={t}:"
+            tipo = transicao_da_cena(cenas[k].get("clima")) if c["transicao"] == "auto" else c["transicao"]
+            partes.append(f"{ultimo}[{k}:v]xfade=transition={tipo}:duration={t}:"
                           f"offset={tempos[k]['inicio']:.3f}[x{k}]")
             ultimo = f"[x{k}]"
         cadeia = ";".join(partes) + ";"

@@ -33,6 +33,7 @@ Caminhos relativos valem a partir da pasta do JSON.
 | Cortes | caem na batida mais próxima da trilha (até 0,35 s), nunca antes do fim da fala |
 | Clipe curto | desacelera até 1,5×; se ainda faltar, segura o último quadro (fica em `congelado_s`) |
 | Legendas | até 2 linhas; 28 caracteres por linha no 9:16 (42 no 16:9); numa pausa real da voz, o bloco seguinte entra quando a fala volta e o anterior sai até 0,4 s depois; bloco com menos de 1 s junta com o vizinho; cada bloco fica ≥ 1 s e o bastante para ≤ 17 caracteres/s, se couber |
+| Efeitos | legenda acende palavra por palavra no ritmo da fala (`karaoke`); legenda entra e sai suave; título da tela cresce ao entrar; transição de cada cena pelo clima do roteiro (`transicao = "auto"`: curioso desliza, inspirador sobe, alegre abre em círculo, épico dá zoom…) |
 | Texto na tela | quebrado em linhas; mais de 2 linhas reprova (encurte o `texto_tela`) |
 | Área segura (9:16) | legenda acima dos 20% de baixo; `texto_tela` abaixo dos 10% de cima |
 | Trilha | medida e ajustada para 12 LU abaixo da voz (mínimo 10), abaixando quando a voz entra |

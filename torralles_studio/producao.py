@@ -244,7 +244,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         except TodosFalharam as e:
             raise ErroProducao(f"cena {i}: {e}") from None
         cenas.append({"video": str(video), "voz": str(voz), "narracao": cena["narracao"],
-                      "texto_tela": cena.get("texto_tela"), "duracao": cena.get("duracao")})
+                      "texto_tela": cena.get("texto_tela"), "duracao": cena.get("duracao"), "clima": cena.get("clima")})
 
     # 4. Montagem final + régua da spec 03 §3.6
     avisar("== montagem final")

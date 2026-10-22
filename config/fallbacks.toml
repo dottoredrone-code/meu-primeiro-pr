@@ -259,7 +259,8 @@ cadeia = ["fal_kling", "fal_wan", "ken_burns"]
 
 [montagem]
 fps = 30
-transicao = "fade"           # tipo de transição do FFmpeg (xfade)
+transicao = "auto"           # "auto": pelo clima da cena (curioso desliza, alegre abre em círculo…); ou um tipo fixo do xfade
+karaoke = true               # legenda acende palavra por palavra no ritmo da fala
 transicao_s = 0.4
 folga_inicio_s = 0.2         # respiro antes da fala de cada cena
 folga_fim_s = 0.35           # respiro depois da fala

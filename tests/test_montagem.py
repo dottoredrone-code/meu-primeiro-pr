@@ -114,6 +114,18 @@ class TestLegendas(unittest.TestCase):
         self.assertGreaterEqual(e["margem_cima"], 192)
         self.assertLessEqual(e["max_chars"], 42)
 
+    def test_karaoke_acende_cada_palavra_no_tempo_do_bloco(self):
+        from torralles_studio.montagem import transicao_da_cena
+
+        ass = gerar_ass([(0.0, 2.0, ["Chá verde tem", "antioxidantes."])], [], 1080, 1920, "9:16", karaoke=True)
+        linha = ass.strip().splitlines()[-1]
+        tempos = [int(x) for x in __import__("re").findall(r"\\k(\d+)", linha)]
+        self.assertEqual(len(tempos), 4)
+        self.assertEqual(sum(tempos), 170)  # 85% de 2 s: a última palavra acende antes do bloco sair
+        self.assertIn("\\N{\\k", linha)  # a segunda linha também acende palavra por palavra
+        self.assertEqual(transicao_da_cena("Curioso"), "slideleft")
+        self.assertEqual(transicao_da_cena("desconhecido"), "fade")
+
     def test_ass_sem_comandos_injetados_e_srt(self):
         ass = gerar_ass([(0, 1.5, ["{\\b1}oi\\N", "tudo"])], [], 1080, 1920, "9:16")
         ultima = ass.strip().splitlines()[-1]
