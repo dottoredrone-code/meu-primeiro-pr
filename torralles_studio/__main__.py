@@ -335,6 +335,12 @@ def comando_com_qualidade(args, roteador, perfil):
 
 
 def main(argv=None):
+    # Windows com saída redirecionada usa cp1252: "✓" quebrava o comando. Troca por "?" em vez de cair.
+    for fluxo in (sys.stdout, sys.stderr):
+        try:
+            fluxo.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass  # fluxo trocado (testes, StringIO)
     p = argparse.ArgumentParser(prog="torralles_studio", description="Gera conteúdo com fallback entre modelos de IA.")
     p.add_argument("--config", help="caminho de um fallbacks.toml alternativo")
     sub = p.add_subparsers(dest="comando", required=True)
