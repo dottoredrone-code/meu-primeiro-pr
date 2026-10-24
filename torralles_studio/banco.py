@@ -177,6 +177,12 @@ MIGRACOES = [
         "ALTER TABLE ativo_perfil ADD COLUMN criado_em TEXT",
         "UPDATE ativo_perfil SET licenca = (SELECT a.licenca FROM ativos a WHERE a.hash = ativo_perfil.hash), uso_comercial = (SELECT a.uso_comercial FROM ativos a WHERE a.hash = ativo_perfil.hash), fonte = (SELECT a.fonte FROM ativos a WHERE a.hash = ativo_perfil.hash), autor = (SELECT a.autor FROM ativos a WHERE a.hash = ativo_perfil.hash), link = (SELECT a.link FROM ativos a WHERE a.hash = ativo_perfil.hash), titulo = (SELECT a.titulo FROM ativos a WHERE a.hash = ativo_perfil.hash), provedor = (SELECT a.provedor FROM ativos a WHERE a.hash = ativo_perfil.hash), modelo = (SELECT a.modelo FROM ativos a WHERE a.hash = ativo_perfil.hash), prompt = (SELECT a.prompt FROM ativos a WHERE a.hash = ativo_perfil.hash), parametros_json = (SELECT a.parametros_json FROM ativos a WHERE a.hash = ativo_perfil.hash), criado_em = (SELECT a.criado_em FROM ativos a WHERE a.hash = ativo_perfil.hash)",
     ],
+    # 7 — pedidos de peça vindos do Ops, do Hermes ou de outro sistema (K28, spec 08): fila assíncrona
+    [
+        "CREATE TABLE pedidos (id TEXT PRIMARY KEY, status TEXT NOT NULL, origem_json TEXT, pedido_json TEXT NOT NULL, "
+        "resultado_json TEXT, erro TEXT, criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL)",
+        "CREATE INDEX idx_pedidos_status ON pedidos(status, criado_em)",
+    ],
 ]
 # Cada migração é uma lista de comandos (sem partir por ";", que quebraria textos e gatilhos).
 
@@ -478,6 +484,47 @@ class Banco:
         return cur.rowcount == 1
 
     # -- custo --------------------------------------------------------------
+    # -- pedidos (K28) ---------------------------------------------------------
+    def criar_pedido(self, pedido_id, pedido):
+        agora = _agora()
+        with self.con:
+            self.con.execute("INSERT INTO pedidos (id, status, origem_json, pedido_json, criado_em, atualizado_em) "
+                             "VALUES (?, 'na_fila', ?, ?, ?, ?)",
+                             (pedido_id, json.dumps(pedido.get("origem") or {}, ensure_ascii=False),
+                              json.dumps(pedido, ensure_ascii=False), agora, agora))
+
+    def pedido(self, pedido_id):
+        linha = self.con.execute("SELECT * FROM pedidos WHERE id = ?", (pedido_id,)).fetchone()
+        if not linha:
+            return None
+        return {"id": linha["id"], "status": linha["status"], "pedido": json.loads(linha["pedido_json"]),
+                "resultado": json.loads(linha["resultado_json"]) if linha["resultado_json"] else None,
+                "erro": linha["erro"], "criado_em": linha["criado_em"], "atualizado_em": linha["atualizado_em"]}
+
+    def atualizar_pedido(self, pedido_id, status, resultado=None, erro=None):
+        with self.con:
+            self.con.execute("UPDATE pedidos SET status = ?, resultado_json = COALESCE(?, resultado_json), erro = ?, "
+                             "atualizado_em = ? WHERE id = ?",
+                             (status, json.dumps(resultado, ensure_ascii=False) if resultado is not None else None,
+                              erro, _agora(), pedido_id))
+
+    def proximo_pedido(self):
+        """Pega o pedido mais antigo da fila e já o marca como 'produzindo' (um trabalhador por vez)."""
+        with self.con:
+            linha = self.con.execute("SELECT id FROM pedidos WHERE status = 'na_fila' ORDER BY criado_em, rowid "
+                                     "LIMIT 1").fetchone()
+            if not linha:
+                return None
+            self.con.execute("UPDATE pedidos SET status = 'produzindo', atualizado_em = ? WHERE id = ?",
+                             (_agora(), linha["id"]))
+        return self.pedido(linha["id"])
+
+    def retomar_pedidos(self):
+        """Pedidos que estavam em produção quando o Studio parou voltam para a fila (retomam sem pagar de novo)."""
+        with self.con:
+            return self.con.execute("UPDATE pedidos SET status = 'na_fila', atualizado_em = ? "
+                                    "WHERE status IN ('produzindo', 'avaliando')", (_agora(),)).rowcount
+
     def custo_projeto(self, projeto_id):
         por_etapa, por_provedor, total = {}, {}, 0.0
         for t in self.tentativas(projeto_id):

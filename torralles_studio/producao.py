@@ -134,7 +134,7 @@ def _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
 
 def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesquisar=False, trilha=None, bpm=None,
                    cfg_montagem=None, aviso=None, refazer_roteiro=False, biblioteca=None, trilha_auto=True,
-                   capcut=False):
+                   capcut=False, fatos=None, proporcao=None):
     """Produz o vídeo e devolve o relatório (também salvo em pasta/relatorio.json).
 
     biblioteca: com ela, cena cuja imagem nenhuma IA conseguiu gerar usa uma foto gratuita com licença, e
@@ -147,7 +147,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
     avisar = aviso or (lambda texto: None)
     pasta = Path(pasta)
     pasta.mkdir(parents=True, exist_ok=True)
-    proporcao = (perfil.formato.get("proporcao") if perfil else None) or "9:16"
+    proporcao = proporcao or (perfil.formato.get("proporcao") if perfil else None) or "9:16"
     c = {**PADROES, **(cfg_montagem or {})}
     gasto_inicial, inicio = roteador.orcamento.gasto_usd, time.monotonic()
     etapas = []
@@ -185,7 +185,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         from .roteiro import produzir_roteiro
 
         avisar("== roteiro")
-        r = produzir_roteiro(loop, tema, duracao, pesquisa=resumo, perfil=perfil)
+        r = produzir_roteiro(loop, tema, duracao, pesquisa=resumo, perfil=perfil, fatos=fatos or None)
         if not r.valor or not r.valor.get("cenas"):
             raise ErroProducao(f"não saiu roteiro: {r.motivo}")
         roteiro = r.valor

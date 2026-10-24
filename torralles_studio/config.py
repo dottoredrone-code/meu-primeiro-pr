@@ -75,12 +75,17 @@ def carregar_loop(roteador=None, caminho=None, relatorio=None):
     return LoopCorrecao.do_config(roteador, avaliador, dados.get("avaliacao", {}).get("loop", {}), relatorio)
 
 
+def caminho_banco(caminho=None):
+    """Arquivo do banco local ([banco].caminho, relativo à raiz do repositório)."""
+    destino = Path(carregar_config(caminho).get("banco", {}).get("caminho", "dados/torralles.db"))
+    return destino if destino.is_absolute() else RAIZ / destino
+
+
 def carregar_banco(caminho=None):
     """Banco local do config ([banco].caminho, relativo à raiz do repositório)."""
     from .banco import Banco
 
-    destino = Path(carregar_config(caminho).get("banco", {}).get("caminho", "dados/torralles.db"))
-    return Banco(destino if destino.is_absolute() else RAIZ / destino)
+    return Banco(caminho_banco(caminho))
 
 
 def carregar_biblioteca(caminho=None, banco=None):

@@ -137,6 +137,38 @@ def comando_produzir(args, roteador, perfil):
     return 0 if rel["aprovado"] else 2
 
 
+def comando_servidor(args):
+    from .config import RAIZ, caminho_banco
+    from .servico import ServicoPecas
+
+    servico = ServicoPecas(caminho_banco(args.config), pasta_base=RAIZ / "saidas" / "pedidos", config=args.config)
+    servico.iniciar()
+    try:
+        if args.comando == "mcp":
+            from .servidor import servir_mcp
+
+            servir_mcp(servico)  # fala por stdin/stdout: nada mais pode escrever na saída padrão
+            return 0
+        from .servidor import criar_servidor_http
+
+        try:
+            http = criar_servidor_http(servico, args.host, args.porta)
+        except (ValueError, OSError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            return 1
+        print(f"✓ Torralles Studio ouvindo em http://{args.host}:{args.porta}/v1/pecas (Ctrl+C para parar)",
+              file=sys.stderr)
+        try:
+            http.serve_forever()
+        except KeyboardInterrupt:
+            print("\nparando…", file=sys.stderr)
+        finally:
+            http.server_close()
+        return 0
+    finally:
+        servico.parar(esperar=False)
+
+
 def comando_exportar_capcut(args):
     from pathlib import Path
 
@@ -292,6 +324,11 @@ def main(argv=None):
     s.add_argument("--refazer-roteiro", action="store_true", help="faz um roteiro novo (e cenas novas) mesmo se já houver")
     s.add_argument("--capcut", action="store_true", help="também gera a pasta para editar no CapCut (<pasta>/capcut)")
 
+    s = sub.add_parser("servidor", help="servidor HTTP local para o Torralles Ops pedir peças (spec 08)")
+    s.add_argument("--porta", type=int, default=8765)
+    s.add_argument("--host", default="127.0.0.1", help="padrão: só este PC")
+    sub.add_parser("mcp", help="servidor MCP por stdio para o Hermes (produzir_peca, consultar_peca)")
+
     s = sub.add_parser("exportar-capcut", help="pasta para editar no CapCut a partir de um vídeo já produzido")
     s.add_argument("pasta", help="pasta do vídeo (ex.: saidas/beneficios-do-cha-verde)")
 
@@ -301,6 +338,8 @@ def main(argv=None):
     s.add_argument("--trabalho", help="pasta para guardar clipes, áudios e legendas (para o CapCut)")
 
     args = p.parse_args(argv)
+    if args.comando in ("servidor", "mcp"):
+        return comando_servidor(args)
     if args.comando == "exportar-capcut":
         return comando_exportar_capcut(args)
     if args.comando == "montar":

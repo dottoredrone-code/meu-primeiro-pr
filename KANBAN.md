@@ -83,7 +83,7 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 ### Camada 5 — Integração (depende das Camadas 1, 3 e 4)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
-| K28 | Servidor MCP + HTTP local, assíncrono (`POST /v1/pecas`, `GET /v1/pecas/{id}`) | [08](docs/sdd/08-contrato-ops-studio.md) · D13 · D14 | K22 · K24 | Exemplo real do Ops validado pelo esquema |
+| K28 | Servidor MCP + HTTP local, assíncrono (`POST /v1/pecas`, `GET /v1/pecas/{id}`) — **em verificação**: `contrato.py`, `servico.py` (fila no SQLite, retomada), `servidor.py` (HTTP com token opcional, MCP stdio); imagem e vídeo curto/story; carrossel depois | [08](docs/sdd/08-contrato-ops-studio.md) · D13 · D14 | K22 · K24 | Exemplo real do Ops validado pelo esquema |
 | K29 | No Torralles Ops (outro repositório): botão "Produzir no Studio" + colunas novas | [08](docs/sdd/08-contrato-ops-studio.md) | K28 | Peça volta com arquivo, nota e custo |
 | K30 | Hermes: skill/perfil que chama o Studio | [06](docs/sdd/06-estudo-hermes.md) | K28 | Pedido pelo Hermes gera vídeo |
 
