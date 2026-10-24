@@ -179,7 +179,18 @@ def isolar_stdin():
     nulo = os.open(os.devnull, os.O_RDONLY)
     os.dup2(nulo, 0)
     os.close(nulo)
-    return os.fdopen(canal, "r", encoding="utf-8")
+    return os.fdopen(canal, "r", encoding="utf-8", errors="replace")  # byte inválido não derruba o servidor
+
+
+def saida_utf8(fluxo=None):
+    """stdout para o JSON-RPC sempre em UTF-8 e com fim de linha LF (no Windows, com pipe, saía em cp1252:
+    "é" chegava corrompido ao Hermes e "✓" derrubava o servidor)."""
+    fluxo = fluxo or sys.stdout
+    try:
+        fluxo.reconfigure(encoding="utf-8", errors="strict", newline="\n", write_through=True)
+    except (AttributeError, ValueError):
+        pass  # fluxo trocado (testes)
+    return fluxo
 
 
 def servir_mcp(servico, entrada=None, saida=None):
@@ -201,5 +212,6 @@ def servir_mcp(servico, entrada=None, saida=None):
             resposta = {"jsonrpc": "2.0", "id": ident,
                         "error": {"code": -32603, "message": mascarar(f"{type(e).__name__}: {e}")[:300]}}
         if resposta is not None:
-            saida.write(json.dumps(resposta, ensure_ascii=False) + "\n")
+            # Só ASCII: caractere inválido ecoado do pedido (ex.: "\ud800" solto) nunca derruba o servidor.
+            saida.write(json.dumps(resposta) + "\n")
             saida.flush()

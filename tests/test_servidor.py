@@ -279,6 +279,38 @@ class TestMCP(unittest.TestCase):
                            text=True, cwd=Path(__file__).resolve().parent.parent)
         self.assertEqual(r.stdout.split(" ", 1), ["0", '{"jsonrpc": "2.0"}\n'])
 
+    def test_caractere_invalido_nao_derruba(self):  # verificador: "\ud800" ecoado no erro matava o processo
+        with tempfile.TemporaryDirectory() as d:
+            servico = ServicoPecas(Path(d) / "b.db", fabricar=Fabrica())
+            entrada = io.StringIO('{"jsonrpc":"2.0","id":7,"method":"x\\ud800"}\n'
+                                  '{"jsonrpc":"2.0","id":8,"method":"ping"}\n')
+            bruto = io.BytesIO()
+            saida = io.TextIOWrapper(bruto, encoding="utf-8", errors="strict", newline="\n", write_through=True)
+            servir_mcp(servico, entrada=entrada, saida=saida)
+            linhas = bruto.getvalue().decode("utf-8").splitlines()
+            self.assertEqual([json.loads(l)["id"] for l in linhas], [7, 8])
+
+    def test_byte_invalido_na_entrada_nao_derruba(self):  # verificador: UnicodeDecodeError matava o processo
+        import sys
+
+        roteiro = ("from torralles_studio.servidor import isolar_stdin\n"
+                   "print(len(isolar_stdin().read().splitlines()))\n")
+        r = subprocess.run([sys.executable, "-c", roteiro], input=b'{"m":"x\xed\xa0\x80"}\n{"m":"ping"}\n',
+                           capture_output=True, cwd=Path(__file__).resolve().parent.parent)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, b"2"), r.stderr)
+
+    def test_resposta_sai_em_utf8_no_windows(self):  # verificador: cp1252 corrompia "é" e caía no "✓"
+        import os
+        import sys
+
+        roteiro = ("from torralles_studio.servidor import saida_utf8\n"
+                   "saida_utf8().write('m\\u00e9todo \\u2713\\n')\n")
+        r = subprocess.run([sys.executable, "-c", roteiro], capture_output=True,
+                           cwd=Path(__file__).resolve().parent.parent,
+                           env={**os.environ, "PYTHONIOENCODING": "cp1252"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout, "método ✓\n".encode("utf-8"))
+
     def test_conversa_completa(self):
         with tempfile.TemporaryDirectory() as d:
             servico = ServicoPecas(Path(d) / "b.db", fabricar=Fabrica())

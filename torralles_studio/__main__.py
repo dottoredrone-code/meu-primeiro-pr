@@ -152,9 +152,9 @@ def comando_servidor(args):
     servico.iniciar()
     try:
         if args.comando == "mcp":
-            from .servidor import servir_mcp
+            from .servidor import saida_utf8, servir_mcp
 
-            servir_mcp(servico, entrada=canal)
+            servir_mcp(servico, entrada=canal, saida=saida_utf8())
             return 0
         from .servidor import criar_servidor_http
 
