@@ -1,4 +1,48 @@
-# Passagem de bastão — Torralles Studio (15/10/2026)
+# Passagem de bastão — Torralles Studio (atualizada em 24/10/2026)
+
+Leia este arquivo antes de continuar. O trabalho vinha numa sessão na nuvem e continua numa sessão local no PC
+do Diego (`C:\Users\Oem\meu-primeiro-pr`, branch **`claude/multi-model-integration-app-g1697x`**).
+Leia também `CLAUDE.md`, `KANBAN.md`, `docs/sdd/decisoes.md` e o fim de `docs/sdd/aprendizados.md`.
+
+## Como falar com o Diego
+- Português do Brasil, simples e direto; ele acompanha pelo celular e pelo PC.
+- Escolhas sempre em perguntas com opções clicáveis, com a recomendada marcada.
+
+## Regras que não podem ser quebradas
+- Nunca mostrar, copiar ou repetir chaves do `.env` (nem no chat, nem em commits). O `.env` é ignorado pelo Git.
+- D9: o Studio é independente dos outros projetos (nada jurídico em código, testes ou specs).
+- D2: nada AGPL ou "não comercial" no produto. D18: cada mídia guarda fonte e licença. D20: teto US$ 1,50 por vídeo.
+- Protocolo: plano → implementação → **verificação por um agente diferente** → correção. Um cartão por commit
+  (`tipo(Kxx): descrição`); `python -m unittest discover -s tests` antes de cada commit; push só nessa branch;
+  PR só se o Diego pedir. Rodapé dos commits:
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` e
+  `Claude-Session: https://claude.ai/code/session_01NAT84JQjJ937ynY1rQbLgm`.
+
+## Onde paramos
+- **K32 (primeiro vídeo real)** rodou no PC em 21/10 com `produzir`. Diego: "não ficou tão ruim, faltam
+  animações e efeitos". Já feito depois: legenda palavra por palavra, título animado, transição pelo clima,
+  movimento grátis com aceleração suave e efeitos por clima, foto gratuita licenciada quando a IA de imagem falha.
+- **Chaves no `.env` do PC:** Gemini, Claude, DeepSeek (recarregado), Tavily. Sem OpenAI e sem fal.ai.
+  Gemini não gera imagem (falta faturamento); Pollinations cobra (402) → imagens vêm de fotos gratuitas (Openverse).
+- **Voz:** edge-tts (`pip install edge-tts`). A Piper de teste fala "lh" como "l" (não usar como voz principal).
+- **Placa de vídeo:** Intel HD Graphics 4600 → IA de vídeo local inviável; Diego escolheu movimento grátis sem IA.
+
+## Próximos passos
+1. `git pull origin claude/multi-model-integration-app-g1697x`.
+2. Refazer o vídeo do chá verde com os efeitos novos, sem gastar: apagar só `saidas\beneficios-do-cha-verde\cena_*.mp4`
+   e `video_final.mp4` (manter `cena_*.png`, `voz_*.mp3`, `roteiro.json`, `fotos.json`) e rodar
+   `python -m torralles_studio produzir "benefícios do chá verde" -d 30 --pesquisa`; abrir com
+   `start saidas\beneficios-do-cha-verde\video_final.mp4` e perguntar ao Diego o que achou.
+3. **K21 — trilha e efeitos sonoros gratuitos** (pedido do Diego): trilha por clima de fontes com licença comercial
+   (acervo, Openverse áudio, Pixabay se houver chave; Freesound só com perfil `comercial = false`, D22), ligada ao
+   `produzir` (`montar(trilha=...)` já deixa a música 12 LU abaixo da voz e abaixa sob a fala); opcional: sons curtos
+   por cena (campo `sons` do roteiro, ≥ 15 LU abaixo da voz); licença de cada som em `creditos.txt`.
+   Spec: `docs/sdd/12-pesquisa-qualidade-concorrentes.md` §3.
+4. O K32 só fecha com a aprovação do Diego no vídeo completo.
+
+---
+
+## Histórico (passagem anterior, 15–16/10/2026)
 
 Leia este arquivo antes de continuar. O trabalho até aqui foi feito numa sessão na nuvem e continua numa sessão local no PC do Diego.
 
