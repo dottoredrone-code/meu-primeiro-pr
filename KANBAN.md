@@ -18,6 +18,8 @@
 | K00a | Roteador com fallback por função, provedores e CLI (protótipo) | — |
 | K00b | Percepção níveis 1 e 2: quadros, cortes, som, transcrição com fallback | [10](docs/sdd/10-percepcao.md) |
 | K06 | Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) — teste real no PC em 18/10: nota 90/100 no vídeo de demonstração | [10](docs/sdd/10-percepcao.md) |
+| K21 | Trilha pelo clima do roteiro (`trilha.py`): música instrumental com licença comercial, BPM e energia medidos com FFmpeg, voz eliminatória, crédito; trilha ruim nunca derruba o vídeo — teste real no PC pendente (Jamendo) | [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) · D19 |
+| K23 | Exportação para o CapCut (`exportar.py`, `produzir --capcut`, `exportar-capcut`): clipes por quadros, áudios alinhados no volume do vídeo, legenda .srt, guia e créditos — abrir no CapCut no PC pendente | D5 |
 | K00c | Planejamento: specs 00–12 e decisões D1–D20 | [decisões](docs/sdd/decisoes.md) |
 | K01 | Modelos atualizados + Kling v3 `start_image_url` (teste de contrato por família) | [00](docs/sdd/00-descoberta.md) |
 | K02 | Pacote renomeado para `torralles_studio` | D1 |
@@ -71,8 +73,6 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 | K17 | 🔒 Imagens com consistência entre cenas (Nano Banana 2 / FLUX) | [03](docs/sdd/03-parametros-avaliacao.md) | K01 · K09 · **chaves** | Juízes aprovam consistência e anatomia |
 | K18 | 🔒 Voz com fallback (ElevenLabs → Gemini TTS → Edge → Piper) e checagem por transcrição. Teste de pronúncia com lh, nh e rr ("olha", "vermelho", "ninho", "carro"); a voz Piper de teste (edresson-low) fala "lh" como "l": no fallback, usar uma voz pt-BR melhor, com licença conferida (D2) | [11](docs/sdd/11-banco-midia-gratuita.md) | K00b · **chaves** | Erro de palavras ≤ 10% |
 | K19 | 🔒 Vídeo por cena no modo misto (Kling v3 nas cenas-chave, zoom nas demais) — zoom local já segue a proporção do perfil e o movimento da cena (17/10) | D20 | K01 · K04 · **chave fal.ai** | Custo dentro do teto; sem congelamento indevido |
-| K21 | Escolha de trilha pela pontuação da spec 12 — **em verificação**: `trilha.py` (clima dominante → Openverse/Jamendo com licença comercial; BPM e energia medidos com FFmpeg, sem librosa; voz eliminatória pelo título/etiquetas) ligado ao `produzir`; falta teste real no PC e o juiz que ouve a trilha | [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) · D19 | K20 · K06 | Trilha com letra durante a fala é eliminada |
-| K23 | Exportação para CapCut (pasta com clipes, áudios e legendas) — **em verificação**: `exportar.py`, `produzir --capcut` e `exportar-capcut`; falta abrir no CapCut no PC | D5 | K22 | Abre no CapCut sem retrabalho |
 
 ### Camada 4 — Dados e memória (pode começar junto com a Camada 1)
 ✅ Concluída em 16/10/2026 (K24–K27).

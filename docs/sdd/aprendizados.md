@@ -142,3 +142,13 @@
   (fal.ai), nas cenas-chave.
 - **Primeira reação ao vídeo real:** "não ficou tão ruim, faltam animações e efeitos" → legenda palavra por
   palavra e transições pelo clima vieram antes de qualquer custo novo.
+
+## Camada 3 — Trilha (K21) e CapCut (K23) (24/10/2026)
+- **Ritmo sem librosa:** energia em janelas de 10 ms + autocorrelação dos ataques acerta 70–140 BPM em
+  < 0,2 s. Precisa de medida de confiança (pulsação e pico da autocorrelação): pad sem batida inventava BPM.
+- **Voz na trilha por título/etiquetas é só triagem;** o juiz que ouve continua necessário.
+- **Mídia de terceiros falha de jeitos novos** (arquivo sumido, quase silêncio): cada uma tem que cair para
+  "sem trilha", nunca derrubar o vídeo.
+- **Exportar para edição exige a mesma régua do final:** cortes por quadros acumulados, faixas com o ganho e o
+  limitador da normalização, e só a mídia que tem crédito.
+- 3 rodadas de verificação (K21: 2 graves; K23: 2 graves + 3 médios; aprovado na 3ª).

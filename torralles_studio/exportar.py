@@ -37,7 +37,7 @@ def _ganho_final(trabalho):
 
 
 def _audio(origem, destino, ganho):
-    proc = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(origem), "-af", f"volume={ganho}dB",
+    proc = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(origem), "-af", f"volume={ganho}dB,alimiter=limit=0.84:level=disabled",  # pico ≤ −1,5 dB, sem estourar
                            "-c:a", "pcm_s16le", str(destino)], capture_output=True, text=True)
     if proc.returncode != 0:
         raise ErroProvedor(f"ffmpeg falhou no áudio {Path(destino).name}: {proc.stderr.strip()[-200:]}")
