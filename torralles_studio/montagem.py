@@ -265,16 +265,20 @@ def distribuir_legendas(texto, inicio_fala, fim_fala, pausas_internas=(), max_ch
     def precisa_de(k):
         return max(lim["min_s"], sum(len(l) for l in blocos[k]) / lim["cps"] + 0.01)  # folga do arredondamento
     for i in range(len(blocos) - 1):
-        if fins[i] < inis[i + 1] - 1e-6 or inis[i + 1] in de_pausa:
+        if fins[i] < inis[i + 1] - 1e-6:
             continue  # há pausa entre os dois: cada um já tem o seu tempo
         fim_seguinte = inis[i + 2] if i + 2 < len(blocos) else max(fins[i + 1], min(teto, fim_fala + 0.8))
         menor, maior = inis[i] + precisa_de(i), fim_seguinte - precisa_de(i + 1)
+        if inis[i + 1] in de_pausa and fins[i] >= menor - 1e-6:
+            continue  # veio de pausa real e o bloco já cabe: não tira tempo do seguinte
         if menor <= maior:
             fronteira = min(max(fins[i], menor), maior)
         else:
             a, b = sum(map(len, blocos[i])), sum(map(len, blocos[i + 1]))
             fronteira = inis[i] + (fim_seguinte - inis[i]) * a / (a + b)
         fronteira = min(fronteira, max(fim_fala - 0.1, inis[i + 1]))  # nunca entra depois que a fala acaba
+        if inis[i + 1] in de_pausa:
+            fronteira = max(fronteira, inis[i + 1])  # veio de pausa real: só anda para depois dela
         fins[i] = inis[i + 1] = fronteira
         fins[i + 1] = max(fins[i + 1], fronteira)
     # Tempo mínimo de leitura: estica o fim até o próximo bloco (ou o fim da cena, no máx. 0,8 s após a fala).

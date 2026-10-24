@@ -84,6 +84,12 @@ class TestLegendas(unittest.TestCase):
             legendas = distribuir_legendas(texto, 0.2, fim, max_chars=28, fim_cena=fim + 0.9)
             self.assertEqual(checar_legendas(legendas, 28), [], texto)
 
+    def test_fronteira_de_pausa_so_anda_para_depois_dela(self):  # chá verde: "— mas não" a 19,9 car./s
+        texto = "Pode auxiliar no metabolismo e na perda de peso — mas não é solução mágica."
+        legendas = distribuir_legendas(texto, 0.0, 4.6, [(2.5, 3.0)], max_chars=28, fim_cena=5.5)
+        self.assertEqual(checar_legendas(legendas, 28), [])
+        self.assertGreaterEqual(legendas[1][0], 2.9)  # nunca entra dentro da pausa
+
     def test_corte_vai_para_a_pausa_real(self):
         texto = "Primeira parte da frase aqui, segunda parte da frase ali."
         legendas = distribuir_legendas(texto, 1.0, 5.0, [(3.4, 3.7)], max_chars=16)
