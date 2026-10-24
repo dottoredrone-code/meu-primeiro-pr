@@ -59,6 +59,7 @@ python -m torralles_studio roteiro "tema" -p meu-canal          # gera com o per
 python -m torralles_studio roteiro "tema" -q                    # com juiz e loop de correção (também em pesquisa)
 python -m torralles_studio produzir "tema" -d 30 --pesquisa      # vídeo completo (saidas/<tema>/video_final.mp4); --capcut, --sem-trilha
 python -m torralles_studio exportar-capcut saidas/<tema>         # pasta para editar no CapCut
+python -m torralles_studio testar-voz                          # frase com lh, nh, rr em cada voz pronta (ouvir + erro de palavras)
 python -m torralles_studio servidor                           # HTTP local para o Ops (docs/servidor.md); 'mcp' para o Hermes
 python -m torralles_studio montar projeto.json -o final.mp4   # montagem final + régua (docs/montagem.md)
 python -m torralles_studio --config outro.toml status   # config alternativo (ou TORRALLES_CONFIG)

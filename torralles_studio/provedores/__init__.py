@@ -4,7 +4,7 @@ from .midia import FreesoundMidia, OpenverseMidia, PexelsMidia, PixabayMidia
 from .imagem import FalImagem, GeminiImagem, OpenAIImagem, PollinationsImagem
 from .texto import AnthropicTexto, GeminiTexto, OpenAICompatTexto
 from .video import FalVideo, KenBurnsVideo
-from .voz import EdgeVoz, ElevenLabsVoz, OpenAIVoz
+from .voz import EdgeVoz, ElevenLabsVoz, GeminiVoz, OpenAIVoz
 
 # Nome usado no campo `classe` do config/fallbacks.toml.
 CLASSES = {
@@ -20,6 +20,7 @@ CLASSES = {
     "elevenlabs": ElevenLabsVoz,
     "openai_voz": OpenAIVoz,
     "edge_tts": EdgeVoz,
+    "gemini_voz": GeminiVoz,
     "fal_video": FalVideo,
     "ken_burns": KenBurnsVideo,
     "gemini_video": GeminiVideoJuiz,

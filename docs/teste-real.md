@@ -30,6 +30,14 @@ Teste real pago do juiz de vídeo dentro da suíte (uns US$ 0,05): defina `TORRA
 Cada comando é uma linha só (funciona no PowerShell, no cmd e no terminal do Linux/Mac).
 Se o juiz de vídeo não conseguir avaliar, ele mostra o motivo real (ex.: modelo inexistente, chave, bloqueio).
 
+## 2a. Vozes (K18)
+```bash
+python -m torralles_studio testar-voz
+```
+Grava em `saidas/teste-voz/` a mesma frase (com lh, nh, r e rr) em cada voz pronta e mostra o erro de palavras.
+Ouça os arquivos: a voz do Gemini (`gemini_voz`) deve falar "olha" e "vermelho" certinho. Se aparecer 404, o nome
+do modelo TTS em `config/fallbacks.toml` precisa de ajuste (KR1).
+
 ## 2b. Vídeo completo (K32)
 Precisa de uma voz: `pip install edge-tts` (grátis) ou chave da ElevenLabs/OpenAI.
 ```bash

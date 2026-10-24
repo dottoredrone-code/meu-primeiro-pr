@@ -134,7 +134,7 @@ def _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
 
 def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesquisar=False, trilha=None, bpm=None,
                    cfg_montagem=None, aviso=None, refazer_roteiro=False, biblioteca=None, trilha_auto=True,
-                   capcut=False, fatos=None, proporcao=None):
+                   capcut=False, fatos=None, proporcao=None, conferir_voz=None):
     """Produz o vídeo e devolve o relatório (também salvo em pasta/relatorio.json).
 
     biblioteca: com ela, cena cuja imagem nenhuma IA conseguiu gerar usa uma foto gratuita com licença, e
@@ -235,7 +235,18 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
             else:
                 avisar(f"== cena {i}/{total}: narração")
                 r = _gerar(voz, lambda saida: funcoes.gerar_voz(roteador, cena["narracao"], saida))
-                etapa(f"cena {i}: voz", r.provedor)
+                conferencia = conferir_voz(voz, cena["narracao"]) if conferir_voz else None
+                if conferencia and not conferencia["ok"]:  # fala diferente do roteiro: tenta a próxima voz (K18)
+                    avisar(f"  ⚠ a narração de {r.provedor} errou {conferencia['wer']:.0%} das palavras; "
+                           "tentando outra voz")
+                    try:
+                        r2 = _gerar(voz, lambda saida: roteador.executar(
+                            "voz", texto=cena["narracao"], saida=Path(saida), excluir={r.provedor}, usar_cache=False))
+                        r, conferencia = r2, conferir_voz(voz, cena["narracao"])
+                    except (TodosFalharam, ErroProducao):
+                        avisar("  ⚠ nenhuma outra voz disponível: fica a primeira")
+                etapa(f"cena {i}: voz", r.provedor,
+                      **({"erro_palavras": conferencia["wer"]} if conferencia else {}))
             ini, fim, _ = trecho_falado(voz)
             if _pronto(video):
                 etapa(f"cena {i}: vídeo", reaproveitado=True)

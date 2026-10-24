@@ -199,6 +199,21 @@ class TestProduzirVideo(unittest.TestCase):
                                   cfg_montagem={"preset": "ultrafast"})
             self.assertTrue(next(e for e in rel2["etapas"] if e["etapa"] == "trilha")["reaproveitado"])
 
+    def test_narracao_errada_e_refeita_com_outra_voz(self):  # K18
+        rt, loop = self.montar()
+        voz2 = Voz()
+        voz2.nome = "voz2"
+        rt.provedores["voz2"] = voz2
+        rt.cadeias["voz"] = ["voz", "voz2"]
+        respostas = iter([{"wer": 0.5, "ok": False}, {"wer": 0.0, "ok": True}, {"wer": 0.0, "ok": True}])
+        with tempfile.TemporaryDirectory() as d:
+            rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, cfg_montagem={"preset": "ultrafast"},
+                                 conferir_voz=lambda arq, texto: next(respostas))
+            vozes = [e for e in rel["etapas"] if e["etapa"].endswith(": voz")]
+            self.assertEqual([e["provedor"] for e in vozes], ["voz2", "voz"])
+            self.assertEqual([e["erro_palavras"] for e in vozes], [0.0, 0.0])
+            self.assertEqual((self.voz.chamadas, voz2.chamadas), (2, 1))
+
     def test_trilha_que_quebra_a_montagem_nao_derruba_o_video(self):  # verificador K21: rede de segurança
         from unittest import mock
 

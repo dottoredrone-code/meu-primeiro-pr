@@ -149,6 +149,15 @@ modelo = "gpt-4o-mini-tts"
 voz = "alloy"
 chave_env = "OPENAI_API_KEY"
 
+[provedores.gemini_voz]
+# Voz do Gemini (TTS), mesma chave do texto. Modelo citado na doc do Google em 10/2026 — confirmar no teste real (KR1).
+familia = "google"
+custo_usd = 0.01  # estimativa por cena curta (revisar no KR1)
+classe = "gemini_voz"
+modelo = "gemini-3.8-flash-tts"
+voz = "Kore"
+chave_env = "GEMINI_API_KEY"
+
 [provedores.edge_tts]
 classe = "edge_tts"
 voz = "pt-BR-FranciscaNeural"
@@ -254,7 +263,8 @@ cadeia = ["tavily", "brave"]
 cadeia = ["nano_banana", "fal_flux", "openai_imagem", "pollinations"]
 
 [tarefas.voz]
-cadeia = ["elevenlabs", "openai_voz", "edge_tts"]
+# ElevenLabs no plano grátis não permite uso comercial (D2): só entra com plano pago (chave no .env).
+cadeia = ["elevenlabs", "openai_voz", "gemini_voz", "edge_tts"]
 
 [tarefas.video]
 cadeia = ["fal_kling", "fal_wan", "ken_burns"]

@@ -108,6 +108,7 @@ def comando_produzir(args, roteador, perfil):
     from .config import carregar_biblioteca, carregar_config, carregar_loop
     from .montagem import ErroMontagem
     from .producao import ErroProducao, pasta_do_tema, produzir_video
+    from .pronuncia import conferir_voz
     from .rede import ErroProvedor
 
     pasta = args.pasta or pasta_do_tema(args.tema)
@@ -117,7 +118,8 @@ def comando_produzir(args, roteador, perfil):
                              cfg_montagem=carregar_config(args.config).get("montagem"),
                              aviso=lambda t: print(t, file=sys.stderr, flush=True),
                              refazer_roteiro=args.refazer_roteiro, biblioteca=carregar_biblioteca(args.config),
-                             trilha_auto=not args.sem_trilha, capcut=args.capcut)
+                             trilha_auto=not args.sem_trilha, capcut=args.capcut,
+                             conferir_voz=None if args.sem_conferir_voz else conferir_voz)
     except KeyboardInterrupt:
         print(f"\n✗ interrompido. O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
         return 130
@@ -172,6 +174,37 @@ def comando_servidor(args):
         return 0
     finally:
         servico.parar(esperar=False)
+
+
+def comando_testar_voz(args, roteador):
+    from pathlib import Path
+
+    from .pronuncia import FRASE_TESTE, conferir_voz
+    from .rede import ErroProvedor
+
+    frase, pasta = args.frase or FRASE_TESTE, Path(args.pasta)
+    pasta.mkdir(parents=True, exist_ok=True)
+    print(f"Frase: {frase}\n")
+    algum = False
+    for nome in roteador.cadeias.get("voz", []):
+        prov = roteador.provedores[nome]
+        motivo = prov.configurado()
+        if motivo:
+            print(f"  {nome:12s} pulado ({motivo})")
+            continue
+        algum = True
+        saida = pasta / f"{nome}.mp3"
+        try:
+            prov.executar(texto=frase, saida=saida)
+        except (ErroProvedor, ValueError, OSError) as e:
+            print(f"  {nome:12s} falhou: {e}")
+            continue
+        c = conferir_voz(saida, frase)
+        nota = f"erro de palavras {c['wer']:.0%} ({'ok' if c['ok'] else 'acima de 10%'})" if c else "sem transcrição"
+        print(f"  {nome:12s} {saida} · {nota}")
+    if algum:
+        print("\nOuça os arquivos: a transcrição às vezes corrige pronúncia ruim pelo contexto (ex.: 'ola' → 'olha').")
+    return 0 if algum else 1
 
 
 def comando_exportar_capcut(args):
@@ -328,6 +361,12 @@ def main(argv=None):
     s.add_argument("-o", "--pasta", help="pasta do vídeo (padrão: saidas/<tema>)")
     s.add_argument("--refazer-roteiro", action="store_true", help="faz um roteiro novo (e cenas novas) mesmo se já houver")
     s.add_argument("--capcut", action="store_true", help="também gera a pasta para editar no CapCut (<pasta>/capcut)")
+    s.add_argument("--sem-conferir-voz", action="store_true",
+                   help="não transcreve a narração para conferir a pronúncia (mais rápido, sem custo de transcrição)")
+
+    s = sub.add_parser("testar-voz", help="grava uma frase difícil (lh, nh, rr) em cada voz pronta e mede o erro")
+    s.add_argument("-o", "--pasta", default="saidas/teste-voz")
+    s.add_argument("--frase", help="frase de teste (padrão: palavras com lh, nh, r e rr)")
 
     s = sub.add_parser("servidor", help="servidor HTTP local para o Torralles Ops pedir peças (spec 08)")
     s.add_argument("--porta", type=int, default=8765)
@@ -385,6 +424,8 @@ def main(argv=None):
 
     if args.comando == "produzir":
         return comando_produzir(args, roteador, perfil)
+    if args.comando == "testar-voz":
+        return comando_testar_voz(args, roteador)
     if getattr(args, "qualidade", False):
         return comando_com_qualidade(args, roteador, perfil)
 
