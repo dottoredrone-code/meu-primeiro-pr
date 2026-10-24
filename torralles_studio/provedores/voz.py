@@ -99,7 +99,8 @@ def _gravar_audio(dados, mime, saida):
 
     saida.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as pasta:
-        if "l16" in mime or "pcm" in mime:  # PCM cru: 16 bits, little-endian, mono; taxa no mimeType
+        tipo = mime.split(";")[0].strip()
+        if tipo in ("audio/l16", "audio/pcm"):  # PCM cru: 16 bits, little-endian, mono; taxa no mimeType
             achada = re.search(r"rate=(\d+)", mime)
             taxa = int(achada.group(1)) if achada else 24000  # padrão do Gemini TTS quando o mime não diz
             bruto = Path(pasta) / "voz.wav"

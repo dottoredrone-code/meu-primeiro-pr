@@ -20,6 +20,25 @@ class TestTaxaDeErro(unittest.TestCase):
         self.assertEqual(taxa_erro("um dois", "um dois três"), 0.5)
         self.assertEqual(taxa_erro("", ""), 0.0)
 
+    def test_numeros_valem_por_extenso(self):  # verificador K18: "30" falado como "trinta" não é erro
+        for escrito, falado in [("Em 30 dias", "em trinta dias"), ("70% das pessoas", "setenta por cento das pessoas"),
+                                ("R$ 1.500 em 2026", "mil e quinhentos reais em dois mil e vinte e seis"),
+                                ("Custa R$ 49,90", "custa quarenta e nove reais e noventa centavos")]:
+            self.assertEqual(taxa_erro(escrito, falado), 0.0, escrito)
+
+    def test_uma_palavra_trocada_em_cena_curta_nao_refaz(self):
+        c = conferir_voz("x.mp3", "Olha só isso.", transcrever=lambda a, p: {"texto": "Ola só isso."})
+        self.assertEqual((c["erros"], c["ok"]), (1, True))
+        c = conferir_voz("x.mp3", "Olha o vermelho bonito.", transcrever=lambda a, p: {"texto": "Ola o vermelo bonito."})
+        self.assertFalse(c["ok"])
+
+    def test_formatos_comuns_de_transcricao(self):
+        for t in ["Transcrição: Olha o filho", "Narrador: Olha o filho", "[00:00:01] Olha o filho",
+                  "[00:00 - 00:03] Olha o filho", "(00:01) Olha o filho", "Olha o filho. SONS: música",
+                  "Olha o filho\nSons percebidos: música ao fundo"]:
+            self.assertEqual(taxa_erro("Olha o filho", limpar_transcricao(t)), 0.0, t)
+        self.assertEqual(taxa_erro("Ouça os sons: pássaros", limpar_transcricao("Ouça os sons: pássaros")), 0.0)
+
     def test_limpa_marcas_da_transcricao(self):
         texto = "[00:01] Olha que vermelho.\n[00:03.5] O filho chegou.\nSONS: música suave aos 00:02"
         self.assertEqual(" ".join(limpar_transcricao(texto).split()), "Olha que vermelho. O filho chegou.")
@@ -27,7 +46,7 @@ class TestTaxaDeErro(unittest.TestCase):
     def test_conferir_voz(self):
         ok = conferir_voz("x.mp3", "olha o filho", transcrever=lambda a, p: {"texto": "[00:00] Olha o filho", "motor": "t"})
         self.assertEqual((ok["wer"], ok["ok"]), (0.0, True))
-        ruim = conferir_voz("x.mp3", "olha o filho", transcrever=lambda a, p: {"texto": "ola o filo", "motor": "t"})
+        ruim = conferir_voz("x.mp3", "olha o filho", transcrever=lambda a, p: {"texto": "ola o filo", "motor": "t"})  # 2 erros
         self.assertFalse(ruim["ok"])
         self.assertIsNone(conferir_voz("x.mp3", "olha", transcrever=lambda a, p: {"texto": None, "motivo": "sem chave"}))
 

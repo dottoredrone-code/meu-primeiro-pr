@@ -205,7 +205,8 @@ class TestProduzirVideo(unittest.TestCase):
         voz2.nome = "voz2"
         rt.provedores["voz2"] = voz2
         rt.cadeias["voz"] = ["voz", "voz2"]
-        respostas = iter([{"wer": 0.5, "ok": False}, {"wer": 0.0, "ok": True}, {"wer": 0.0, "ok": True}])
+        respostas = iter([{"wer": 0.5, "erros": 2, "ok": False}, {"wer": 0.0, "erros": 0, "ok": True},
+                          {"wer": 0.0, "erros": 0, "ok": True}])
         with tempfile.TemporaryDirectory() as d:
             rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, cfg_montagem={"preset": "ultrafast"},
                                  conferir_voz=lambda arq, texto: next(respostas))
@@ -213,6 +214,22 @@ class TestProduzirVideo(unittest.TestCase):
             self.assertEqual([e["provedor"] for e in vozes], ["voz2", "voz"])
             self.assertEqual([e["erro_palavras"] for e in vozes], [0.0, 0.0])
             self.assertEqual((self.voz.chamadas, voz2.chamadas), (2, 1))
+            self.assertFalse(list((Path(d) / "v").glob("voz_*_b.*")))  # arquivo da 2ª tentativa não sobra
+
+    def test_segunda_voz_pior_nao_substitui_a_primeira(self):
+        rt, loop = self.montar()
+        voz2 = Voz()
+        voz2.nome = "voz2"
+        rt.provedores["voz2"] = voz2
+        rt.cadeias["voz"] = ["voz", "voz2"]
+        respostas = iter([{"wer": 0.3, "erros": 2, "ok": False}, {"wer": 0.6, "erros": 4, "ok": False},
+                          {"wer": 0.0, "erros": 0, "ok": True}])
+        with tempfile.TemporaryDirectory() as d:
+            rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, cfg_montagem={"preset": "ultrafast"},
+                                 conferir_voz=lambda arq, texto: next(respostas))
+            vozes = [e for e in rel["etapas"] if e["etapa"].endswith(": voz")]
+            self.assertEqual(vozes[0]["provedor"], "voz")  # a primeira errou menos: fica
+            self.assertEqual(vozes[0]["erro_palavras"], 0.3)
 
     def test_trilha_que_quebra_a_montagem_nao_derruba_o_video(self):  # verificador K21: rede de segurança
         from unittest import mock

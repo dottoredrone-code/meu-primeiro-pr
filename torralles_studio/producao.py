@@ -101,6 +101,17 @@ def _roteiro_guardado(pasta, tema, duracao, proporcao):
     return dados
 
 
+CUSTO_CONFERENCIA_USD = 0.002  # estimativa por transcrição curta (revisar no KR1)
+
+
+def _conferir(conferir_voz, roteador, arquivo, texto):
+    """Confere a fala se houver conferência e o teto comportar a transcrição (que entra no orçamento, D20)."""
+    if not conferir_voz or not roteador.orcamento.cabe(CUSTO_CONFERENCIA_USD):
+        return None
+    roteador.orcamento.registrar("conferencia_voz", CUSTO_CONFERENCIA_USD)
+    return conferir_voz(arquivo, texto)
+
+
 def prompt_da_imagem(cena, proporcao):
     formato = {"9:16": "vertical 9:16", "16:9": "horizontal 16:9", "1:1": "quadrada 1:1", "4:5": "vertical 4:5"}
     return (f"{cena['prompt_imagem']}. Composição {formato.get(proporcao, proporcao)}, assunto principal no centro, "
@@ -235,16 +246,24 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
             else:
                 avisar(f"== cena {i}/{total}: narração")
                 r = _gerar(voz, lambda saida: funcoes.gerar_voz(roteador, cena["narracao"], saida))
-                conferencia = conferir_voz(voz, cena["narracao"]) if conferir_voz else None
+                conferencia = _conferir(conferir_voz, roteador, voz, cena["narracao"])
                 if conferencia and not conferencia["ok"]:  # fala diferente do roteiro: tenta a próxima voz (K18)
-                    avisar(f"  ⚠ a narração de {r.provedor} errou {conferencia['wer']:.0%} das palavras; "
-                           "tentando outra voz")
-                    try:
-                        r2 = _gerar(voz, lambda saida: roteador.executar(
-                            "voz", texto=cena["narracao"], saida=Path(saida), excluir={r.provedor}, usar_cache=False))
-                        r, conferencia = r2, conferir_voz(voz, cena["narracao"])
+                    avisar(f"  ⚠ a narração de {r.provedor} errou {conferencia['erros']} palavra(s) "
+                           f"({conferencia['wer']:.0%}); tentando outra voz")
+                    outra = voz.with_name(f"{voz.stem}_b{voz.suffix}")
+                    try:  # cache liberado: se a outra voz já foi paga antes, vem de graça
+                        r2 = _gerar(outra, lambda saida: roteador.executar(
+                            "voz", texto=cena["narracao"], saida=Path(saida), excluir={r.provedor}))
+                        c2 = _conferir(conferir_voz, roteador, outra, cena["narracao"])
+                        if c2 is None or c2["wer"] < conferencia["wer"]:  # fica com a que errou menos
+                            os.replace(outra, voz)
+                            r, conferencia = r2, c2
+                        else:
+                            avisar("  ⚠ a outra voz não foi melhor: fica a primeira")
                     except (TodosFalharam, ErroProducao):
                         avisar("  ⚠ nenhuma outra voz disponível: fica a primeira")
+                    finally:
+                        _apagar(outra)
                 etapa(f"cena {i}: voz", r.provedor,
                       **({"erro_palavras": conferencia["wer"]} if conferencia else {}))
             ini, fim, _ = trecho_falado(voz)
