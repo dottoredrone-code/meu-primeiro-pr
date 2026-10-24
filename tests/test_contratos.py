@@ -72,9 +72,6 @@ class TestContratos(unittest.TestCase):
         self.assertNotIn("duration", corpo)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class TestClaudeAtual(unittest.TestCase):
     """KR1 24/10/2026: modelos atuais pensam antes de responder; cortar ou recusar vira falha (vai para o próximo)."""
@@ -107,3 +104,7 @@ class TestClaudeAtual(unittest.TestCase):
         for motivo in ("max_tokens", "refusal"):
             with self.assertRaises(ErroProvedor):
                 self.chamar({"stop_reason": motivo, "content": [{"type": "text", "text": "{\"a\": "}]})
+
+
+if __name__ == "__main__":
+    unittest.main()

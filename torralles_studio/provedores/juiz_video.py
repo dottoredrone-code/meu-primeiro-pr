@@ -69,7 +69,7 @@ class GeminiVideoJuiz(Provedor):
         mime = _MIME[caminho.suffix.lower()]
         return {"inline_data": {"mime_type": mime, "data": base64.b64encode(caminho.read_bytes()).decode()}}
 
-    def executar(self, video, prompt, sistema=None):
+    def executar(self, video, prompt, sistema=None, duracao=None):  # duracao: só para estimar o custo
         with tempfile.TemporaryDirectory() as pasta:
             corpo = {
                 "contents": [{"parts": [self._parte_video(video, pasta), {"text": prompt}]}],

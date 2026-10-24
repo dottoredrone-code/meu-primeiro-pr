@@ -177,25 +177,30 @@ def comando_servidor(args):
 
 
 def comando_analisar_referencia(args, roteador):
+    import subprocess
     import tomllib
 
     from .config import RAIZ
+    from .rede import ErroProvedor
     from .referencias import analisar_referencia
+    from .seguranca import mascarar
     from .roteador import TodosFalharam
 
     try:
         categorias = tomllib.loads((RAIZ / "config" / "referencias.toml").read_text(encoding="utf-8"))["categorias"]
     except (OSError, KeyError, tomllib.TOMLDecodeError):
         categorias = {}
+    categorias = {k: v for k, v in categorias.items() if isinstance(v, dict)} if isinstance(categorias, dict) else {}
     categoria = args.categoria.upper()
     if categorias and categoria not in categorias:
         print(f"✗ categoria {categoria!r} não existe (use {', '.join(categorias)})", file=sys.stderr)
         return 1
     try:
-        r = analisar_referencia(roteador, args.video, categoria, nome_categoria=(categorias.get(categoria) or {}).get("nome"),
-                                pasta=RAIZ / "dados" / "referencias")
-    except (TodosFalharam, ValueError) as e:
-        print(f"✗ não deu para analisar: {e}", file=sys.stderr)
+        cat = categorias.get(categoria) or {}
+        r = analisar_referencia(roteador, args.video, categoria, nome_categoria=cat.get("nome"),
+                                formato=cat.get("formato"), pasta=RAIZ / "dados" / "referencias")
+    except (TodosFalharam, ValueError, ErroProvedor, subprocess.CalledProcessError, OSError) as e:
+        print(f"✗ não deu para analisar: {mascarar(str(e))}", file=sys.stderr)
         return 1
     p = r["potencial"]
     print(f"✓ {r['origem']} · categoria {categoria} · {r['medido_por']}")

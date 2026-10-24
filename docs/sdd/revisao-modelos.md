@@ -8,16 +8,16 @@ usada pelo teto de US$ 1,50 por vídeo (D20). Confirmar sempre na página oficia
 | Provedor (config) | Modelo | Preço encontrado | Custo por chamada no config | Antes | Confiança |
 |---|---|---|---|---|---|
 | deepseek_chat | deepseek-flash (V4 Flash) | US$ 0,14 / 0,28 por 1M tokens | 0,001 | 0,001 | média (agregadores) |
-| deepseek_reasoner | deepseek-v4-pro | US$ 1,74 / 3,48 por 1M (promoção de 75% citada, talvez encerrada) | 0,012 | 0,003 | média |
+| deepseek_reasoner | deepseek-v4-pro | US$ 1,74 / 3,48 por 1M (promoção de 75% citada, talvez encerrada) | 0,014 | 0,003 | média |
 | gemini_flash | gemini-3.6-flash | US$ 1,50 / 7,50 por 1M (3.8 Flash citado a 0,75 / 3,75) | 0,015 | 0,003 | média — **testar 3.8 Flash** |
-| gemini_video | gemini-3.6-flash | ~290 tokens/s de vídeo + áudio | 0,03 por vídeo de 30 s | 0,05 | média |
+| gemini_video | gemini-3.6-flash | ~290 tokens/s de vídeo + áudio | 0,003 + 0,0009/s (30 s ≈ 0,03; sem duração conhecida, conta 60 s) | 0,05 | média |
 | gemini_voz | gemini-3.8-flash-tts | não encontrado | 0,01 (mantido) | — | baixa — confirmar no teste real |
 | nano_banana | gemini-3.1-flash-image | não encontrado (exige faturamento) | 0,06 (mantido) | 0,06 | baixa |
 | claude | CLAUDE_MODEL (claude-sonnet-5-5) | US$ 2 / 10 por 1M (Haiku 5.5: 0,10 / 0,50) | 0,02 | 0,02 | alta (referência oficial) |
 | openai_mini | gpt-5.4-mini | US$ 0,75 / 4,50 por 1M (página oficial) | 0,009 | 0,003 | alta |
 | openai_imagem / openai_voz | gpt-image-2 / gpt-4o-mini-tts | não confirmado | mantidos | — | baixa (sem chave em uso) |
 | fal_flux | flux/schnell | US$ 0,003 por megapixel | 0,004 | 0,004 | média |
-| fal_kling | kling v3 standard | US$ 0,112–0,14 por segundo (v3) | 0,112/s | 0,084/s | média |
+| fal_kling | kling v3 standard | US$ 0,112–0,14 por segundo (v3) | 0,14/s | 0,084/s | média |
 | fal_wan | wan-25-preview | US$ 0,05 / 0,10 / 0,15 por s (480p / 720p / 1080p) | 0,10/s | 0,05/s | média |
 | tavily | busca | 1.000 créditos grátis/mês; depois US$ 0,008 por crédito | 0 (dentro do grátis) | 0 | alta (docs oficiais) |
 

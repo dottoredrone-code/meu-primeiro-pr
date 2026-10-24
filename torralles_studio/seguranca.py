@@ -48,7 +48,7 @@ class Orcamento:
         cfg = provedor.cfg
         por_segundo = float(cfg.get("custo_usd_por_segundo", 0))
         try:
-            duracao = float(kwargs.get("duracao") or cls.DURACAO_PADRAO_S)
+            duracao = float(kwargs.get("duracao") or cfg.get("duracao_padrao_s") or cls.DURACAO_PADRAO_S)
         except (TypeError, ValueError):
             duracao = cls.DURACAO_PADRAO_S
         return float(cfg.get("custo_usd", 0)) + por_segundo * duracao

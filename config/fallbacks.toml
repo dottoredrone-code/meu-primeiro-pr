@@ -49,7 +49,7 @@ chave_env = "DEEPSEEK_API_KEY"
 
 [provedores.deepseek_reasoner]
 familia = "deepseek"  # juiz nunca é da mesma família de quem gerou
-custo_usd = 0.012  # KR1 24/10/2026: V4 Pro US$ 1,74/3,48 por 1M tokens (~5k entrada + 1,5k saída)
+custo_usd = 0.014  # KR1 24/10/2026: V4 Pro US$ 1,74/3,48 por 1M tokens (~5k entrada + 1,5k saída ≈ 0,0139)
 classe = "openai_compat"
 base_url = "https://api.deepseek.com"
 modelo = "deepseek-v4-pro"  # "deepseek-reasoner" foi aposentado; se indisponível, a cadeia segue
@@ -80,7 +80,7 @@ chave_env = "OPENAI_API_KEY"
 
 [provedores.openrouter_gratis]
 familia = "deepseek"  # família do MODELO, não do serviço: atualize junto quando trocar o modelo
-custo_usd = 0  # KR1 24/10/2026: 1.000 créditos grátis por mês (busca básica = 1); depois US$ 0,008 por crédito
+custo_usd = 0  # KR1 24/10/2026: modelos ":free" sem custo, com limite diário de pedidos por conta
 # Modelos ":free" do OpenRouter mudam com frequência: openrouter.ai/models?q=free
 classe = "openai_compat"
 base_url = "https://openrouter.ai/api/v1"
@@ -165,7 +165,7 @@ voz = "pt-BR-FranciscaNeural"
 # ---------------------------------------------------------------- vídeo
 
 [provedores.fal_kling]
-custo_usd_por_segundo = 0.112  # KR1 24/10/2026: Kling v3 no fal US$ 0,112–0,14/s (a favor do bolso)
+custo_usd_por_segundo = 0.14  # KR1 24/10/2026: Kling v3 no fal US$ 0,112–0,14/s (a favor do bolso: o maior)
 classe = "fal_video"
 modelo = "fal-ai/kling-video/v3/standard/image-to-video"
 campo_imagem = "start_image_url"  # o Kling v3 usa este nome de parâmetro
@@ -188,7 +188,9 @@ classe = "ken_burns"
 
 [provedores.gemini_video]
 familia = "google"  # juiz nunca é da mesma família de quem gerou
-custo_usd = 0.03  # KR1 24/10/2026: ~290 tokens/s de vídeo+áudio; 30 s ≈ 9k entrada + 2k saída no 3.6 Flash
+custo_usd = 0.003  # KR1 24/10/2026: ~290 tokens/s de vídeo+áudio no 3.6 Flash (30 s ≈ 9k entrada + 2k saída ≈ US$ 0,03)
+custo_usd_por_segundo = 0.0009  # a favor do bolso: vídeo de 20 min ≈ US$ 1,08
+duracao_padrao_s = 60  # quando a duração não é conhecida
 classe = "gemini_video"
 modelo = "gemini-3.6-flash"  # mesmo modelo da percepção; aceita vídeo + áudio e link do YouTube
 chave_env = "GEMINI_API_KEY"
