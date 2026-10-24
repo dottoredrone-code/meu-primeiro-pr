@@ -71,6 +71,19 @@ class TestLegendas(unittest.TestCase):
         self.assertEqual(len(legendas), 1)
         self.assertEqual(checar_legendas(legendas, 20), [])
 
+    def test_fala_rapida_divide_o_tempo_entre_blocos(self):  # chá verde: "O que uma xícara de chá" a 17,9 car./s
+        legendas = distribuir_legendas("O que uma xícara de chá verde pode fazer pelo seu corpo?", 0.2, 3.22,
+                                       max_chars=28, fim_cena=4.1)
+        self.assertEqual(len(legendas), 2)
+        self.assertEqual(checar_legendas(legendas, 28), [])
+        self.assertEqual(legendas[0][1], legendas[1][0])
+
+    def test_fala_rapida_no_fim_junta_ou_estica(self):  # chá verde: legendas 5 e 10
+        for texto, fim in [("Pode auxiliar no metabolismo e na perda de peso — mas não é solução mágica.", 4.6),
+                           ("Consuma com moderação e converse com um profissional.", 3.2)]:
+            legendas = distribuir_legendas(texto, 0.2, fim, max_chars=28, fim_cena=fim + 0.9)
+            self.assertEqual(checar_legendas(legendas, 28), [], texto)
+
     def test_corte_vai_para_a_pausa_real(self):
         texto = "Primeira parte da frase aqui, segunda parte da frase ali."
         legendas = distribuir_legendas(texto, 1.0, 5.0, [(3.4, 3.7)], max_chars=16)

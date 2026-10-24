@@ -164,6 +164,18 @@ class TestKenBurns(unittest.TestCase):
                                capture_output=True, text=True, check=True)
             self.assertEqual(r.stdout.strip(), "1080,1920")
 
+    def test_foto_jpeg_sai_na_faixa_de_cor_padrao(self):  # chá verde: foto JPEG gerava yuvj420p
+        with tempfile.TemporaryDirectory() as d:
+            img, saida = Path(d) / "foto.jpg", Path(d) / "out.mp4"
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=400x300",
+                            "-frames:v", "1", str(img)], check=True)
+            KenBurnsVideo("kb", {"largura": 320, "altura": 180}).executar(img, "", saida, duracao=0.4,
+                                                                          clima="alegre")
+            r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                "stream=pix_fmt", "-of", "csv=p=0", str(saida)],
+                               capture_output=True, text=True, check=True)
+            self.assertEqual(r.stdout.strip().strip(","), "yuv420p")
+
 
 class TestMovimentoKenBurns(unittest.TestCase):
     def test_le_o_movimento_do_prompt(self):

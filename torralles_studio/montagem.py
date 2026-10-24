@@ -225,6 +225,7 @@ def distribuir_legendas(texto, inicio_fala, fim_fala, pausas_internas=(), max_ch
     pesos = [sum(len(l) for l in b) for b in blocos]
     total, dur = sum(pesos), fim_fala - inicio_fala
     inis, fins, acumulado = [inicio_fala], [], 0
+    de_pausa = set()  # entradas que caem numa pausa real: não se movem depois
     for p in pesos[:-1]:
         acumulado += p
         estimado = inicio_fala + dur * acumulado / total
@@ -235,16 +236,20 @@ def distribuir_legendas(texto, inicio_fala, fim_fala, pausas_internas=(), max_ch
             entra = max(a, b - 0.1)
             fins.append(min(a + 0.4, entra))  # nunca depois que o seguinte entra (pausa curta)
             inis.append(entra)
+            de_pausa.add(entra)
         else:
             estimado = max(estimado, inis[-1] + 0.3)  # nunca antes do bloco anterior (fala rápida demais)
             fins.append(estimado)
             inis.append(estimado)
     teto = fim_fala + 0.8 if fim_cena is None else max(fim_fala, fim_cena)
     fins.append(min(fim_fala + 0.4, teto))
-    # Bloco que ficaria menos de 1 s na tela junta com o vizinho, se os dois couberem em 2 linhas.
+    # Bloco que não daria tempo de ler (menos de 1 s ou mais de 17 caracteres/s, mesmo esticando até o
+    # próximo) junta com o vizinho, se os dois couberem em 2 linhas. Fala rápida de TTS cai aqui.
     i = 0
     while len(blocos) > 1 and i < len(blocos):
-        if fins[i] - inis[i] >= lim["min_s"]:
+        precisa = max(lim["min_s"], sum(len(l) for l in blocos[i]) / lim["cps"])
+        cabe_ate = inis[i + 1] if i + 1 < len(blocos) else max(fins[i], min(teto, fim_fala + 0.8))
+        if fins[i] - inis[i] >= lim["min_s"] and cabe_ate - inis[i] >= precisa - 1e-6:
             i += 1
             continue
         j = i if i + 1 < len(blocos) else i - 1  # junta j com j+1
@@ -255,9 +260,26 @@ def distribuir_legendas(texto, inicio_fala, fim_fala, pausas_internas=(), max_ch
         blocos[j:j + 2] = [juntas]
         del fins[j], inis[j + 1]
         i = max(0, j - 1)
+    # Blocos colados (sem pausa entre eles) dividem o tempo: a fronteira anda para que os dois fiquem
+    # ≤ 17 caracteres/s; se não houver tempo para os dois, divide pelo tamanho do texto.
+    def precisa_de(k):
+        return max(lim["min_s"], sum(len(l) for l in blocos[k]) / lim["cps"] + 0.01)  # folga do arredondamento
+    for i in range(len(blocos) - 1):
+        if fins[i] < inis[i + 1] - 1e-6 or inis[i + 1] in de_pausa:
+            continue  # há pausa entre os dois: cada um já tem o seu tempo
+        fim_seguinte = inis[i + 2] if i + 2 < len(blocos) else max(fins[i + 1], min(teto, fim_fala + 0.8))
+        menor, maior = inis[i] + precisa_de(i), fim_seguinte - precisa_de(i + 1)
+        if menor <= maior:
+            fronteira = min(max(fins[i], menor), maior)
+        else:
+            a, b = sum(map(len, blocos[i])), sum(map(len, blocos[i + 1]))
+            fronteira = inis[i] + (fim_seguinte - inis[i]) * a / (a + b)
+        fronteira = min(fronteira, max(fim_fala - 0.1, inis[i + 1]))  # nunca entra depois que a fala acaba
+        fins[i] = inis[i + 1] = fronteira
+        fins[i + 1] = max(fins[i + 1], fronteira)
     # Tempo mínimo de leitura: estica o fim até o próximo bloco (ou o fim da cena, no máx. 0,8 s após a fala).
     for i, b in enumerate(blocos):
-        precisa = max(lim["min_s"], sum(len(l) for l in b) / lim["cps"])
+        precisa = max(lim["min_s"], sum(len(l) for l in b) / lim["cps"] + 0.01)  # folga do arredondamento
         limite = inis[i + 1] if i + 1 < len(blocos) else min(teto, fim_fala + 0.8)
         if fins[i] - inis[i] < precisa:
             fins[i] = max(fins[i], min(inis[i] + precisa, limite))
@@ -588,7 +610,8 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
                           f"offset={tempos[k]['inicio']:.3f}[x{k}]")
             ultimo = f"[x{k}]"
         cadeia = ";".join(partes) + ";"
-    filtro = f"{cadeia}{ultimo}ass=legendas.ass,format=yuv420p[v]"
+    # Foto JPEG traz faixa de cor "cheia" (yuvj420p); vídeo para redes precisa da faixa padrão (tv).
+    filtro = f"{cadeia}{ultimo}ass=legendas.ass,scale=out_range=tv,format=yuv420p[v]"
     _ff([*entradas, "-filter_complex", filtro, "-map", "[v]", "-map", f"{len(clipes)}:a", "-t", f"{total}",
          "-c:v", "libx264", "-preset", c["preset"], "-crf", str(c["crf"]), "-r", str(c["fps"]),
          "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", str(saida)], cwd=pasta)

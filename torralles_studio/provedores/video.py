@@ -64,6 +64,7 @@ class KenBurnsVideo(Provedor):
         )
         if clima and self.cfg.get("efeitos", True):
             filtro += "," + ",".join(efeitos_do_clima(clima, largura, altura))
+        filtro += ",scale=out_range=tv,format=yuv420p"  # foto JPEG vem com faixa de cor cheia (yuvj)
         saida = Path(saida)
         saida.parent.mkdir(parents=True, exist_ok=True)
         cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(imagem), "-vf", filtro,
