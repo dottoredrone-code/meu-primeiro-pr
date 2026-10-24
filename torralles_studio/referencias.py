@@ -86,8 +86,11 @@ def _tempo(dados, campo, duracao, padrao=None):
     return float(min(valor, duracao))
 
 
-def validar_analise(texto):
-    """Confere e normaliza o JSON da análise; erro (ValueError) faz o roteador tentar o próximo provedor."""
+def validar_analise(texto, duracao_medida=None):
+    """Confere e normaliza o JSON da análise; erro (ValueError) faz o roteador tentar o próximo provedor.
+
+    duracao_medida: a do FFmpeg (arquivo local); os tempos são conferidos contra ela, não contra a estimativa.
+    """
     dados = extrair_json(texto)
     saida = {
         "duracao_s": _numero(dados, "duracao_s", 1, 4 * 3600),
@@ -97,6 +100,8 @@ def validar_analise(texto):
     }
     musica = dados.get("musica") if isinstance(dados.get("musica"), dict) else {}
     saida["musica"] = {"tem": bool(musica.get("tem")), "abaixo_da_voz": bool(musica.get("abaixo_da_voz"))}
+    if duracao_medida:
+        saida["duracao_s"] = float(duracao_medida)
     dur = saida["duracao_s"]
     estrutura = []
     for p in dados.get("estrutura") or []:
@@ -106,7 +111,7 @@ def validar_analise(texto):
             ini, fim = _tempo(p, "inicio_s", dur), _tempo(p, "fim_s", dur)
         except ValueError:
             continue
-        if ini <= fim:
+        if ini <= fim and ini < dur:  # parte que começa depois do fim do vídeo é inventada: sai
             estrutura.append({"parte": p["parte"].lower(), "inicio_s": round(ini, 1), "fim_s": round(fim, 1),
                               "resumo": _curto(p.get("resumo"))})
     if not estrutura:
@@ -171,6 +176,7 @@ def analisar_referencia(roteador, video, categoria, *, nome_categoria=None, form
 
     formato: o da categoria ("15–60 s"); a maior duração dele estima o custo de um link (duração desconhecida).
     """
+    from .banco import _hash_arquivo
     from .provedores.juiz_video import eh_youtube
 
     local = not eh_youtube(video)
@@ -179,7 +185,7 @@ def analisar_referencia(roteador, video, categoria, *, nome_categoria=None, form
     if local:
         medidas = _medir_local(video)  # grátis e antes da chamada paga: se o FFmpeg falhar, nada é cobrado
         duracao = medidas["duracao_s"] or None
-        ident = sha256(Path(video).read_bytes()).hexdigest()[:12]  # mesmo arquivo em outro caminho = mesmo id
+        ident = _hash_arquivo(video)[:12]  # mesmo arquivo em outro caminho = mesmo id (lido em blocos)
         origem = Path(video).name  # só o nome (sem caminho do PC)
     else:
         medidas, duracao = {}, _duracao_maxima(formato)
@@ -187,7 +193,8 @@ def analisar_referencia(roteador, video, categoria, *, nome_categoria=None, form
         ident = sha256(f"youtube:{yid}".encode()).hexdigest()[:12]
         origem = f"https://www.youtube.com/watch?v={yid}"  # link canônico, sem tokens de compartilhamento
     r = roteador.executar("juiz_video", video=str(video).strip(), prompt=_prompt(categoria, nome_categoria),
-                          sistema=SISTEMA, duracao=duracao, validar=validar_analise)
+                          sistema=SISTEMA, duracao=duracao,
+                          validar=lambda texto: validar_analise(texto, duracao if local else None))
     analise = r.valor
     for campo in ("duracao_s", "cortes_por_minuto", "duracao_media_plano_s"):
         if medidas.get(campo) is not None:  # medido vale mais que estimado, inclusive 0 cortes

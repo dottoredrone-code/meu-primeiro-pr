@@ -90,6 +90,13 @@ class TestValidacao(unittest.TestCase):
         self.assertTrue(all(len(v["evidencia"]) <= LIMITE_TRECHO for v in a["potencial"].values()))
         self.assertLessEqual(len(a["ancoras_sugeridas"]["gancho"]), LIMITE_TRECHO)
 
+    def test_tempos_conferidos_pela_duracao_medida(self):
+        estrutura = [{"parte": "gancho", "inicio_s": 0, "fim_s": 50}, {"parte": "cta", "inicio_s": 50, "fim_s": 70}]
+        a = validar_analise(json.dumps({**BOA, "duracao_s": 30, "estrutura": estrutura}), duracao_medida=60)
+        self.assertEqual([(e["inicio_s"], e["fim_s"]) for e in a["estrutura"]], [(0, 50), (50, 60)])
+        b = validar_analise(json.dumps({**BOA, "duracao_s": 30, "estrutura": estrutura}))
+        self.assertEqual([e["parte"] for e in b["estrutura"]], ["gancho"])  # cta começa depois do fim: sai
+
     def test_duracao_maxima_do_formato(self):
         self.assertEqual([_duracao_maxima(f) for f in ("15–60 s, vertical", "5–20 min", "curto ou longo", None)],
                          [60, 1200, 1200, None])

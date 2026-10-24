@@ -27,7 +27,7 @@ PROPORCOES = {"9:16", "16:9", "1:1", "4:5"}
 # O perfil ajusta estilo do provedor (voz, tamanho…), nunca o que é regra do produto:
 # chaves e endereços (segurança), modelo e custo (teto D20 e modelos como dados, KR1), família (juízes).
 CAMPOS_PROIBIDOS = {"classe", "base_url", "familia", "modelo", "custo_usd", "custo_usd_por_segundo", "timeout",
-                    "cache"}
+                    "cache", "duracao_padrao_s"}
 
 
 class ErroPerfil(ValueError):

@@ -171,3 +171,14 @@
 - **Conferência custa:** cada transcrição entra no orçamento do vídeo; sem teto, não confere.
 - **Refazer não pode piorar:** a 2ª tentativa vai para outro arquivo e só fica se for melhor.
 - 2 rodadas de verificação (3 altos + 2 médios na 1ª; aprovado na 2ª).
+
+## Camada 5 — Referências: KR1 + K12 (24/10/2026)
+- **Modelo devolve NaN e Infinity em JSON** (o `json` do Python aceita): sem `math.isfinite`, um NaN passa pelas
+  faixas e estraga as médias (K13). Todo número de modelo: finito, dentro da faixa, tempos dentro do vídeo.
+- **Medir de graça antes de pagar:** a medição do FFmpeg vem antes da chamada paga; se falhar, nada é cobrado.
+  E o medido vale mais que o estimado, inclusive o 0 (`is not None`, não "verdadeiro").
+- **Mesmo vídeo, vários links:** o id sai do id do vídeo (não do texto do link), e o token `si=` não é guardado.
+- **Custo fixo por chamada engana em mídia longa:** juiz de vídeo cobra por segundo; sem duração conhecida, conta
+  a maior da categoria. Campo novo de custo também fica fora da chave do cache e fora do alcance dos perfis.
+- **Preço "a favor do bolso" é o maior da faixa,** conferido pela conta, não pelo comentário.
+- 2 rodadas de verificação (5 médios na 1ª; aprovado com 4 baixos na 2ª, corrigidos).

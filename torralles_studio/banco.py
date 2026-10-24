@@ -194,7 +194,7 @@ MIGRACOES = [
 _FORA_DA_CHAVE = {"saida"}
 # Campos do config do provedor que não mudam o resultado (o resto — voz, tamanho, base_url… — entra na chave).
 _CFG_FORA_DA_CHAVE = {"chave_env", "modelo_env", "timeout", "familia", "custo_usd", "custo_usd_por_segundo",
-                      "cache", "classe"}
+                      "duracao_padrao_s", "cache", "classe"}
 _ARQUIVOS = {"imagem", "audio", "video"}
 _PRONTOS = ("aprovado", "revisar")
 
