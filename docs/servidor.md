@@ -12,8 +12,16 @@ python -m torralles_studio servidor            # http://127.0.0.1:8765, só este
 - `GET /v1/pecas/{job_id}` → status (`na_fila`, `produzindo`, `aguardando_aprovacao`, `concluido`, `falhou`) e,
   quando pronto, `arquivos` (caminho e sha256), `qualidade`, `custo_usd`, `creditos`, `exportacao_capcut`.
 - Pedido com problema → `422 {"erro": "pedido inválido", "problemas": [...]}` (diz o campo e o porquê).
-- Proteção: defina `TORRALLES_STUDIO_TOKEN` no `.env` e mande `Authorization: Bearer <token>`. Para escutar fora
-  deste PC (`--host`), o token é obrigatório.
+- Proteção:
+  - o pedido precisa ir com `Content-Type: application/json` (formulário de site é recusado: 415);
+  - pedido vindo de página de outro site (cabeçalho `Origin` fora de `localhost`/`127.0.0.1`) é recusado (403),
+    assim como nome de host diferente de `127.0.0.1`/`localhost` (403);
+  - até 20 pedidos esperando ao mesmo tempo; acima disso, 429 (tente de novo depois);
+  - defina `TORRALLES_STUDIO_TOKEN` no `.env` e mande `Authorization: Bearer <token>`. Para escutar fora deste PC
+    (`--host`), o token é obrigatório.
+- Servidor e MCP podem rodar juntos na mesma fila: cada pedido é produzido por um só deles; se um processo cair,
+  o pedido dele volta para a fila depois de 3 minutos sem sinal de vida. O teto do pedido vale também nas retomadas
+  (o gasto já feito é descontado).
 
 Exemplo (PowerShell):
 ```powershell

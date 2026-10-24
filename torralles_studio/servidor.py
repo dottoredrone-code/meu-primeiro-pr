@@ -14,15 +14,21 @@ import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .servico import PedidoInvalido
+from .seguranca import mascarar
+from .servico import FilaCheia, PedidoInvalido
 
 LIMITE_CORPO = 1_000_000  # 1 MB: um pedido é texto; nada de upload por aqui
+_LOCAL = ("127.0.0.1", "localhost", "[::1]")
+# Origem de navegador aceita: só páginas deste PC (o painel do Ops em localhost). Site de fora → 403 (CSRF).
+_ORIGEM_LOCAL = re.compile(r"^https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$")
+VERSOES_MCP = ("2025-06-18", "2025-03-26", "2024-11-05")
 _ROTA_PECA = re.compile(r"^/v1/pecas/([A-Za-z0-9_-]{1,64})$")
 
 
-def _manipulador(servico, token):
+def _manipulador(servico, token, so_local):
     class Manipulador(BaseHTTPRequestHandler):
         server_version = "TorrallesStudio/1"
+        timeout = 30  # conexão parada não prende o servidor
 
         def log_message(self, *args):  # silencioso: o terminal mostra só o andamento da produção
             pass
@@ -41,9 +47,23 @@ def _manipulador(servico, token):
             recebido = self.headers.get("Authorization", "")
             return hmac.compare_digest(recebido.encode(), f"Bearer {token}".encode())
 
-        def do_GET(self):
+        def _barrar(self):
+            """Resposta de recusa (ou None se pode seguir): host, origem de navegador e token."""
+            cabecalho = self.headers.get("Host") or ""
+            host = cabecalho.split("]")[0] + "]" if cabecalho.startswith("[") else cabecalho.rsplit(":", 1)[0]
+            if so_local and host not in _LOCAL:  # contra "DNS rebinding": nome de outro site apontando para cá
+                return 403, {"erro": "host não permitido"}
+            origem = self.headers.get("Origin")
+            if origem is not None and not _ORIGEM_LOCAL.match(origem):
+                return 403, {"erro": "origem não permitida"}
             if not self._autorizado():
-                return self._responder(401, {"erro": "token ausente ou errado"})
+                return 401, {"erro": "token ausente ou errado"}
+            return None
+
+        def do_GET(self):
+            barrado = self._barrar()
+            if barrado:
+                return self._responder(*barrado)
             if self.path == "/v1/saude":
                 return self._responder(200, {"ok": True})
             m = _ROTA_PECA.match(self.path)
@@ -53,10 +73,14 @@ def _manipulador(servico, token):
             return self._responder(200, r) if r else self._responder(404, {"erro": "pedido não encontrado"})
 
         def do_POST(self):
-            if not self._autorizado():
-                return self._responder(401, {"erro": "token ausente ou errado"})
+            barrado = self._barrar()
+            if barrado:
+                return self._responder(*barrado)
             if self.path != "/v1/pecas":
                 return self._responder(404, {"erro": "rota não encontrada"})
+            tipo = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if tipo != "application/json":  # formulário de site (text/plain) não passa: exige JSON de verdade
+                return self._responder(415, {"erro": "envie o pedido com Content-Type: application/json"})
             try:
                 tamanho = int(self.headers.get("Content-Length") or 0)
             except ValueError:
@@ -71,6 +95,10 @@ def _manipulador(servico, token):
                 return self._responder(202, servico.enviar(dados))
             except PedidoInvalido as e:
                 return self._responder(422, {"erro": "pedido inválido", "problemas": e.problemas})
+            except FilaCheia as e:
+                return self._responder(429, {"erro": str(e)})
+            except Exception as e:  # nunca derruba a conexão sem resposta
+                return self._responder(500, {"erro": mascarar(f"{type(e).__name__}: {e}")[:300]})
 
     return Manipulador
 
@@ -79,7 +107,7 @@ def criar_servidor_http(servico, host="127.0.0.1", porta=8765, token=None):
     token = token if token is not None else os.environ.get("TORRALLES_STUDIO_TOKEN") or None
     if host not in ("127.0.0.1", "localhost", "::1") and not token:
         raise ValueError("para escutar fora deste PC, defina TORRALLES_STUDIO_TOKEN (proteção do servidor)")
-    return ThreadingHTTPServer((host, porta), _manipulador(servico, token))
+    return ThreadingHTTPServer((host, porta), _manipulador(servico, token, so_local=host in ("127.0.0.1", "localhost", "::1")))
 
 
 # ---------------------------------------------------------------- MCP (stdio)
@@ -106,8 +134,12 @@ def responder_mcp(servico, mensagem):
     def ok(resultado):
         return {"jsonrpc": "2.0", "id": ident, "result": resultado}
 
+    params = mensagem.get("params")
+    if params is not None and not isinstance(params, dict):
+        return {"jsonrpc": "2.0", "id": ident, "error": {"code": -32602, "message": "params precisa ser um objeto"}}
     if metodo == "initialize":
-        versao = (mensagem.get("params") or {}).get("protocolVersion") or "2025-06-18"
+        pedida = (params or {}).get("protocolVersion")
+        versao = pedida if pedida in VERSOES_MCP else VERSOES_MCP[0]
         return ok({"protocolVersion": versao, "capabilities": {"tools": {}},
                    "serverInfo": {"name": "torralles-studio", "version": "1.0"}})
     if metodo == "ping":
@@ -115,8 +147,9 @@ def responder_mcp(servico, mensagem):
     if metodo == "tools/list":
         return ok({"tools": FERRAMENTAS})
     if metodo == "tools/call":
-        params = mensagem.get("params") or {}
-        nome, args = params.get("name"), params.get("arguments") or {}
+        nome, args = (params or {}).get("name"), (params or {}).get("arguments") or {}
+        if not isinstance(args, dict):
+            return {"jsonrpc": "2.0", "id": ident, "error": {"code": -32602, "message": "arguments precisa ser um objeto"}}
         try:
             if nome == "produzir_peca":
                 corpo, erro = servico.enviar(args.get("pedido")), False
@@ -127,8 +160,22 @@ def responder_mcp(servico, mensagem):
                 return {"jsonrpc": "2.0", "id": ident, "error": {"code": -32602, "message": f"ferramenta {nome!r}"}}
         except PedidoInvalido as e:
             corpo, erro = {"erro": "pedido inválido", "problemas": e.problemas}, True
+        except FilaCheia as e:
+            corpo, erro = {"erro": str(e)}, True
         return ok({"content": [{"type": "text", "text": json.dumps(corpo, ensure_ascii=False)}], "isError": erro})
     return {"jsonrpc": "2.0", "id": ident, "error": {"code": -32601, "message": f"método desconhecido: {metodo}"}}
+
+
+def isolar_stdin():
+    """Entrega o canal JSON-RPC (stdin original) e põe 'nada' no lugar do stdin do processo.
+
+    Assim nenhum programa filho (FFmpeg) lê bytes das mensagens do Hermes.
+    """
+    canal = os.dup(0)
+    nulo = os.open(os.devnull, os.O_RDONLY)
+    os.dup2(nulo, 0)
+    os.close(nulo)
+    return os.fdopen(canal, "r", encoding="utf-8")
 
 
 def servir_mcp(servico, entrada=None, saida=None):
@@ -138,12 +185,17 @@ def servir_mcp(servico, entrada=None, saida=None):
         linha = linha.strip()
         if not linha:
             continue
+        mensagem = None
         try:
             mensagem = json.loads(linha)
             resposta = responder_mcp(servico, mensagem) if isinstance(mensagem, dict) else {
                 "jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "mensagem inválida"}}
         except json.JSONDecodeError:
             resposta = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "JSON inválido"}}
+        except Exception as e:  # o processo MCP nunca morre por causa de uma mensagem
+            ident = mensagem.get("id") if isinstance(mensagem, dict) else None
+            resposta = {"jsonrpc": "2.0", "id": ident,
+                        "error": {"code": -32603, "message": mascarar(f"{type(e).__name__}: {e}")[:300]}}
         if resposta is not None:
             saida.write(json.dumps(resposta, ensure_ascii=False) + "\n")
             saida.flush()

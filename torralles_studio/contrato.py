@@ -4,7 +4,10 @@ validar_pedido() confere o pedido e devolve (pedido_normalizado, problemas). O m
 HTTP local, para o MCP (Hermes) e para outros sistemas: o Studio não depende do Ops.
 """
 
+import math
 import re
+
+from .perfis import ID_VALIDO
 
 VERSAO = "1.0"
 CAMPOS_BRIEFING = ("tipo_peca", "conceito_visual", "paleta_cores", "formato_dimensoes", "texto_overlay",
@@ -33,6 +36,8 @@ def proporcao_do_formato(formato, entregavel):
     """'1080x1920' → '9:16'; '1:1' → '1:1'; sem formato claro, o padrão do entregável."""
     texto = str(formato or "").lower().replace(" ", "")
     m = re.search(r"(\d{3,4})[x×:](\d{3,4})", texto) or re.search(r"(\d{1,2}):(\d{1,2})", texto)
+    if not m and re.search(r"\d", texto):
+        return None  # tem números mas não é um tamanho válido (ex.: "1080x0"): recusa em vez de adivinhar
     if m:
         w, h = int(m.group(1)), int(m.group(2))
         r = w / h if h else 0
@@ -80,21 +85,31 @@ def validar_pedido(dados):
         problemas.append("fatos_travados precisa ser um objeto com textos ou números")
         fatos = {}
     orcamento = dados.get("orcamento") or {}
+    if not isinstance(orcamento, dict):
+        problemas.append("orcamento precisa ser um objeto")
+        orcamento = {}
     modo = orcamento.get("modo", "economico")
     if modo not in MODOS:
         problemas.append(f"orcamento.modo {modo!r} inválido (use {', '.join(MODOS)})")
-    try:
-        teto = min(float(orcamento.get("custo_maximo_usd", TETO_USD)), TETO_USD)
-        if teto <= 0:
-            raise ValueError
-    except (TypeError, ValueError):
+    custo = orcamento.get("custo_maximo_usd", TETO_USD)
+    if isinstance(custo, bool) or not isinstance(custo, (int, float)) or not math.isfinite(custo) or custo <= 0:
         problemas.append("orcamento.custo_maximo_usd precisa ser um número maior que zero")
         teto = TETO_USD
+    else:
+        teto = min(float(custo), TETO_USD)
+    duracao = dados.get("duracao_s", 15 if principal == "story" else 30)
+    if isinstance(duracao, bool) or not isinstance(duracao, (int, float)) or not math.isfinite(duracao) \
+            or not 5 <= duracao <= 90:
+        problemas.append("duracao_s precisa ser um número de 5 a 90 segundos")
+        duracao = 30
+    aprovacao = dados.get("aprovacao_humana", True)
+    if not isinstance(aprovacao, bool):
+        problemas.append("aprovacao_humana precisa ser true ou false")
     contexto = dados.get("contexto_campanha") if isinstance(dados.get("contexto_campanha"), dict) else {}
     origem = dados.get("origem") if isinstance(dados.get("origem"), dict) else {}
     perfil = dados.get("perfil")
-    if perfil is not None and not (isinstance(perfil, str) and re.fullmatch(r"[a-z0-9][a-z0-9-]{1,40}", perfil)):
-        problemas.append("perfil precisa ser o id de um perfil do Studio (letras minúsculas, números e hífen)")
+    if perfil is not None and not (isinstance(perfil, str) and ID_VALIDO.match(perfil)):
+        problemas.append("perfil precisa ser o id de um perfil do Studio (minúsculas, números, hífen ou _)")
     if problemas:
         return None, problemas
     return {
@@ -104,8 +119,8 @@ def validar_pedido(dados):
         "fatos_travados": {k: str(v) for k, v in fatos.items()},
         "entregaveis": entregaveis, "entregavel": principal, "proporcao": proporcao,
         "orcamento": {"custo_maximo_usd": round(teto, 2), "modo": modo},
-        "duracao_s": int(dados.get("duracao_s") or (15 if principal == "story" else 30)),
-        "aprovacao_humana": bool(dados.get("aprovacao_humana", True)),
+        "duracao_s": int(round(duracao)),
+        "aprovacao_humana": aprovacao,
     }, []
 
 

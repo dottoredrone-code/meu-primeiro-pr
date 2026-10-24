@@ -58,6 +58,16 @@ class TestContrato(unittest.TestCase):
         self.assertIn("ainda não é produzido", " ".join(validar_pedido(p)[1]))
 
 
+def _pegar(caminho):
+    import os
+    import time
+
+    with Banco(caminho) as banco:
+        time.sleep(0.2)  # todos tentam juntos
+        p = banco.proximo_pedido(str(os.getpid()))
+    return p["id"] if p else None
+
+
 class Fabrica:
     def __init__(self, falhar=False):
         self.falhar, self.chamadas = falhar, []
@@ -109,10 +119,33 @@ class TestFila(unittest.TestCase):
         s = ServicoPecas(self.d / "b.db", pasta_base=self.d / "pedidos", fabricar=Fabrica())
         r = s.enviar(PEDIDO)
         with Banco(self.d / "b.db") as banco:
-            banco.proximo_pedido()  # o Studio "parou" no meio
-            self.assertEqual(banco.pedido(r["job_id"])["status"], "produzindo")
+            banco.proximo_pedido("outro-processo")
+        # outro processo vivo (batimento recente): abrir um segundo servidor NÃO tira o pedido dele
         s2 = ServicoPecas(self.d / "b.db", pasta_base=self.d / "pedidos", fabricar=Fabrica())
-        self.assertEqual(s2.consultar(r["job_id"])["status"], "na_fila")
+        self.assertEqual(s2.consultar(r["job_id"])["status"], "produzindo")
+        with Banco(self.d / "b.db") as banco:  # o processo morreu: sem batimento há 10 minutos
+            banco.con.execute("UPDATE pedidos SET atualizado_em = '2000-01-01T00:00:00+00:00'")
+            banco.con.commit()
+        s3 = ServicoPecas(self.d / "b.db", pasta_base=self.d / "pedidos", fabricar=Fabrica())
+        self.assertEqual(s3.consultar(r["job_id"])["status"], "na_fila")
+
+    def test_dois_processos_nunca_pegam_o_mesmo_pedido(self):  # verificador K28: pagaria duas vezes
+        import multiprocessing as mp
+
+        s = ServicoPecas(self.d / "b.db", fabricar=Fabrica())
+        s.enviar(PEDIDO)
+        with mp.get_context("spawn").Pool(4) as pool:
+            pegos = pool.map(_pegar, [str(self.d / "b.db")] * 4)
+        self.assertEqual(sum(1 for p in pegos if p), 1)
+
+    def test_fila_tem_limite(self):
+        from torralles_studio import servico as mod
+
+        s = ServicoPecas(self.d / "b.db", fabricar=Fabrica())
+        for _ in range(mod.LIMITE_FILA):
+            s.enviar(PEDIDO)
+        with self.assertRaises(mod.FilaCheia):
+            s.enviar(PEDIDO)
 
     def test_pedido_invalido_nao_entra_na_fila(self):
         s = ServicoPecas(self.d / "b.db", fabricar=Fabrica())
@@ -135,11 +168,12 @@ class TestHTTP(unittest.TestCase):
         self.addCleanup(http.shutdown)
         return f"http://127.0.0.1:{http.server_address[1]}"
 
-    def pedir(self, url, corpo=None, token=None):
+    def pedir(self, url, corpo=None, token=None, extra=None):
         dados = json.dumps(corpo).encode() if corpo is not None else None
         req = urllib.request.Request(url, data=dados, method="POST" if dados else "GET",
                                      headers={"Content-Type": "application/json",
-                                              **({"Authorization": f"Bearer {token}"} if token else {})})
+                                              **({"Authorization": f"Bearer {token}"} if token else {}),
+                                              **(extra or {})})
         try:
             with urllib.request.urlopen(req, timeout=10) as r:
                 return r.status, json.loads(r.read())
@@ -163,12 +197,73 @@ class TestHTTP(unittest.TestCase):
         self.assertEqual(self.pedir(f"{base}/v1/pecas", PEDIDO)[0], 401)
         self.assertEqual(self.pedir(f"{base}/v1/pecas", PEDIDO, token="segredo-de-teste")[0], 202)
 
+    def test_site_de_fora_nao_poe_pedido_na_fila(self):  # verificador K28: CSRF e DNS rebinding
+        base = self.iniciar()
+        url = f"{base}/v1/pecas"
+        self.assertEqual(self.pedir(url, PEDIDO, extra={"Content-Type": "text/plain"})[0], 415)
+        self.assertEqual(self.pedir(url, PEDIDO, extra={"Origin": "https://site-estranho.example"})[0], 403)
+        self.assertEqual(self.pedir(url, PEDIDO, extra={"Host": "site-estranho.example"})[0], 403)
+        self.assertEqual(self.pedir(url, PEDIDO, extra={"Origin": "http://localhost:3000"})[0], 202)  # painel do Ops
+
+    def test_fila_cheia_responde_429(self):
+        from torralles_studio import servico as mod
+
+        base = self.iniciar()
+        for _ in range(mod.LIMITE_FILA):
+            self.servico.enviar(PEDIDO)
+        self.assertEqual(self.pedir(f"{base}/v1/pecas", PEDIDO)[0], 429)
+
     def test_fora_do_pc_exige_token(self):
         with self.assertRaises(ValueError):
             criar_servidor_http(self.servico, "0.0.0.0", 0, token="")
 
 
 class TestMCP(unittest.TestCase):
+    def test_mensagens_estranhas_nao_derrubam(self):  # verificador K28
+        with tempfile.TemporaryDirectory() as d:
+            servico = ServicoPecas(Path(d) / "b.db", fabricar=Fabrica())
+            ruins = [{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": [1]},
+                     {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                      "params": {"name": "produzir_peca", "arguments": "texto"}},
+                     {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                      "params": {"name": "produzir_peca", "arguments": {"pedido": {**PEDIDO, "duracao_s": "abc"}}}},
+                     {"jsonrpc": "2.0", "id": 4, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}}]
+            saida = io.StringIO()
+            servir_mcp(servico, io.StringIO("\n".join(json.dumps(m) for m in ruins) + "\n"), saida)
+            r = [json.loads(l) for l in saida.getvalue().splitlines()]
+            self.assertEqual([x["id"] for x in r], [1, 2, 3, 4])
+            self.assertEqual(r[0]["error"]["code"], -32602)
+            self.assertEqual(r[1]["error"]["code"], -32602)
+            self.assertTrue(r[2]["result"]["isError"])  # pedido inválido volta explicado
+            self.assertEqual(r[3]["result"]["protocolVersion"], "2025-06-18")  # versão que o Studio suporta
+
+    def test_erro_inesperado_vira_resposta_32603(self):
+        class Quebrado:
+            def enviar(self, dados):
+                raise RuntimeError("falha com sk-abcdefghijklmnopqrstu")
+
+        saida = io.StringIO()
+        servir_mcp(Quebrado(), io.StringIO(json.dumps({"jsonrpc": "2.0", "id": 9, "method": "tools/call",
+                                                       "params": {"name": "produzir_peca",
+                                                                  "arguments": {"pedido": {}}}}) + "\n"), saida)
+        r = json.loads(saida.getvalue())
+        self.assertEqual(r["error"]["code"], -32603)
+        self.assertNotIn("abcdefghijklmnopqrstu", r["error"]["message"])
+
+    def test_ffmpeg_nao_le_as_mensagens_do_hermes(self):  # verificador K28: stdin isolado
+        import sys
+
+        roteiro = (
+            "import subprocess, sys\n"
+            "from torralles_studio.servidor import isolar_stdin\n"
+            "canal = isolar_stdin()\n"
+            "filho = subprocess.run([sys.executable, '-c', 'import sys; print(len(sys.stdin.read()))'],"
+            " capture_output=True, text=True)\n"
+            "print(filho.stdout.strip(), canal.read().strip())\n")
+        r = subprocess.run([sys.executable, "-c", roteiro], input='{"jsonrpc": "2.0"}\n', capture_output=True,
+                           text=True, cwd=Path(__file__).resolve().parent.parent)
+        self.assertEqual(r.stdout.split(" ", 1), ["0", '{"jsonrpc": "2.0"}\n'])
+
     def test_conversa_completa(self):
         with tempfile.TemporaryDirectory() as d:
             servico = ServicoPecas(Path(d) / "b.db", fabricar=Fabrica())

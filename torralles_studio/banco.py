@@ -11,7 +11,7 @@ import hashlib
 import json
 import shutil
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 MIGRACOES = [
@@ -182,6 +182,10 @@ MIGRACOES = [
         "CREATE TABLE pedidos (id TEXT PRIMARY KEY, status TEXT NOT NULL, origem_json TEXT, pedido_json TEXT NOT NULL, "
         "resultado_json TEXT, erro TEXT, criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL)",
         "CREATE INDEX idx_pedidos_status ON pedidos(status, criado_em)",
+    ],
+    # 8 — quem está produzindo cada pedido (vários processos na mesma fila: só retoma pedido órfão)
+    [
+        "ALTER TABLE pedidos ADD COLUMN dono TEXT",
     ],
 ]
 # Cada migração é uma lista de comandos (sem partir por ";", que quebraria textos e gatilhos).
@@ -508,22 +512,44 @@ class Banco:
                              (status, json.dumps(resultado, ensure_ascii=False) if resultado is not None else None,
                               erro, _agora(), pedido_id))
 
-    def proximo_pedido(self):
-        """Pega o pedido mais antigo da fila e já o marca como 'produzindo' (um trabalhador por vez)."""
-        with self.con:
+    def proximo_pedido(self, dono=None):
+        """Pega o pedido mais antigo da fila e o marca como 'produzindo' por `dono`.
+
+        O UPDATE só vale se o pedido ainda estiver na fila: com vários processos (HTTP e MCP), um pedido nunca é
+        pego por dois trabalhadores (nem pago duas vezes).
+        """
+        for _ in range(5):
             linha = self.con.execute("SELECT id FROM pedidos WHERE status = 'na_fila' ORDER BY criado_em, rowid "
                                      "LIMIT 1").fetchone()
             if not linha:
                 return None
-            self.con.execute("UPDATE pedidos SET status = 'produzindo', atualizado_em = ? WHERE id = ?",
-                             (_agora(), linha["id"]))
-        return self.pedido(linha["id"])
+            with self.con:
+                pego = self.con.execute("UPDATE pedidos SET status = 'produzindo', dono = ?, atualizado_em = ? "
+                                        "WHERE id = ? AND status = 'na_fila'",
+                                        (dono, _agora(), linha["id"])).rowcount
+            if pego == 1:
+                return self.pedido(linha["id"])
+        return None
 
-    def retomar_pedidos(self):
-        """Pedidos que estavam em produção quando o Studio parou voltam para a fila (retomam sem pagar de novo)."""
+    def batimento(self, pedido_id, dono):
+        """O trabalhador avisa que continua vivo produzindo o pedido."""
         with self.con:
-            return self.con.execute("UPDATE pedidos SET status = 'na_fila', atualizado_em = ? "
-                                    "WHERE status IN ('produzindo', 'avaliando')", (_agora(),)).rowcount
+            self.con.execute("UPDATE pedidos SET atualizado_em = ? WHERE id = ? AND dono = ? AND status = 'produzindo'",
+                             (_agora(), pedido_id, dono))
+
+    def retomar_pedidos(self, orfao_apos_s=180):
+        """Pedidos em produção sem batimento há `orfao_apos_s` voltam para a fila (o Studio parou no meio).
+
+        Pedido de outro processo vivo (com batimento recente) não é tocado.
+        """
+        limite = (datetime.now(timezone.utc) - timedelta(seconds=orfao_apos_s)).isoformat(timespec="seconds")
+        with self.con:
+            return self.con.execute("UPDATE pedidos SET status = 'na_fila', dono = NULL, atualizado_em = ? "
+                                    "WHERE status IN ('produzindo', 'avaliando') AND atualizado_em <= ?",
+                                    (_agora(), limite)).rowcount
+
+    def pedidos_na_fila(self):
+        return self.con.execute("SELECT COUNT(*) FROM pedidos WHERE status = 'na_fila'").fetchone()[0]
 
     def custo_projeto(self, projeto_id):
         por_etapa, por_provedor, total = {}, {}, 0.0

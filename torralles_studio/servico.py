@@ -6,6 +6,7 @@ Se o Studio parar no meio, o pedido volta para a fila e a produção retoma sem 
 """
 
 import hashlib
+import os
 import secrets
 import subprocess
 import sys
@@ -16,6 +17,13 @@ from pathlib import Path
 
 from .contrato import estimativa_custo, tema_do_pedido, validar_pedido
 from .seguranca import mascarar
+
+
+LIMITE_FILA = 20  # pedidos esperando ao mesmo tempo (protege o bolso se algo enviar pedidos sem parar)
+
+
+class FilaCheia(Exception):
+    """Muitos pedidos esperando: o Ops deve tentar de novo depois."""
 
 
 class PedidoInvalido(Exception):
@@ -68,6 +76,30 @@ def compor_imagem(imagem, texto, proporcao, saida, fonte="Arial"):
     return Path(saida)
 
 
+class OrcamentoDoPedido:
+    """Teto do pedido que vale também nas retomadas: o gasto já feito fica em gasto.json e é descontado."""
+
+    def __new__(cls, teto, arquivo):
+        import json
+
+        from .seguranca import Orcamento
+
+        class _Orcamento(Orcamento):
+            def registrar(self, provedor, valor):
+                super().registrar(provedor, valor)
+                if valor:
+                    Path(arquivo).write_text(json.dumps({"gasto_usd": round(self.anterior + self.gasto_usd, 6)}),
+                                             encoding="utf-8")
+
+        try:
+            anterior = float(json.loads(Path(arquivo).read_text(encoding="utf-8")).get("gasto_usd", 0))
+        except (OSError, ValueError, AttributeError):
+            anterior = 0.0
+        o = _Orcamento(max(0.0, teto - anterior))
+        o.anterior = anterior
+        return o
+
+
 def fabricar_peca(pedido, pasta, *, config=None, aviso=None):
     """Produz o entregável do pedido e devolve o resultado no formato da spec 08 (sem job_id/status)."""
     from .config import carregar_biblioteca, carregar_config, carregar_loop, carregar_perfis, carregar_roteador
@@ -80,7 +112,7 @@ def fabricar_peca(pedido, pasta, *, config=None, aviso=None):
     perfil = carregar_perfis(config).obter(pedido["perfil"]) if pedido.get("perfil") else None
     if perfil:
         roteador = perfil.roteador(roteador)
-    roteador.orcamento = Orcamento(pedido["orcamento"]["custo_maximo_usd"])  # teto do pedido (nunca acima de 1,50)
+    roteador.orcamento = OrcamentoDoPedido(pedido["orcamento"]["custo_maximo_usd"], pasta / "gasto.json")
     roteador.aviso = avisar
     biblioteca = carregar_biblioteca(config)
     tema = tema_do_pedido(pedido)
@@ -92,6 +124,7 @@ def fabricar_peca(pedido, pasta, *, config=None, aviso=None):
                              perfil=perfil, biblioteca=biblioteca, capcut=True, fatos=pedido["fatos_travados"],
                              proporcao=pedido["proporcao"], cfg_montagem=carregar_config(config).get("montagem"),
                              aviso=avisar)
+        rel["custo_usd"] = round(roteador.orcamento.anterior + roteador.orcamento.gasto_usd, 4)
         roteiro = next((e for e in rel["etapas"] if e["etapa"] == "roteiro"), {})
         problemas = list(rel["problemas"]) + list(roteiro.get("problemas") or [])
         fatos_ok = not any("não autorizad" in p or "proibid" in p for p in problemas)
@@ -113,23 +146,36 @@ def fabricar_peca(pedido, pasta, *, config=None, aviso=None):
     from .roteador import TodosFalharam
 
     cena = {"prompt_imagem": f"{pedido['briefing']['conceito_visual']}. Cores: {pedido['briefing']['paleta_cores']}"}
-    base, foto = pasta / "base.png", None
-    try:
-        r = _gerar(base, lambda saida: funcoes.gerar_imagem(roteador, prompt_da_imagem(cena, pedido["proporcao"]), saida,
-                                                            perfil=perfil, proporcao=pedido["proporcao"]))
-        provedor = r.provedor
-    except (TodosFalharam, ErroProducao):
-        foto = _foto_gratuita(roteador, biblioteca, cena, base, pedido["proporcao"], perfil, avisar)
-        provedor = f"foto gratuita ({foto['fonte']})"
+    import json
+
+    from .fatos import checar_fatos
+    from .producao import _ler_json, _pronto
+
+    base, foto = pasta / "base.png", _ler_json(pasta / "foto.json")
+    if _pronto(base):  # retomada: a imagem já foi gerada (e paga)
+        provedor = f"foto gratuita ({foto['fonte']})" if foto else "reaproveitada"
+    else:
+        try:
+            r = _gerar(base, lambda saida: funcoes.gerar_imagem(roteador, prompt_da_imagem(cena, pedido["proporcao"]),
+                                                                saida, perfil=perfil, proporcao=pedido["proporcao"]))
+            provedor, foto = r.provedor, None
+        except (TodosFalharam, ErroProducao):
+            foto = _foto_gratuita(roteador, biblioteca, cena, base, pedido["proporcao"], perfil, avisar)
+            (pasta / "foto.json").write_text(json.dumps(foto, ensure_ascii=False), encoding="utf-8")
+            provedor = f"foto gratuita ({foto['fonte']})"
+    erros_fatos = checar_fatos(pedido["briefing"]["texto_overlay"], pedido["fatos_travados"]) \
+        if pedido["fatos_travados"] else []
     final = compor_imagem(base, pedido["briefing"]["texto_overlay"], pedido["proporcao"], pasta / "peca.png")
     creditos = biblioteca.creditos([foto]) if foto else None
     return {
         "arquivos": [{"tipo": "imagem", "caminho": str(final), "sha256": _sha256(final),
                       "licenca": foto["licenca"] if foto else "comercial_ok", "provedor": provedor}],
         "exportacao_capcut": None,
-        "qualidade": {"nota_estrutural": 100, "nota_criativa": None, "aprovado": True, "fatos_travados_ok": True,
-                      "problemas": ["sem juiz de imagem ainda: confira antes de publicar"]},
-        "creditos": creditos, "custo_usd": round(roteador.orcamento.gasto_usd, 4), "tentativas": 1,
+        "qualidade": {"nota_estrutural": 100, "nota_criativa": None, "aprovado": not erros_fatos,
+                      "fatos_travados_ok": not erros_fatos,
+                      "problemas": erros_fatos + ["sem juiz de imagem ainda: confira antes de publicar"]},
+        "creditos": creditos, "custo_usd": round(roteador.orcamento.anterior + roteador.orcamento.gasto_usd, 4),
+        "tentativas": 1,
         "revisar_manual": True,
     }
 
@@ -145,8 +191,9 @@ class ServicoPecas:
         self._parar = threading.Event()
         self._acordar = threading.Event()
         self._thread = None
+        self.dono = f"{os.getpid()}-{secrets.token_hex(4)}"  # este processo (outros podem usar a mesma fila)
         with self._banco() as banco:
-            banco.retomar_pedidos()
+            banco.retomar_pedidos()  # só pedidos órfãos (sem batimento recente); os de outro processo vivo ficam
 
     def _banco(self):
         from .banco import Banco
@@ -160,6 +207,8 @@ class ServicoPecas:
             raise PedidoInvalido(problemas)
         job_id = "stu_" + secrets.token_hex(8)
         with self._banco() as banco:
+            if banco.pedidos_na_fila() >= LIMITE_FILA:
+                raise FilaCheia(f"já há {LIMITE_FILA} pedidos esperando; tente de novo depois")
             banco.criar_pedido(job_id, pedido)
         self._acordar.set()
         return {"job_id": job_id, "status": "na_fila", "estimativa_custo_usd": estimativa_custo(pedido)}
@@ -176,10 +225,18 @@ class ServicoPecas:
     def processar_proximo(self):
         """Produz o pedido mais antigo da fila. Devolve o job_id processado ou None se a fila estava vazia."""
         with self._banco() as banco:
-            p = banco.proximo_pedido()
+            p = banco.proximo_pedido(self.dono)
         if not p:
             return None
         pasta = self.pasta_base / p["id"]
+        vivo = threading.Event()
+
+        def bater():  # batimento: outros processos sabem que este pedido não está órfão
+            while not vivo.wait(30):
+                with self._banco() as banco:
+                    banco.batimento(p["id"], self.dono)
+
+        threading.Thread(target=bater, daemon=True).start()
         try:
             resultado = self.fabricar(p["pedido"], pasta, config=self.config)
             status = "aguardando_aprovacao" if p["pedido"].get("aprovacao_humana") else "concluido"
@@ -190,11 +247,15 @@ class ServicoPecas:
             with self._banco() as banco:
                 banco.atualizar_pedido(p["id"], "falhou", erro=detalhe[:500])
             print(mascarar(traceback.format_exc()), file=sys.stderr)  # detalhe para quem cuida, sem chaves
+        finally:
+            vivo.set()
         return p["id"]
 
     def _laco(self):
         while not self._parar.is_set():
             if self.processar_proximo() is None:
+                with self._banco() as banco:
+                    banco.retomar_pedidos()  # pedido de um processo que morreu volta para a fila
                 self._acordar.wait(timeout=5)
                 self._acordar.clear()
 

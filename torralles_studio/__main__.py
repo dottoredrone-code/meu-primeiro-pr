@@ -145,9 +145,9 @@ def comando_servidor(args):
     servico.iniciar()
     try:
         if args.comando == "mcp":
-            from .servidor import servir_mcp
+            from .servidor import isolar_stdin, servir_mcp
 
-            servir_mcp(servico)  # fala por stdin/stdout: nada mais pode escrever na saída padrão
+            servir_mcp(servico, entrada=isolar_stdin())  # stdin/stdout são só do JSON-RPC (FFmpeg não lê dele)
             return 0
         from .servidor import criar_servidor_http
 
