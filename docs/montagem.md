@@ -50,5 +50,5 @@ com código 2 se algum eliminatório falhar.
 
 **Limite conhecido:** dentro de uma mesma fala, a divisão entre blocos de legenda segue as pausas da voz ou a
 proporção de letras. A conferência palavra por palavra com transcrição fica para quando houver chave (Gemini)
-ou Whisper instalado. A escolha da trilha pelo clima e o BPM medido vêm no K21; os efeitos sonoros por cena,
+ou Whisper instalado. A trilha pelo clima (K21) é escolhida no `produzir` (`torralles_studio/trilha.py`); os efeitos sonoros por cena,
 também depois.

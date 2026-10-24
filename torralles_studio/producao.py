@@ -132,10 +132,11 @@ def _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
 
 
 def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesquisar=False, trilha=None, bpm=None,
-                   cfg_montagem=None, aviso=None, refazer_roteiro=False, biblioteca=None):
+                   cfg_montagem=None, aviso=None, refazer_roteiro=False, biblioteca=None, trilha_auto=True):
     """Produz o vídeo e devolve o relatório (também salvo em pasta/relatorio.json).
 
-    biblioteca: com ela, cena cuja imagem nenhuma IA conseguiu gerar usa uma foto gratuita com licença.
+    biblioteca: com ela, cena cuja imagem nenhuma IA conseguiu gerar usa uma foto gratuita com licença, e
+    (com trilha_auto e sem `trilha`) a música de fundo é escolhida pelo clima do roteiro (K21).
     """
     for programa in ("ffmpeg", "ffprobe"):
         if not shutil.which(programa):
@@ -196,6 +197,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
                 _apagar(arq)
         _apagar(pasta / "fotos.json")
         _apagar(pasta / "creditos.txt")
+        _apagar(pasta / "trilha.json")  # roteiro novo pode ter outro clima
 
     # 3. Cada cena: imagem → voz → cena animada com a duração da fala
     cenas, total = [], len(roteiro["cenas"])
@@ -247,7 +249,33 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         cenas.append({"video": str(video), "voz": str(voz), "narracao": cena["narracao"],
                       "texto_tela": cena.get("texto_tela"), "duracao": cena.get("duracao"), "clima": cena.get("clima")})
 
-    # 4. Montagem final + régua da spec 03 §3.6
+    # 4. Trilha pelo clima do roteiro (K21): reaproveita a escolhida antes; sem trilha, o vídeo sai só com voz
+    musica = None
+    if trilha is None and trilha_auto and biblioteca is not None:
+        guardada = _ler_json(pasta / "trilha.json")
+        if isinstance(guardada, dict) and guardada.get("tema") == tema and Path(guardada.get("arquivo", "")).is_file():
+            musica = guardada
+            etapa("trilha", reaproveitado=True, licenca=(guardada.get("ativo") or {}).get("licenca"))
+        else:
+            from .trilha import SemTrilha, escolher_trilha
+
+            avisar("== trilha")
+            try:
+                t = escolher_trilha(roteador, biblioteca, roteiro, duracao, perfil=perfil, aviso=avisar)
+                ativo = {k: t["ativo"].get(k) for k in ("hash", "caminho", "licenca", "fonte", "autor", "link",
+                                                        "titulo")}
+                musica = {"tema": tema, "arquivo": t["arquivo"], "bpm": t["bpm"], "clima": t["clima"],
+                          "nota": t["nota"], "ativo": ativo}
+                (pasta / "trilha.json").write_text(json.dumps(musica, ensure_ascii=False, indent=2),
+                                                  encoding="utf-8")
+                etapa("trilha", ativo.get("fonte"), nota=t["nota"], licenca=ativo.get("licenca"))
+            except SemTrilha as e:
+                avisar(f"  ⚠ sem trilha: {e} (o vídeo sai só com a narração)")
+                etapa("trilha", None, aviso=str(e))
+        if musica:
+            trilha, bpm = musica["arquivo"], bpm or musica.get("bpm")
+
+    # 5. Montagem final + régua da spec 03 §3.6
     avisar("== montagem final")
     final = pasta / "video_final.mp4"
     resultado = montar(cenas, final, proporcao=proporcao, trilha=trilha, bpm=bpm, cfg=cfg_montagem,
@@ -260,12 +288,14 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         "tempo_s": round(time.monotonic() - inicio), "etapas": etapas,
         "titulo": roteiro.get("titulo"), "cta": roteiro.get("cta"),
         "fotos_gratuitas": {k: v for k, v in fotos.items() if int(k) <= total},
+        "trilha": musica,
     }
-    if biblioteca is not None and relatorio["fotos_gratuitas"]:
-        creditos = biblioteca.creditos(list(relatorio["fotos_gratuitas"].values()))
+    terceiros = list(relatorio["fotos_gratuitas"].values()) + ([musica["ativo"]] if musica else [])
+    if biblioteca is not None and terceiros:
+        creditos = biblioteca.creditos(terceiros)
         relatorio["creditos"] = creditos  # vai na descrição do vídeo (CC-BY exige crédito)
-        (pasta / "creditos.txt").write_text(creditos or "Nenhuma foto exige crédito.\n", encoding="utf-8")
-    elif not relatorio["fotos_gratuitas"]:
-        _apagar(pasta / "creditos.txt")  # sem fotos de terceiros: crédito antigo não pode ir para a descrição
+        (pasta / "creditos.txt").write_text(creditos or "Nenhuma mídia exige crédito.\n", encoding="utf-8")
+    elif not terceiros:
+        _apagar(pasta / "creditos.txt")  # sem mídia de terceiros: crédito antigo não pode ir para a descrição
     (pasta / "relatorio.json").write_text(json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8")
     return relatorio

@@ -100,12 +100,14 @@ class OpenverseMidia(Provedor):
     def configurado(self):
         return None  # chave é opcional
 
-    def executar(self, consulta, tipo="imagem", max_resultados=5, proporcao=None):
+    def executar(self, consulta, tipo="imagem", max_resultados=5, proporcao=None, categoria=None):
         if tipo not in ("imagem", "audio"):
             raise ErroProvedor("Openverse só tem imagem e áudio")
         params = {"q": consulta, "page_size": max_resultados, "license_type": "commercial,modification"}
         if tipo == "audio":  # fontes cujos arquivos ficam em domínios liberados e com licença clara
-            params["source"] = "freesound,wikimedia_audio"
+            params["source"] = "jamendo,freesound,wikimedia_audio" if categoria == "music" else "freesound,wikimedia_audio"
+            if categoria:
+                params["category"] = categoria  # "music" para trilha; efeitos sonoros: "sound_effect"
         if tipo == "imagem" and proporcao in ("9:16", "4:5"):
             params["aspect_ratio"] = "tall"
         elif tipo == "imagem" and proporcao == "16:9":

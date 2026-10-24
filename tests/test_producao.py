@@ -172,6 +172,28 @@ class TestProduzirVideo(unittest.TestCase):
             self.assertEqual(rel2["fotos_gratuitas"], {})
             self.assertFalse((Path(d) / "v" / "creditos.txt").exists())
 
+    def test_trilha_pelo_clima_entra_no_video_com_credito(self):  # K21
+        from torralles_studio.banco import Banco
+        from torralles_studio.biblioteca import Biblioteca
+
+        rt, loop = self.montar()
+        with tempfile.TemporaryDirectory() as d, Banco(Path(d) / "b.db") as banco:
+            bib = Biblioteca(Path(d) / "bib", banco)
+            musica = Path(d) / "m.mp3"
+            _ff("-f", "lavfi", "-i", "aevalsrc='0.5*sin(2*PI*220*t)*exp(-10*mod(t,0.5))':s=22050:d=12", str(musica))
+            bib.adicionar(musica, "cc-by", "Openverse (jamendo)", autor="Bia Música", link="https://exemplo.org/m",
+                          tags=["trilha", "curioso"], titulo="Curious loop")
+            rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, biblioteca=bib,
+                                 cfg_montagem={"preset": "ultrafast"})
+            self.assertEqual(rel["trilha"]["clima"], "curioso")
+            self.assertAlmostEqual(rel["trilha"]["bpm"], 120, delta=3)
+            self.assertGreaterEqual(rel["medidas"]["voz_menos_trilha_lu"], 10)
+            self.assertIn("Bia Música", (Path(d) / "v" / "creditos.txt").read_text(encoding="utf-8"))
+            rt2, loop2 = self.montar(roteiros=[])
+            rel2 = produzir_video(rt2, loop2, "chá verde", Path(d) / "v", duracao=8, biblioteca=bib,
+                                  cfg_montagem={"preset": "ultrafast"})
+            self.assertTrue(next(e for e in rel2["etapas"] if e["etapa"] == "trilha")["reaproveitado"])
+
     def test_sem_ia_de_imagem_e_sem_biblioteca_para_com_mensagem(self):
         rt, loop = self.montar()
         self.img.falhar = True

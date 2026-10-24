@@ -33,6 +33,7 @@ dominios_download = [
   # mídia gratuita (K20): arquivos servidos pelas próprias fontes
   "images.pexels.com", "videos.pexels.com", "cdn.pixabay.com", "pixabay.com", "cdn.freesound.org",
   "upload.wikimedia.org", "live.staticflickr.com",
+  "storage.jamendo.com",  # músicas do Jamendo via Openverse (trilha, K21) — confirmar no teste real
 ]
 tamanho_maximo_download_mb = 300
 
@@ -234,6 +235,10 @@ cadeia = ["pexels_midia", "pixabay_midia", "openverse_midia"]
 
 [tarefas.midia_video]
 cadeia = ["pexels_midia", "pixabay_midia"]
+
+[tarefas.midia_trilha]
+# música de fundo pelo clima do roteiro (K21, spec 12): só fontes com licença comercial
+cadeia = ["openverse_midia"]
 
 [tarefas.midia_audio]
 # efeitos sonoros (trilhas: K21). Freesound só em projetos não comerciais (D22); nos demais é pulado.

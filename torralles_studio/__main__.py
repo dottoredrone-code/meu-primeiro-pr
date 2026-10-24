@@ -116,7 +116,8 @@ def comando_produzir(args, roteador, perfil):
                              perfil=perfil, pesquisar=args.pesquisa, trilha=args.trilha, bpm=args.bpm,
                              cfg_montagem=carregar_config(args.config).get("montagem"),
                              aviso=lambda t: print(t, file=sys.stderr, flush=True),
-                             refazer_roteiro=args.refazer_roteiro, biblioteca=carregar_biblioteca(args.config))
+                             refazer_roteiro=args.refazer_roteiro, biblioteca=carregar_biblioteca(args.config),
+                             trilha_auto=not args.sem_trilha)
     except KeyboardInterrupt:
         print(f"\n✗ interrompido. O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
         return 130
@@ -258,7 +259,8 @@ def main(argv=None):
     s.add_argument("-d", "--duracao", type=int, default=30, help="segundos (padrão 30)")
     s.add_argument("-p", "--perfil", help="id do perfil do projeto (formato, estilo, voz)")
     s.add_argument("--pesquisa", action="store_true", help="pesquisa na web antes do roteiro (fontes reais)")
-    s.add_argument("--trilha", help="arquivo de música (opcional)")
+    s.add_argument("--trilha", help="arquivo de música (padrão: escolhida pelo clima do roteiro)")
+    s.add_argument("--sem-trilha", action="store_true", help="vídeo só com a narração")
     s.add_argument("--bpm", type=float, help="batidas por minuto da trilha (opcional)")
     s.add_argument("-o", "--pasta", help="pasta do vídeo (padrão: saidas/<tema>)")
     s.add_argument("--refazer-roteiro", action="store_true", help="faz um roteiro novo (e cenas novas) mesmo se já houver")
