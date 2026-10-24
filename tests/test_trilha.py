@@ -72,6 +72,34 @@ class TestComFFmpeg(unittest.TestCase):
             self.assertAlmostEqual(m["bpm"], bpm, delta=2)
             self.assertTrue(0 <= m["energia"] <= 1)
 
+    def test_sem_batida_fica_sem_bpm_e_quase_silencio_e_recusado(self):  # verificador K21
+        from torralles_studio.rede import ErroProvedor
+
+        pad = self.d / "pad.wav"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+                        "aevalsrc='0.3*sin(2*PI*220*t)+0.2*sin(2*PI*330*t)':s=22050:d=15", str(pad)], check=True)
+        self.assertIsNone(medir_ritmo(pad)["bpm"])  # pad contínuo: BPM inventado moveria os cortes
+        quase = self.d / "quase.wav"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+                        "aevalsrc='0.00005*sin(2*PI*220*t)':s=22050:d=15", str(quase)], check=True)
+        with self.assertRaises(ErroProvedor):
+            medir_ritmo(quase)
+
+    def test_trilha_do_acervo_que_sumiu_busca_outra(self):  # verificador K21
+        candidatos = [{"url": "https://x.storage.jamendo.com/a", "licenca": "cc-by", "autor": "Ana",
+                       "titulo": "Calm ambient instrumental", "fonte": "Openverse (jamendo)", "duracao": 60}]
+        musica = _musica(self.d / "a.mp3", 80)
+        rt = Roteador({"openverse_midia": Midia(candidatos)}, {"midia_trilha": ["openverse_midia"]},
+                      dormir=lambda s: None)
+        with Banco(self.d / "b.db") as banco:
+            bib = Biblioteca(self.d / "bib", banco)
+            velha = bib.adicionar(_musica(self.d / "v.mp3", 70), "cc0", "acervo", tags=["trilha", "calmo"])
+            bib.caminho(velha).unlink()
+            t = escolher_trilha(rt, bib, {"cenas": [{"clima": "calmo"}]}, 30,
+                                baixar_arquivo=lambda url: musica.read_bytes())
+            self.assertEqual(t["ativo"]["autor"], "Ana")
+            self.assertTrue(Path(t["arquivo"]).is_file())
+
     def test_escolhe_instrumental_guarda_com_credito_e_depois_usa_o_acervo(self):
         arquivos = {"https://x.storage.jamendo.com/a": _musica(self.d / "a.mp3", 120),
                     "https://x.storage.jamendo.com/b": _musica(self.d / "b.mp3", 70)}

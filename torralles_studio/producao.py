@@ -16,6 +16,7 @@ from pathlib import Path
 
 from . import funcoes
 from .montagem import PADROES, ErroMontagem, duracao as duracao_midia, montar, trecho_falado, verificar_montagem
+from .rede import ErroProvedor
 from .roteador import TodosFalharam
 
 _RESERVADOS = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}
@@ -132,7 +133,8 @@ def _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
 
 
 def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesquisar=False, trilha=None, bpm=None,
-                   cfg_montagem=None, aviso=None, refazer_roteiro=False, biblioteca=None, trilha_auto=True):
+                   cfg_montagem=None, aviso=None, refazer_roteiro=False, biblioteca=None, trilha_auto=True,
+                   capcut=False):
     """Produz o vídeo e devolve o relatório (também salvo em pasta/relatorio.json).
 
     biblioteca: com ela, cena cuja imagem nenhuma IA conseguiu gerar usa uma foto gratuita com licença, e
@@ -278,8 +280,18 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
     # 5. Montagem final + régua da spec 03 §3.6
     avisar("== montagem final")
     final = pasta / "video_final.mp4"
-    resultado = montar(cenas, final, proporcao=proporcao, trilha=trilha, bpm=bpm, cfg=cfg_montagem,
-                       pasta_trabalho=pasta / "montagem", duracao_alvo=duracao)
+    try:
+        resultado = montar(cenas, final, proporcao=proporcao, trilha=trilha, bpm=bpm, cfg=cfg_montagem,
+                           pasta_trabalho=pasta / "montagem", duracao_alvo=duracao)
+    except (ErroMontagem, ErroProvedor) as e:
+        if not musica:
+            raise
+        avisar(f"  ⚠ a trilha atrapalhou a montagem ({e}); montando só com a narração")
+        _apagar(pasta / "trilha.json")
+        etapas.append({"etapa": "trilha", "provedor": None, "reaproveitado": False, "aviso": str(e)})
+        musica = None
+        resultado = montar(cenas, final, proporcao=proporcao, cfg=cfg_montagem, pasta_trabalho=pasta / "montagem",
+                           duracao_alvo=duracao)
     conferencia = verificar_montagem(resultado, duracao_pedida=duracao)
     relatorio = {
         "tema": tema, "video": str(final), "proporcao": proporcao, "duracao_s": resultado["duracao_s"],
@@ -297,5 +309,14 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         (pasta / "creditos.txt").write_text(creditos or "Nenhuma mídia exige crédito.\n", encoding="utf-8")
     elif not terceiros:
         _apagar(pasta / "creditos.txt")  # sem mídia de terceiros: crédito antigo não pode ir para a descrição
+    # dados da montagem: permitem exportar para o CapCut depois sem refazer nada
+    (pasta / "montagem.json").write_text(json.dumps(resultado, ensure_ascii=False, indent=2, default=str),
+                                         encoding="utf-8")
+    if capcut:
+        from .exportar import exportar_capcut
+
+        avisar("== exportação para o CapCut")
+        relatorio["capcut"] = str(exportar_capcut(resultado, pasta / "capcut", creditos=relatorio.get("creditos"),
+                                                  titulo=roteiro.get("titulo")))
     (pasta / "relatorio.json").write_text(json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8")
     return relatorio

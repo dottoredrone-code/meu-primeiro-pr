@@ -117,7 +117,7 @@ def comando_produzir(args, roteador, perfil):
                              cfg_montagem=carregar_config(args.config).get("montagem"),
                              aviso=lambda t: print(t, file=sys.stderr, flush=True),
                              refazer_roteiro=args.refazer_roteiro, biblioteca=carregar_biblioteca(args.config),
-                             trilha_auto=not args.sem_trilha)
+                             trilha_auto=not args.sem_trilha, capcut=args.capcut)
     except KeyboardInterrupt:
         print(f"\n✗ interrompido. O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
         return 130
@@ -132,7 +132,30 @@ def comando_produzir(args, roteador, perfil):
         print(f"✗ {problema}")
     print(f"{'✓' if rel['aprovado'] else '⚠'} {rel['video']} · {rel['duracao_s']:.1f} s · US$ {rel['custo_usd']:.3f}"
           f" · {rel['tempo_s']} s")
+    if rel.get("capcut"):
+        print(f"  CapCut: {rel['capcut']} (veja o LEIA-ME.txt)")
     return 0 if rel["aprovado"] else 2
+
+
+def comando_exportar_capcut(args):
+    from pathlib import Path
+
+    from .exportar import ErroExportacao, exportar_capcut
+    from .rede import ErroProvedor
+
+    pasta = Path(args.pasta)
+    try:
+        resultado = json.loads((pasta / "montagem.json").read_text(encoding="utf-8"))
+        rel = json.loads((pasta / "relatorio.json").read_text(encoding="utf-8")) if (pasta / "relatorio.json").is_file() else {}
+        destino = exportar_capcut(resultado, pasta / "capcut", creditos=rel.get("creditos"), titulo=rel.get("titulo"))
+    except FileNotFoundError:
+        print(f"✗ {pasta} não tem montagem.json: produza o vídeo primeiro (comando produzir)", file=sys.stderr)
+        return 1
+    except (ErroExportacao, ErroProvedor, OSError, ValueError) as e:
+        print(f"✗ não deu para exportar: {e}", file=sys.stderr)
+        return 1
+    print(f"✓ pasta para o CapCut: {destino} (veja o LEIA-ME.txt)")
+    return 0
 
 
 def comando_montar(args):
@@ -264,6 +287,10 @@ def main(argv=None):
     s.add_argument("--bpm", type=float, help="batidas por minuto da trilha (opcional)")
     s.add_argument("-o", "--pasta", help="pasta do vídeo (padrão: saidas/<tema>)")
     s.add_argument("--refazer-roteiro", action="store_true", help="faz um roteiro novo (e cenas novas) mesmo se já houver")
+    s.add_argument("--capcut", action="store_true", help="também gera a pasta para editar no CapCut (<pasta>/capcut)")
+
+    s = sub.add_parser("exportar-capcut", help="pasta para editar no CapCut a partir de um vídeo já produzido")
+    s.add_argument("pasta", help="pasta do vídeo (ex.: saidas/beneficios-do-cha-verde)")
 
     s = sub.add_parser("montar", help="monta o vídeo final (cenas, narração, legendas, trilha) e confere a régua")
     s.add_argument("projeto", help="arquivo JSON com as cenas (veja docs/montagem.md)")
@@ -271,6 +298,8 @@ def main(argv=None):
     s.add_argument("--trabalho", help="pasta para guardar clipes, áudios e legendas (para o CapCut)")
 
     args = p.parse_args(argv)
+    if args.comando == "exportar-capcut":
+        return comando_exportar_capcut(args)
     if args.comando == "montar":
         return comando_montar(args)
     if args.comando == "assistir":

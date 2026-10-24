@@ -17,7 +17,7 @@ from collections import Counter
 from pathlib import Path
 
 from .biblioteca import ErroLicenca
-from .midia import _parece_pagina, candidatos_aceitos
+from .midia import _extensao, _parece_pagina, candidatos_aceitos
 from .rede import ErroProvedor, baixar
 from .roteador import TodosFalharam
 
@@ -31,8 +31,9 @@ ENERGIA_POR_CLIMA = {"calmo": 0.2, "reflexivo": 0.25, "curioso": 0.5, "inspirado
                      "tenso": 0.7, "epico": 0.85}
 BPM_POR_CLIMA = {"calmo": (60, 95), "reflexivo": (60, 95), "curioso": (90, 125), "inspirador": (85, 130),
                  "alegre": (100, 140), "tenso": (90, 150), "epico": (80, 140)}
-_VOZ = {"vocal", "vocals", "voice", "voices", "singing", "singer", "sung", "song", "lyrics", "lyric", "rap",
-        "acapella", "choir", "feat", "ft", "karaoke", "spoken", "speech", "narration", "podcast"}
+_VOZ = {"vocal", "vocals", "vocalist", "vox", "voice", "voices", "singing", "singer", "sung", "song", "lyrics",
+        "lyric", "rap", "acapella", "cappella", "choir", "chorus", "chant", "feat", "ft", "karaoke", "spoken",
+        "speech", "narration", "podcast", "voz", "cancao", "canção", "letra", "cantada", "cantor", "cantora"}
 _INSTRUMENTAL = {"instrumental", "background", "ambient", "soundtrack", "score", "loop", "beat", "piano"}
 
 
@@ -57,7 +58,8 @@ def tem_voz(candidato):
     "no vocals", "without voice" e "instrumental" contam como sem voz.
     """
     texto = " ".join([str(candidato.get("titulo") or "")] + [str(t) for t in candidato.get("tags") or []]).lower()
-    for neg in ("no vocals", "no vocal", "without vocals", "without voice", "no voice", "non vocal"):
+    for neg in ("no vocals", "no vocal", "without vocals", "without voice", "no voice", "non vocal", "non-vocal",
+                "sem voz", "sem vocal"):
         texto = texto.replace(neg, " ")
     p = set("".join(ch if ch.isalnum() else " " for ch in texto).split())
     return bool(p & _VOZ)
@@ -76,19 +78,34 @@ def medir_ritmo(arquivo, segundos=60):
                for i in range(0, len(amostras) - passo, passo)]
     if len(energia) < 300 or max(energia) <= 0:
         raise ErroProvedor("trilha curta ou em silêncio")
+    rms = math.sqrt(sum(e * e for e in energia) / len(energia))
+    db = 20 * math.log10(max(rms, 1e-9))
+    if db < -50:  # quase silêncio: a montagem recusaria depois
+        raise ErroProvedor(f"trilha quase em silêncio ({db:.0f} dB)")
     surtos = [max(0.0, energia[i] - energia[i - 1]) for i in range(1, len(energia))]  # ataques das notas
     media = sum(surtos) / len(surtos)
+    pulsacao = media / (sum(energia) / len(energia))  # quanto a energia "bate"; pad contínuo fica perto de 0
     surtos = [s - media for s in surtos]
-    melhor, melhor_lag = -1.0, None
-    for lag in range(33, 101):  # 60 a 180 BPM (janelas de 10 ms)
-        corr = sum(surtos[i] * surtos[i - lag] for i in range(lag, len(surtos)))
-        if corr > melhor:
-            melhor, melhor_lag = corr, lag
-    rms = math.sqrt(sum(e * e for e in energia) / len(energia))
-    db = 20 * math.log10(max(rms, 1e-6))
-    return {"bpm": round(6000 / melhor_lag, 1) if melhor_lag else None,
+    base = sum(x * x for x in surtos) or 1e-12  # autocorrelação no atraso 0
+    corrs = {lag: sum(surtos[i] * surtos[i - lag] for i in range(lag, len(surtos))) for lag in range(32, 102)}
+    melhor_lag = max(range(33, 101), key=lambda lag: corrs[lag])  # 60 a 180 BPM (janelas de 10 ms)
+    bpm = None
+    if pulsacao >= 0.03 and corrs[melhor_lag] / base >= 0.2:  # batida clara e regular; sem pulso → sem BPM
+        a, b, c = corrs[melhor_lag - 1], corrs[melhor_lag], corrs[melhor_lag + 1]
+        ajuste = 0.5 * (a - c) / (a - 2 * b + c) if (a - 2 * b + c) else 0.0  # pico entre dois atrasos
+        bpm = round(6000 / (melhor_lag + max(-0.5, min(0.5, ajuste))), 1)
+    return {"bpm": bpm,
             "energia": round(min(1.0, max(0.0, (db + 40) / 32)), 2),  # −40 dB → 0 · −8 dB → 1
-            "duracao_s": round(len(amostras) / 4000, 1)}
+            "duracao_s": round(_duracao_total(arquivo, len(amostras) / 4000), 1)}
+
+
+def _duracao_total(arquivo, padrao):
+    from .montagem import ErroMontagem, duracao
+
+    try:
+        return duracao(arquivo)  # a medição lê só 60 s; a duração real vem do ffprobe
+    except ErroMontagem:
+        return padrao
 
 
 def pontuar(candidato, medidas, clima, duracao_video):
@@ -117,15 +134,17 @@ def escolher_trilha(roteador, biblioteca, roteiro, duracao_video, *, perfil=None
     clima = clima_dominante(roteiro)
     pid = getattr(perfil, "id", None)
     guardadas = biblioteca.buscar(["trilha", clima], tipo="audio", perfil=pid, limite=1)
-    if guardadas:  # acervo local: grátis, offline e já conferida
+    if guardadas:  # acervo local: grátis, offline e já conferida (se o arquivo sumiu ou estragou, busca outra)
         ativo = guardadas[0]
         arq = biblioteca.caminho(ativo)
         try:
-            medidas = medir_ritmo(arq)
+            medidas = medir_ritmo(arq) if arq.is_file() else None
         except ErroProvedor:
-            medidas = {"bpm": None}
-        return {"arquivo": str(arq), "bpm": medidas.get("bpm"), "clima": clima, "nota": None, "ativo": ativo,
-                "detalhe": {"camada": "acervo"}}
+            medidas = None
+        if medidas:
+            return {"arquivo": str(arq), "bpm": medidas.get("bpm"), "clima": clima, "nota": None, "ativo": ativo,
+                    "detalhe": {"camada": "acervo"}}
+        avisar("  … trilha do acervo indisponível: buscando outra")
 
     consulta = f"{CONSULTA_POR_CLIMA[clima]} instrumental"
     avisar(f"  … trilha: buscando música '{consulta}' (clima {clima})")
@@ -150,7 +169,11 @@ def escolher_trilha(roteador, biblioteca, roteiro, duracao_video, *, perfil=None
             if _parece_pagina(dados):
                 motivos.append(f"{c.get('titulo')}: o link devolveu uma página")
                 continue
-            arq = Path(pasta) / f"trilha_{i}.mp3"
+            extensao = _extensao(c["url"], "audio")
+            if extensao is None:
+                motivos.append(f"{c.get('titulo')}: formato que não é áudio")
+                continue
+            arq = Path(pasta) / f"trilha_{i}{extensao}"
             arq.write_bytes(dados)
             try:
                 medidas = medir_ritmo(arq)

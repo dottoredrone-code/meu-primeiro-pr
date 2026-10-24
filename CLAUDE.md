@@ -33,6 +33,7 @@ torralles_studio/
   qualidade.py    avaliador 0–100 (juízes de outra família); fatos.py fatos travados
   loop.py         loop de correção; relatorio.py relatório de qualidade e custo
   producao.py     vídeo completo de um tema: pesquisa → roteiro → imagem, voz e cena → montagem (retoma sem pagar de novo)
+  trilha.py       trilha pelo clima do roteiro (BPM e energia pelo FFmpeg, voz eliminatória); exportar.py pasta para o CapCut
   montagem.py     vídeo final: tempo da fala, transições na batida, legendas na área segura, trilha sob a voz, −14 LUFS
   banco.py        SQLite: projetos, peças, tentativas, custo, retomada e cache (dados/, fora do Git)
   biblioteca.py   mídia por hash (sem duplicatas), licença obrigatória, busca por etiqueta, créditos CC-BY
@@ -55,7 +56,8 @@ python -m torralles_studio perfil-novo meu-canal "Meu canal"   # cria perfil de 
 python -m torralles_studio cerebro --desde 2026-10-01          # aprendizados para colar no CEREBRO_MESTRE.md
 python -m torralles_studio roteiro "tema" -p meu-canal          # gera com o perfil do projeto
 python -m torralles_studio roteiro "tema" -q                    # com juiz e loop de correção (também em pesquisa)
-python -m torralles_studio produzir "tema" -d 30 --pesquisa      # vídeo completo (saidas/<tema>/video_final.mp4)
+python -m torralles_studio produzir "tema" -d 30 --pesquisa      # vídeo completo (saidas/<tema>/video_final.mp4); --capcut, --sem-trilha
+python -m torralles_studio exportar-capcut saidas/<tema>         # pasta para editar no CapCut
 python -m torralles_studio montar projeto.json -o final.mp4   # montagem final + régua (docs/montagem.md)
 python -m torralles_studio --config outro.toml status   # config alternativo (ou TORRALLES_CONFIG)
 ```

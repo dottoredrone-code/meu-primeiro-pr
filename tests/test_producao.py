@@ -109,6 +109,11 @@ class TestProduzirVideo(unittest.TestCase):
             self.assertEqual((roteiro["provedor"], roteiro["nota"]), ("redator", 85))
             self.assertGreater(rel["custo_usd"], 0)
             self.assertTrue((Path(d) / "v" / "relatorio.json").is_file())
+            self.assertTrue((Path(d) / "v" / "montagem.json").is_file())  # permite exportar para o CapCut depois
+
+            from torralles_studio.__main__ import main  # K23: exporta sem refazer nada
+            self.assertEqual(main(["exportar-capcut", str(Path(d) / "v")]), 0)
+            self.assertTrue((Path(d) / "v" / "capcut" / "01_clipes" / "cena_02.mp4").is_file())
 
             rt2, loop2 = self.montar(roteiros=[])  # sem respostas: se tentar gerar de novo, quebra
             rel2 = produzir_video(rt2, loop2, "chá verde", Path(d) / "v", duracao=8,
@@ -193,6 +198,26 @@ class TestProduzirVideo(unittest.TestCase):
             rel2 = produzir_video(rt2, loop2, "chá verde", Path(d) / "v", duracao=8, biblioteca=bib,
                                   cfg_montagem={"preset": "ultrafast"})
             self.assertTrue(next(e for e in rel2["etapas"] if e["etapa"] == "trilha")["reaproveitado"])
+
+    def test_trilha_que_quebra_a_montagem_nao_derruba_o_video(self):  # verificador K21: rede de segurança
+        from unittest import mock
+
+        from torralles_studio.banco import Banco
+        from torralles_studio.biblioteca import Biblioteca
+
+        rt, loop = self.montar()
+        with tempfile.TemporaryDirectory() as d, Banco(Path(d) / "b.db") as banco:
+            muda = Path(d) / "muda.wav"
+            _ff("-f", "lavfi", "-i", "anullsrc=r=22050:cl=mono", "-t", "5", str(muda))
+            falsa = {"arquivo": str(muda), "bpm": None, "clima": "curioso", "nota": 50,
+                     "ativo": {"hash": "h", "caminho": "m.wav", "licenca": "cc0", "fonte": "x", "autor": None,
+                               "link": None, "titulo": "muda"}}
+            with mock.patch("torralles_studio.trilha.escolher_trilha", return_value=falsa):
+                rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8,
+                                     biblioteca=Biblioteca(Path(d) / "bib", banco), cfg_montagem={"preset": "ultrafast"})
+            self.assertTrue(Path(rel["video"]).is_file())
+            self.assertIsNone(rel["trilha"])
+            self.assertFalse((Path(d) / "v" / "trilha.json").exists())
 
     def test_sem_ia_de_imagem_e_sem_biblioteca_para_com_mensagem(self):
         rt, loop = self.montar()
