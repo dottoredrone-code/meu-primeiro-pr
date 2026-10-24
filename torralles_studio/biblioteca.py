@@ -198,6 +198,12 @@ class Biblioteca:
     def _duplicata(self, digest, arquivo, dono, tags, procedencia):
         linha = self._linha(digest)
         tipo = tipo_do_arquivo(arquivo)
+        guardado = self.raiz / linha["caminho"]
+        if not guardado.exists() or _hash(guardado) != digest:  # arquivo sumiu ou estragou: repõe com o novo
+            guardado.parent.mkdir(parents=True, exist_ok=True)
+            temporario = guardado.with_suffix(guardado.suffix + ".parcial")
+            shutil.copyfile(arquivo, temporario)
+            temporario.replace(guardado)
         with self.con:
             if linha["tipo"] == "outro" and tipo != "outro":
                 self.con.execute("UPDATE ativos SET tipo = ? WHERE hash = ?", (tipo, digest))

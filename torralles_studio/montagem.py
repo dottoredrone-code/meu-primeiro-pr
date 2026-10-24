@@ -536,6 +536,8 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
 
     # 5. Trilha abaixo da voz e abaixando quando ela entra
     info_trilha, mistura = None, voz
+    for velho in ("trilha_bruta.wav", "trilha.wav", "mistura.wav"):  # de uma montagem anterior na mesma pasta
+        (pasta / velho).unlink(missing_ok=True)
     if trilha:
         bruta = pasta / "trilha_bruta.wav"
         _ff(["-stream_loop", "-1", "-t", f"{total}", "-i", str(trilha), "-vn", "-af",
@@ -599,7 +601,7 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
         "textos_tela": [{"inicio": a, "fim": b, "linhas": linhas} for a, b, linhas in textos_tela],
         "estilo_legenda": estilo, "voz": medida_voz, "trilha": info_trilha,
         "sincronia": dict(zip(("desvios", "problemas"), sincronia(legendas, voz))) if legendas else None,
-        "pasta_trabalho": str(pasta),
+        "pasta_trabalho": str(pasta), "fps": c["fps"],
     }
 
 

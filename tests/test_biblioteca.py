@@ -232,6 +232,19 @@ class TestBusca(BaseBiblioteca):
         self.assertEqual((b["licenca"], b["duplicado"]), ("pexels", True))
 
 
+class TestDuplicataRepoeArquivo(unittest.TestCase):
+    def test_mesmo_arquivo_de_novo_repoe_o_que_sumiu(self):  # verificador K21: trilha do acervo sumida
+        with tempfile.TemporaryDirectory() as d, Banco(Path(d) / "b.db") as banco:
+            bib = Biblioteca(Path(d) / "bib", banco)
+            arq = Path(d) / "m.mp3"
+            arq.write_bytes(b"ID3" + b"x" * 100)
+            a = bib.adicionar(arq, "cc0", "acervo", tags=["trilha"])
+            bib.caminho(a).unlink()
+            b = bib.adicionar(arq, "cc0", "acervo", tags=["trilha"])
+            self.assertTrue(b["duplicado"])
+            self.assertTrue(bib.caminho(b).is_file())
+
+
 class TestConfigDaBiblioteca(unittest.TestCase):
     def test_carregar_biblioteca(self):
         from torralles_studio.config import carregar_biblioteca
