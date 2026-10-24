@@ -43,20 +43,28 @@ class AnthropicTexto(Provedor):
     tipo = "texto"
 
     def executar(self, prompt, sistema=None):
+        # Modelos atuais pensam antes de responder e o raciocínio conta no max_tokens: folga para não cortar o JSON.
         corpo = {
             "model": self.modelo,
-            "max_tokens": self.cfg.get("max_tokens", 4096),
+            "max_tokens": self.cfg.get("max_tokens", 16000),
             "messages": [{"role": "user", "content": prompt}],
         }
         if sistema:
             corpo["system"] = sistema
+        if self.cfg.get("esforco"):  # low | medium | high (opcional; menos esforço = mais barato e rápido)
+            corpo["output_config"] = {"effort": self.cfg["esforco"]}
         r = post_json(
             "https://api.anthropic.com/v1/messages",
             corpo,
             {"x-api-key": self.chave, "anthropic-version": "2023-06-01"},
             self.timeout,
         )
-        return _exigir_texto("".join(b["text"] for b in r["content"] if b["type"] == "text"))
+        motivo = r.get("stop_reason")
+        if motivo == "max_tokens":
+            raise ErroProvedor("resposta cortada no limite de tokens (aumente max_tokens no config)")
+        if motivo == "refusal":
+            raise ErroProvedor("o modelo recusou o pedido")
+        return _exigir_texto("".join(b.get("text", "") for b in r.get("content", []) if b.get("type") == "text"))
 
 
 class GeminiTexto(Provedor):

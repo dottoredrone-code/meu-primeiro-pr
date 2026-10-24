@@ -96,7 +96,7 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 ## 🔁 Recorrentes
 | ID | Cartão | Frequência |
 |---|---|---|
-| KR1 | Verificar modelos, preços e limites gratuitos dos provedores | Mensal |
+| KR1 | Verificar modelos, preços e limites gratuitos dos provedores (última: 24/10/2026, `docs/sdd/revisao-modelos.md`) | Mensal |
 | KR2 | Recalibrar juízes ao trocar um modelo ou a cada mês | Mensal |
 
 ---

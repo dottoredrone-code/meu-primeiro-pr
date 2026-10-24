@@ -41,7 +41,7 @@ tamanho_maximo_download_mb = 300
 
 [provedores.deepseek_chat]
 familia = "deepseek"  # juiz nunca é da mesma família de quem gerou
-custo_usd = 0.001  # estimativa (revisar no KR1)
+custo_usd = 0.001  # KR1 24/10/2026: V4 Flash US$ 0,14/0,28 por 1M tokens
 classe = "openai_compat"
 base_url = "https://api.deepseek.com"
 modelo = "deepseek-flash"   # V4.1-Flash; "deepseek-chat" foi aposentado em 24/07/2026
@@ -49,7 +49,7 @@ chave_env = "DEEPSEEK_API_KEY"
 
 [provedores.deepseek_reasoner]
 familia = "deepseek"  # juiz nunca é da mesma família de quem gerou
-custo_usd = 0.003  # estimativa (revisar no KR1)
+custo_usd = 0.012  # KR1 24/10/2026: V4 Pro US$ 1,74/3,48 por 1M tokens (~5k entrada + 1,5k saída)
 classe = "openai_compat"
 base_url = "https://api.deepseek.com"
 modelo = "deepseek-v4-pro"  # "deepseek-reasoner" foi aposentado; se indisponível, a cadeia segue
@@ -58,21 +58,21 @@ timeout = 300
 
 [provedores.claude]
 familia = "anthropic"  # juiz nunca é da mesma família de quem gerou
-custo_usd = 0.02  # estimativa (revisar no KR1)
+custo_usd = 0.02  # KR1 24/10/2026: Sonnet 5.5 US$ 2/10 por 1M (~5k + 1k); Haiku 5.5 sai ~0,001
 classe = "anthropic"
 modelo_env = "CLAUDE_MODEL"   # defina o modelo no .env
 chave_env = "ANTHROPIC_API_KEY"
 
 [provedores.gemini_flash]
 familia = "google"  # juiz nunca é da mesma família de quem gerou
-custo_usd = 0.003  # estimativa (revisar no KR1)
+custo_usd = 0.015  # KR1 24/10/2026: 3.6 Flash US$ 1,50/7,50 por 1M (3.8 Flash citado a 0,75/3,75: testar)
 classe = "gemini_texto"
 modelo = "gemini-3.6-flash"  # estável; "gemini-2.5-flash" desligado em 16/10/2026
 chave_env = "GEMINI_API_KEY"
 
 [provedores.openai_mini]
 familia = "openai"  # juiz nunca é da mesma família de quem gerou
-custo_usd = 0.003  # estimativa (revisar no KR1)
+custo_usd = 0.009  # KR1 24/10/2026: gpt-5.4-mini US$ 0,75/4,50 por 1M (página oficial)
 classe = "openai_compat"
 base_url = "https://api.openai.com/v1"
 modelo = "gpt-5.4-mini"  # substituto indicado do snapshot gpt-5-mini (desliga 11/12/2026)
@@ -80,7 +80,7 @@ chave_env = "OPENAI_API_KEY"
 
 [provedores.openrouter_gratis]
 familia = "deepseek"  # família do MODELO, não do serviço: atualize junto quando trocar o modelo
-custo_usd = 0  # estimativa (revisar no KR1)
+custo_usd = 0  # KR1 24/10/2026: 1.000 créditos grátis por mês (busca básica = 1); depois US$ 0,008 por crédito
 # Modelos ":free" do OpenRouter mudam com frequência: openrouter.ai/models?q=free
 classe = "openai_compat"
 base_url = "https://openrouter.ai/api/v1"
@@ -98,7 +98,7 @@ timeout = 600
 # ---------------------------------------------------------------- busca
 
 [provedores.tavily]
-custo_usd = 0  # estimativa (revisar no KR1)
+custo_usd = 0  # KR1 24/10/2026: 1.000 créditos grátis por mês (busca básica = 1); depois US$ 0,008 por crédito
 classe = "tavily"
 chave_env = "TAVILY_API_KEY"
 
@@ -116,7 +116,7 @@ modelo = "gemini-3.1-flash-image"  # Nano Banana 2; "gemini-2.5-flash-image" des
 chave_env = "GEMINI_API_KEY"
 
 [provedores.fal_flux]
-custo_usd = 0.004  # estimativa (revisar no KR1)
+custo_usd = 0.004  # KR1 24/10/2026: FLUX schnell US$ 0,003 por megapixel (arredonda para cima)
 classe = "fal_imagem"
 modelo = "fal-ai/flux/schnell"
 chave_env = "FAL_KEY"
@@ -165,7 +165,7 @@ voz = "pt-BR-FranciscaNeural"
 # ---------------------------------------------------------------- vídeo
 
 [provedores.fal_kling]
-custo_usd_por_segundo = 0.084  # estimativa (revisar no KR1)
+custo_usd_por_segundo = 0.112  # KR1 24/10/2026: Kling v3 no fal US$ 0,112–0,14/s (a favor do bolso)
 classe = "fal_video"
 modelo = "fal-ai/kling-video/v3/standard/image-to-video"
 campo_imagem = "start_image_url"  # o Kling v3 usa este nome de parâmetro
@@ -173,7 +173,7 @@ chave_env = "FAL_KEY"
 timeout = 900
 
 [provedores.fal_wan]
-custo_usd_por_segundo = 0.05  # estimativa (revisar no KR1)
+custo_usd_por_segundo = 0.10  # KR1 24/10/2026: Wan 2.5 US$ 0,05 (480p) / 0,10 (720p) / 0,15 (1080p) por s
 classe = "fal_video"
 modelo = "fal-ai/wan-25-preview/image-to-video"
 chave_env = "FAL_KEY"
@@ -188,7 +188,7 @@ classe = "ken_burns"
 
 [provedores.gemini_video]
 familia = "google"  # juiz nunca é da mesma família de quem gerou
-custo_usd = 0.05    # estimativa por vídeo curto (revisar no KR1)
+custo_usd = 0.03  # KR1 24/10/2026: ~290 tokens/s de vídeo+áudio; 30 s ≈ 9k entrada + 2k saída no 3.6 Flash
 classe = "gemini_video"
 modelo = "gemini-3.6-flash"  # mesmo modelo da percepção; aceita vídeo + áudio e link do YouTube
 chave_env = "GEMINI_API_KEY"

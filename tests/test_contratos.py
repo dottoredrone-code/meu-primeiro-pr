@@ -74,3 +74,36 @@ class TestContratos(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestClaudeAtual(unittest.TestCase):
+    """KR1 24/10/2026: modelos atuais pensam antes de responder; cortar ou recusar vira falha (vai para o próximo)."""
+
+    def chamar(self, resposta):
+        from unittest import mock
+
+        from torralles_studio.provedores import texto
+
+        enviados = []
+
+        def falso(url, corpo, cab, timeout):
+            enviados.append(corpo)
+            return resposta
+
+        prov = texto.AnthropicTexto("claude", {"modelo": "claude-sonnet-5-5"})
+        with mock.patch.object(texto, "post_json", falso):
+            return prov.executar("oi"), enviados
+
+    def test_texto_ignora_bloco_de_raciocinio_e_nao_manda_temperature(self):
+        r, enviados = self.chamar({"stop_reason": "end_turn", "content": [{"type": "thinking", "thinking": ""},
+                                                                           {"type": "text", "text": "olá"}]})
+        self.assertEqual(r, "olá")
+        self.assertNotIn("temperature", enviados[0])
+        self.assertGreaterEqual(enviados[0]["max_tokens"], 16000)
+
+    def test_cortada_ou_recusada_e_erro(self):
+        from torralles_studio.rede import ErroProvedor
+
+        for motivo in ("max_tokens", "refusal"):
+            with self.assertRaises(ErroProvedor):
+                self.chamar({"stop_reason": motivo, "content": [{"type": "text", "text": "{\"a\": "}]})
