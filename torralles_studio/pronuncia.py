@@ -56,6 +56,9 @@ def por_extenso(n):
 def _numeros_por_extenso(texto):
     t = re.sub(r"R\$\s*([\d.]+),(\d{2})\b", r"\1 reais e \2 centavos", texto)  # como se fala um preço
     t = re.sub(r"R\$\s*([\d.]+)", r"\1 reais", t)
+    t = re.sub(r"US\$\s*([\d.]+)[,.](\d{2})\b", r"\1 dólares e \2 centavos", t)
+    t = re.sub(r"US\$\s*([\d.]+)", r"\1 dólares", t)
+    t = re.sub(r"(\d)\s*h\b", r"\1 horas", t)
     t = re.sub(r"(\d)\s*%", r"\1 por cento", t)
     t = re.sub(r"(?<=\d)\.(?=\d{3}\b)", "", t)  # 1.500 → 1500
 
@@ -91,9 +94,11 @@ def taxa_erro(referencia, hipotese):
     return round(_distancia(ref, hip) / len(ref), 3)
 
 
-def limpar_transcricao(texto):
-    """Tira marcas de tempo, rótulos de quem fala e descrição de sons que uma transcrição costuma trazer."""
-    t = re.split(r"(?im)(?:^|(?<=[.!?])\s+)\s*sons?(?:\s+percebidos)?\s*:", str(texto or ""))[0]
+def limpar_transcricao(texto, cortar_sons=True):
+    """Tira marcas de tempo, rótulos de quem fala e (na transcrição da percepção) a lista de sons."""
+    t = str(texto or "")
+    if cortar_sons:
+        t = re.split(r"(?im)(?:^|(?<=[.!?])\s+)\s*\**\s*sons?(?:\s+percebidos)?\s*\**\s*:", t)[0]
     t = re.sub(r"[\[(]\s*\d{1,2}(?::\d{2}){1,2}(?:\.\d+)?(?:\s*[-–]\s*\d{1,2}(?::\d{2}){1,2}(?:\.\d+)?)?\s*[\])]",
                " ", t)
     t = re.sub(r"(?im)^\s*(?:transcri[cç][aã]o|narrador|locutor|falante\s*\d*|voz)\s*:\s*", "", t)
@@ -120,7 +125,7 @@ def transcrever_fala(arquivo):
                            "generationConfig": {"temperature": 0}},
                           {"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, 120)
             texto = "".join(p.get("text", "") for p in r["candidates"][0]["content"]["parts"])
-            return {"texto": texto, "motor": f"gemini:{modelo}"}
+            return {"texto": texto, "motor": f"gemini:fala:{modelo}"}
         except Exception:  # cai para a transcrição da percepção
             pass
     from .percepcao import transcrever
@@ -134,8 +139,11 @@ def conferir_voz(arquivo, texto, transcrever=None):
     t = (transcrever or (lambda a, p: transcrever_fala(a)))(Path(arquivo), None)
     if not t or not t.get("texto"):
         return None
-    falado = limpar_transcricao(t["texto"])
+    # a transcrição própria já vem sem sons; cortar "Sons:" só na da percepção (a narração pode ter essa palavra)
+    falado = limpar_transcricao(t["texto"], cortar_sons=not str(t.get("motor", "")).startswith("gemini:fala"))
     ref, hip = palavras(texto), palavras(falado)
+    if not hip:  # nada sobrou para comparar: não conta como erro (não paga outra voz)
+        return None
     erros = _distancia(ref, hip)
     wer = round(erros / len(ref), 3) if ref else (0.0 if not hip else 1.0)
     return {"wer": wer, "erros": erros, "transcricao": " ".join(falado.split())[:500], "motor": t.get("motor"),

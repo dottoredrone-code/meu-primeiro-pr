@@ -21,6 +21,7 @@
 | K21 | Trilha pelo clima do roteiro (`trilha.py`): música instrumental com licença comercial, BPM e energia medidos com FFmpeg, voz eliminatória, crédito; trilha ruim nunca derruba o vídeo — teste real no PC pendente (Jamendo) | [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) · D19 |
 | K23 | Exportação para o CapCut (`exportar.py`, `produzir --capcut`, `exportar-capcut`): clipes por quadros, áudios alinhados no volume do vídeo, legenda .srt, guia e créditos — abrir no CapCut no PC pendente | D5 |
 | K28 | Servidor do Studio para o Ops e o Hermes: contrato da spec 08, fila assíncrona no SQLite (sem produção em dobro, retomada de órfãos, teto nas retomadas), HTTP local protegido (CSRF, host, token) e MCP por stdio — teste real com o Ops/Hermes pendente | [08](docs/sdd/08-contrato-ops-studio.md) · D13 · D14 |
+| K18 | Voz com fallback (voz do Gemini antes do Edge) e conferência da narração por transcrição (erro de palavras ≤ 10%, números por extenso, refaz com outra voz e fica com a melhor, dentro do teto); `testar-voz` — teste real no PC pendente (nome do modelo TTS) | [11](docs/sdd/11-banco-midia-gratuita.md) |
 | K00c | Planejamento: specs 00–12 e decisões D1–D20 | [decisões](docs/sdd/decisoes.md) |
 | K01 | Modelos atualizados + Kling v3 `start_image_url` (teste de contrato por família) | [00](docs/sdd/00-descoberta.md) |
 | K02 | Pacote renomeado para `torralles_studio` | D1 |
@@ -72,7 +73,6 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
 | K17 | 🔒 Imagens com consistência entre cenas (Nano Banana 2 / FLUX) | [03](docs/sdd/03-parametros-avaliacao.md) | K01 · K09 · **chaves** | Juízes aprovam consistência e anatomia |
-| K18 | Voz com fallback e checagem por transcrição — **em verificação**: voz do Gemini (TTS) na cadeia antes do Edge; `pronuncia.py` mede o erro de palavras (≤ 10%) e o `produzir` refaz a fala com a próxima voz; comando `testar-voz` (frase com lh, nh, rr) para ouvir; falta teste real no PC (nome do modelo TTS) | [11](docs/sdd/11-banco-midia-gratuita.md) | K00b | Erro de palavras ≤ 10% |
 | K19 | 🔒 Vídeo por cena no modo misto (Kling v3 nas cenas-chave, zoom nas demais) — zoom local já segue a proporção do perfil e o movimento da cena (17/10) | D20 | K01 · K04 · **chave fal.ai** | Custo dentro do teto; sem congelamento indevido |
 
 ### Camada 4 — Dados e memória (pode começar junto com a Camada 1)

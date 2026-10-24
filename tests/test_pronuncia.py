@@ -26,6 +26,15 @@ class TestTaxaDeErro(unittest.TestCase):
                                 ("Custa R$ 49,90", "custa quarenta e nove reais e noventa centavos")]:
             self.assertEqual(taxa_erro(escrito, falado), 0.0, escrito)
 
+    def test_dolares_horas_e_transcricao_vazia(self):
+        self.assertEqual(taxa_erro("Custa US$ 1,50", "custa um dólares e cinquenta centavos"), 0.0)
+        self.assertEqual(taxa_erro("Abre às 10h", "abre às dez horas"), 0.0)
+        self.assertIsNone(conferir_voz("x", "Olha", transcrever=lambda a, p: {"texto": "**SONS:** música"}))
+        c = conferir_voz("x", "Ouça a floresta. Sons: pássaros cantando.",
+                         transcrever=lambda a, p: {"texto": "Ouça a floresta. Sons: pássaros cantando.",
+                                                   "motor": "gemini:fala:m"})
+        self.assertEqual(c["erros"], 0)  # na transcrição própria, "Sons:" é parte da fala
+
     def test_uma_palavra_trocada_em_cena_curta_nao_refaz(self):
         c = conferir_voz("x.mp3", "Olha só isso.", transcrever=lambda a, p: {"texto": "Ola só isso."})
         self.assertEqual((c["erros"], c["ok"]), (1, True))

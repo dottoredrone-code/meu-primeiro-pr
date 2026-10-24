@@ -163,3 +163,11 @@
 - **Toda entrada externa passa por validação que nunca lança:** tipo errado vira 422 / erro JSON-RPC, não queda.
 - **Teto por pedido vale nas retomadas** (gasto anotado em disco, de forma atômica).
 - 3 rodadas de verificação (4 altos na 1ª; aprovado com ressalvas baixas na 2ª, corrigidas).
+
+## Camada 3 — Voz: K18 (24/10/2026)
+- **Conferir fala por transcrição exige normalizar números:** "30" escrito vs. "trinta" falado dava 14–125% de
+  erro e pagaria outra voz em todo roteiro com número. Comparar por extenso nos dois lados.
+- **Percentual sozinho engana em cena curta:** 1 palavra em 3 = 33%. Exigir também um mínimo de erros absolutos.
+- **Conferência custa:** cada transcrição entra no orçamento do vídeo; sem teto, não confere.
+- **Refazer não pode piorar:** a 2ª tentativa vai para outro arquivo e só fica se for melhor.
+- 2 rodadas de verificação (3 altos + 2 médios na 1ª; aprovado na 2ª).
