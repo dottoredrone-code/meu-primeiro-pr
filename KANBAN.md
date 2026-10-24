@@ -45,6 +45,7 @@
 ## 🔍 Em verificação
 | ID | Cartão | Spec |
 |---|---|---|
+| K12 | `analisar-referencia` (`referencias.py`): métricas, estrutura do roteiro, tipo de gancho, 4 critérios de potencial com evidência e âncoras sugeridas; link do YouTube sem baixar, arquivo local medido pelo FFmpeg; JSON em `dados/referencias/` — teste real no PC pendente | [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) · [09](docs/sdd/09-referencias-qualidade.md) |
 
 ## 🛠️ Em andamento
 | ID | Cartão | Spec |

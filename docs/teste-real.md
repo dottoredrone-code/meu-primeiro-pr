@@ -47,6 +47,14 @@ O vídeo sai em `saidas/beneficios-do-cha-verde/video_final.mp4`, com `relatorio
 Se parar no meio, rode o mesmo comando: o que já ficou pronto é reaproveitado sem pagar de novo.
 Para refazer do zero, apague a pasta do tema.
 
+## 2c. Vídeos de referência (K12)
+```bash
+python -m torralles_studio analisar-referencia "https://www.youtube.com/shorts/<id>" -c A
+```
+Escolha 3 a 5 vídeos por canal da categoria A (`config/referencias.toml`). O Gemini assiste pelo link, sem baixar.
+Cada análise vira um JSON em `dados/referencias/A/` (fora do Git): números, partes do roteiro, gancho, notas com
+evidência e âncoras sugeridas. Guarda só o link e trechos curtos, nunca o vídeo ou a transcrição inteira.
+
 ## 3. O que anotar (para ajustar o config)
 | O que | Onde aparece | O que fazer |
 |---|---|---|

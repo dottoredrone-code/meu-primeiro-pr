@@ -176,6 +176,38 @@ def comando_servidor(args):
         servico.parar(esperar=False)
 
 
+def comando_analisar_referencia(args, roteador):
+    import tomllib
+
+    from .config import RAIZ
+    from .referencias import analisar_referencia
+    from .roteador import TodosFalharam
+
+    try:
+        categorias = tomllib.loads((RAIZ / "config" / "referencias.toml").read_text(encoding="utf-8"))["categorias"]
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
+        categorias = {}
+    categoria = args.categoria.upper()
+    if categorias and categoria not in categorias:
+        print(f"✗ categoria {categoria!r} não existe (use {', '.join(categorias)})", file=sys.stderr)
+        return 1
+    try:
+        r = analisar_referencia(roteador, args.video, categoria, nome_categoria=(categorias.get(categoria) or {}).get("nome"),
+                                pasta=RAIZ / "dados" / "referencias")
+    except (TodosFalharam, ValueError) as e:
+        print(f"✗ não deu para analisar: {e}", file=sys.stderr)
+        return 1
+    p = r["potencial"]
+    print(f"✓ {r['origem']} · categoria {categoria} · {r['medido_por']}")
+    print(f"  duração {r['duracao_s']:.0f} s · {r['cortes_por_minuto']:.0f} cortes/min · plano médio "
+          f"{r['duracao_media_plano_s']:.1f} s · {r['palavras_por_segundo']:.1f} palavras/s")
+    print(f"  gancho: {r['gancho']['tipo']} aos {r['gancho']['momento_s']:.0f} s — {r['gancho']['trecho']}")
+    print("  estrutura: " + " → ".join(f"{e['parte']} ({e['inicio_s']:.0f}–{e['fim_s']:.0f} s)" for e in r["estrutura"]))
+    print(f"  potencial {r['nota_potencial']:.0f}/100: " + ", ".join(f"{c} {v['nota']:.0f}" for c, v in p.items()))
+    print(f"  salvo em {r['arquivo']}")
+    return 0
+
+
 def comando_testar_voz(args, roteador):
     from pathlib import Path
 
@@ -364,6 +396,10 @@ def main(argv=None):
     s.add_argument("--sem-conferir-voz", action="store_true",
                    help="não transcreve a narração para conferir a pronúncia (mais rápido, sem custo de transcrição)")
 
+    s = sub.add_parser("analisar-referencia", help="analisa um vídeo de referência (link do YouTube ou arquivo) para a régua")
+    s.add_argument("video", help="link de um vídeo do YouTube (sem baixar) ou arquivo local")
+    s.add_argument("-c", "--categoria", required=True, help="categoria de referência (A, B, C… de config/referencias.toml)")
+
     s = sub.add_parser("testar-voz", help="grava uma frase difícil (lh, nh, rr) em cada voz pronta e mede o erro")
     s.add_argument("-o", "--pasta", default="saidas/teste-voz")
     s.add_argument("--frase", help="frase de teste (padrão: palavras com lh, nh, r e rr)")
@@ -424,6 +460,8 @@ def main(argv=None):
 
     if args.comando == "produzir":
         return comando_produzir(args, roteador, perfil)
+    if args.comando == "analisar-referencia":
+        return comando_analisar_referencia(args, roteador)
     if args.comando == "testar-voz":
         return comando_testar_voz(args, roteador)
     if getattr(args, "qualidade", False):
