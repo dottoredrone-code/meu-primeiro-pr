@@ -505,12 +505,15 @@ class Banco:
                 "resultado": json.loads(linha["resultado_json"]) if linha["resultado_json"] else None,
                 "erro": linha["erro"], "criado_em": linha["criado_em"], "atualizado_em": linha["atualizado_em"]}
 
-    def atualizar_pedido(self, pedido_id, status, resultado=None, erro=None):
+    def atualizar_pedido(self, pedido_id, status, resultado=None, erro=None, dono=None):
+        """Grava o desfecho. Com `dono`, só grava se o pedido ainda for dele (um processo que perdeu o pedido
+        para outro não sobrescreve o resultado novo). Devolve True se gravou."""
+        sql = ("UPDATE pedidos SET status = ?, resultado_json = COALESCE(?, resultado_json), erro = ?, "
+               "atualizado_em = ? WHERE id = ?" + (" AND dono = ?" if dono else ""))
+        args = [status, json.dumps(resultado, ensure_ascii=False) if resultado is not None else None, erro, _agora(),
+                pedido_id] + ([dono] if dono else [])
         with self.con:
-            self.con.execute("UPDATE pedidos SET status = ?, resultado_json = COALESCE(?, resultado_json), erro = ?, "
-                             "atualizado_em = ? WHERE id = ?",
-                             (status, json.dumps(resultado, ensure_ascii=False) if resultado is not None else None,
-                              erro, _agora(), pedido_id))
+            return self.con.execute(sql, args).rowcount == 1
 
     def proximo_pedido(self, dono=None):
         """Pega o pedido mais antigo da fila e o marca como 'produzindo' por `dono`.
@@ -534,8 +537,8 @@ class Banco:
     def batimento(self, pedido_id, dono):
         """O trabalhador avisa que continua vivo produzindo o pedido."""
         with self.con:
-            self.con.execute("UPDATE pedidos SET atualizado_em = ? WHERE id = ? AND dono = ? AND status = 'produzindo'",
-                             (_agora(), pedido_id, dono))
+            return self.con.execute("UPDATE pedidos SET atualizado_em = ? WHERE id = ? AND dono = ? "
+                                    "AND status = 'produzindo'", (_agora(), pedido_id, dono)).rowcount == 1
 
     def retomar_pedidos(self, orfao_apos_s=180):
         """Pedidos em produção sem batimento há `orfao_apos_s` voltam para a fila (o Studio parou no meio).

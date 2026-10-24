@@ -70,7 +70,7 @@ def compor_imagem(imagem, texto, proporcao, saida, fonte="Arial"):
             ["ffmpeg", "-y", "-v", "error", "-i", str(Path(imagem).resolve()), "-vf",
              f"scale={largura}:{altura}:force_original_aspect_ratio=increase,crop={largura}:{altura},setsar=1,"
              "ass=texto.ass", "-frames:v", "1", str(Path(saida).resolve())],
-            capture_output=True, text=True, cwd=pasta)
+            capture_output=True, stdin=subprocess.DEVNULL, text=True, cwd=pasta)
     if proc.returncode != 0:
         raise ErroProvedor(f"ffmpeg falhou ao compor a imagem: {proc.stderr.strip()[-200:]}")
     return Path(saida)
@@ -87,9 +87,11 @@ class OrcamentoDoPedido:
         class _Orcamento(Orcamento):
             def registrar(self, provedor, valor):
                 super().registrar(provedor, valor)
-                if valor:
-                    Path(arquivo).write_text(json.dumps({"gasto_usd": round(self.anterior + self.gasto_usd, 6)}),
-                                             encoding="utf-8")
+                if valor:  # grava em arquivo provisório e troca: queda no meio não zera o gasto anotado
+                    tmp = Path(str(arquivo) + ".tmp")
+                    tmp.write_text(json.dumps({"gasto_usd": round(self.anterior + self.gasto_usd, 6)}),
+                                   encoding="utf-8")
+                    os.replace(tmp, arquivo)
 
         try:
             anterior = float(json.loads(Path(arquivo).read_text(encoding="utf-8")).get("gasto_usd", 0))
@@ -233,19 +235,25 @@ class ServicoPecas:
 
         def bater():  # batimento: outros processos sabem que este pedido não está órfão
             while not vivo.wait(30):
-                with self._banco() as banco:
-                    banco.batimento(p["id"], self.dono)
+                try:
+                    with self._banco() as banco:
+                        if not banco.batimento(p["id"], self.dono):
+                            print(f"⚠ o pedido {p['id']} passou para outro processo; o resultado deste não será gravado",
+                                  file=sys.stderr)
+                            return
+                except Exception as e:  # banco ocupado etc.: tenta de novo na próxima batida
+                    print(mascarar(f"⚠ batimento falhou: {e}"), file=sys.stderr)
 
         threading.Thread(target=bater, daemon=True).start()
         try:
             resultado = self.fabricar(p["pedido"], pasta, config=self.config)
             status = "aguardando_aprovacao" if p["pedido"].get("aprovacao_humana") else "concluido"
             with self._banco() as banco:
-                banco.atualizar_pedido(p["id"], status, resultado)
+                banco.atualizar_pedido(p["id"], status, resultado, dono=self.dono)
         except Exception as e:  # o pedido falha sozinho; a fila continua
             detalhe = mascarar(f"{type(e).__name__}: {e}")
             with self._banco() as banco:
-                banco.atualizar_pedido(p["id"], "falhou", erro=detalhe[:500])
+                banco.atualizar_pedido(p["id"], "falhou", erro=detalhe[:500], dono=self.dono)
             print(mascarar(traceback.format_exc()), file=sys.stderr)  # detalhe para quem cuida, sem chaves
         finally:
             vivo.set()

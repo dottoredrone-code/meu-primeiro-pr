@@ -58,7 +58,7 @@ class ErroMontagem(Exception):
 # ---------------------------------------------------------------- FFmpeg
 
 def _ff(args, cwd=None):
-    proc = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-nostdin", *args], capture_output=True, text=True, cwd=cwd)
+    proc = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-nostdin", *args], capture_output=True, stdin=subprocess.DEVNULL, text=True, cwd=cwd)
     if proc.returncode != 0:
         raise ErroProvedor(f"ffmpeg falhou: {proc.stderr.strip()[-400:]}")
     return proc.stderr
@@ -66,7 +66,7 @@ def _ff(args, cwd=None):
 
 def duracao(arquivo):
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(arquivo)],
-                       capture_output=True, text=True)
+                       capture_output=True, stdin=subprocess.DEVNULL, text=True)
     try:
         return float(r.stdout.strip())
     except ValueError:
@@ -610,7 +610,7 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
 def _sondar(arquivo):
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
                         "stream=codec_type,codec_name,pix_fmt,width,height", "-of", "json", str(arquivo)],
-                       capture_output=True, text=True)
+                       capture_output=True, stdin=subprocess.DEVNULL, text=True)
     try:
         return json.loads(r.stdout).get("streams", [])
     except json.JSONDecodeError:

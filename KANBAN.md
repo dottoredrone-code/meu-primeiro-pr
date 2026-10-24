@@ -20,6 +20,7 @@
 | K06 | Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) — teste real no PC em 18/10: nota 90/100 no vídeo de demonstração | [10](docs/sdd/10-percepcao.md) |
 | K21 | Trilha pelo clima do roteiro (`trilha.py`): música instrumental com licença comercial, BPM e energia medidos com FFmpeg, voz eliminatória, crédito; trilha ruim nunca derruba o vídeo — teste real no PC pendente (Jamendo) | [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) · D19 |
 | K23 | Exportação para o CapCut (`exportar.py`, `produzir --capcut`, `exportar-capcut`): clipes por quadros, áudios alinhados no volume do vídeo, legenda .srt, guia e créditos — abrir no CapCut no PC pendente | D5 |
+| K28 | Servidor do Studio para o Ops e o Hermes: contrato da spec 08, fila assíncrona no SQLite (sem produção em dobro, retomada de órfãos, teto nas retomadas), HTTP local protegido (CSRF, host, token) e MCP por stdio — teste real com o Ops/Hermes pendente | [08](docs/sdd/08-contrato-ops-studio.md) · D13 · D14 |
 | K00c | Planejamento: specs 00–12 e decisões D1–D20 | [decisões](docs/sdd/decisoes.md) |
 | K01 | Modelos atualizados + Kling v3 `start_image_url` (teste de contrato por família) | [00](docs/sdd/00-descoberta.md) |
 | K02 | Pacote renomeado para `torralles_studio` | D1 |
@@ -83,7 +84,6 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 ### Camada 5 — Integração (depende das Camadas 1, 3 e 4)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
-| K28 | Servidor MCP + HTTP local, assíncrono (`POST /v1/pecas`, `GET /v1/pecas/{id}`) — **em verificação**: `contrato.py`, `servico.py` (fila no SQLite, retomada), `servidor.py` (HTTP com token opcional, MCP stdio); imagem e vídeo curto/story; carrossel depois | [08](docs/sdd/08-contrato-ops-studio.md) · D13 · D14 | K22 · K24 | Exemplo real do Ops validado pelo esquema |
 | K29 | No Torralles Ops (outro repositório): botão "Produzir no Studio" + colunas novas | [08](docs/sdd/08-contrato-ops-studio.md) | K28 | Peça volta com arquivo, nota e custo |
 | K30 | Hermes: skill/perfil que chama o Studio | [06](docs/sdd/06-estudo-hermes.md) | K28 | Pedido pelo Hermes gera vídeo |
 

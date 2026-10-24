@@ -68,7 +68,7 @@ class KenBurnsVideo(Provedor):
         saida.parent.mkdir(parents=True, exist_ok=True)
         cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(imagem), "-vf", filtro,
                "-frames:v", str(quadros), "-c:v", "libx264", "-pix_fmt", "yuv420p", str(saida)]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL, text=True)
         if proc.returncode != 0:
             raise ErroProvedor(f"ffmpeg falhou: {proc.stderr.strip()[:300]}")
         return saida

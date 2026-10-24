@@ -11,6 +11,7 @@ import hmac
 import json
 import os
 import re
+import socket
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -49,7 +50,7 @@ def _manipulador(servico, token, so_local):
 
         def _barrar(self):
             """Resposta de recusa (ou None se pode seguir): host, origem de navegador e token."""
-            cabecalho = self.headers.get("Host") or ""
+            cabecalho = (self.headers.get("Host") or "").lower()
             host = cabecalho.split("]")[0] + "]" if cabecalho.startswith("[") else cabecalho.rsplit(":", 1)[0]
             if so_local and host not in _LOCAL:  # contra "DNS rebinding": nome de outro site apontando para cá
                 return 403, {"erro": "host não permitido"}
@@ -107,7 +108,10 @@ def criar_servidor_http(servico, host="127.0.0.1", porta=8765, token=None):
     token = token if token is not None else os.environ.get("TORRALLES_STUDIO_TOKEN") or None
     if host not in ("127.0.0.1", "localhost", "::1") and not token:
         raise ValueError("para escutar fora deste PC, defina TORRALLES_STUDIO_TOKEN (proteção do servidor)")
-    return ThreadingHTTPServer((host, porta), _manipulador(servico, token, so_local=host in ("127.0.0.1", "localhost", "::1")))
+    classe = ThreadingHTTPServer
+    if ":" in host:  # IPv6 (ex.: ::1)
+        classe = type("ServidorIPv6", (ThreadingHTTPServer,), {"address_family": socket.AF_INET6})
+    return classe((host, porta), _manipulador(servico, token, so_local=host in ("127.0.0.1", "localhost", "::1")))
 
 
 # ---------------------------------------------------------------- MCP (stdio)

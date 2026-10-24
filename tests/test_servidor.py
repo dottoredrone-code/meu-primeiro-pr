@@ -138,6 +138,19 @@ class TestFila(unittest.TestCase):
             pegos = pool.map(_pegar, [str(self.d / "b.db")] * 4)
         self.assertEqual(sum(1 for p in pegos if p), 1)
 
+    def test_processo_que_perdeu_o_pedido_nao_sobrescreve_o_resultado(self):  # verificador K28
+        s = ServicoPecas(self.d / "b.db", fabricar=Fabrica())
+        r = s.enviar(PEDIDO)
+        with Banco(self.d / "b.db") as banco:
+            banco.proximo_pedido("antigo")
+            banco.con.execute("UPDATE pedidos SET status = 'na_fila', dono = NULL")  # foi retomado por outro
+            banco.con.commit()
+            banco.proximo_pedido("novo")
+            self.assertFalse(banco.batimento(r["job_id"], "antigo"))
+            self.assertFalse(banco.atualizar_pedido(r["job_id"], "concluido", {"x": 1}, dono="antigo"))
+            self.assertTrue(banco.atualizar_pedido(r["job_id"], "concluido", {"x": 2}, dono="novo"))
+            self.assertEqual(banco.pedido(r["job_id"])["resultado"], {"x": 2})
+
     def test_fila_tem_limite(self):
         from torralles_studio import servico as mod
 
@@ -204,6 +217,8 @@ class TestHTTP(unittest.TestCase):
         self.assertEqual(self.pedir(url, PEDIDO, extra={"Origin": "https://site-estranho.example"})[0], 403)
         self.assertEqual(self.pedir(url, PEDIDO, extra={"Host": "site-estranho.example"})[0], 403)
         self.assertEqual(self.pedir(url, PEDIDO, extra={"Origin": "http://localhost:3000"})[0], 202)  # painel do Ops
+        porta = base.rsplit(":", 1)[1]
+        self.assertEqual(self.pedir(url, PEDIDO, extra={"Host": f"LOCALHOST:{porta}"})[0], 202)
 
     def test_fila_cheia_responde_429(self):
         from torralles_studio import servico as mod

@@ -18,7 +18,7 @@ from .rede import ErroProvedor, post_json
 
 
 def _ff(*args, capturar_stderr=False):
-    proc = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", *args], capture_output=True, text=True)
+    proc = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", *args], capture_output=True, stdin=subprocess.DEVNULL, text=True)
     if proc.returncode != 0:
         raise ErroProvedor(f"ffmpeg falhou: {proc.stderr.strip()[-300:]}")
     return proc.stderr if capturar_stderr else proc.stdout
@@ -28,7 +28,7 @@ def _sondar(video):
     proc = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries",
          "format=duration:stream=codec_type,width,height,r_frame_rate", "-of", "json", str(video)],
-        capture_output=True, text=True, check=True,
+        capture_output=True, stdin=subprocess.DEVNULL, text=True, check=True,
     )
     dados = json.loads(proc.stdout)
     info = {"duracao_s": round(float(dados["format"]["duration"]), 2), "tem_audio": False}

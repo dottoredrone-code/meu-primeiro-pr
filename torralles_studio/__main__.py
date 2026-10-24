@@ -141,13 +141,18 @@ def comando_servidor(args):
     from .config import RAIZ, caminho_banco
     from .servico import ServicoPecas
 
+    canal = None
+    if args.comando == "mcp":
+        from .servidor import isolar_stdin
+
+        canal = isolar_stdin()  # antes de qualquer FFmpeg: stdin/stdout são só do JSON-RPC
     servico = ServicoPecas(caminho_banco(args.config), pasta_base=RAIZ / "saidas" / "pedidos", config=args.config)
     servico.iniciar()
     try:
         if args.comando == "mcp":
-            from .servidor import isolar_stdin, servir_mcp
+            from .servidor import servir_mcp
 
-            servir_mcp(servico, entrada=isolar_stdin())  # stdin/stdout são só do JSON-RPC (FFmpeg não lê dele)
+            servir_mcp(servico, entrada=canal)
             return 0
         from .servidor import criar_servidor_http
 

@@ -68,7 +68,7 @@ def tem_voz(candidato):
 def medir_ritmo(arquivo, segundos=60):
     """{"bpm", "energia" (0–1), "duracao_s"} medidos com FFmpeg + autocorrelação simples da energia."""
     proc = subprocess.run(["ffmpeg", "-v", "error", "-t", str(segundos), "-i", str(arquivo), "-ac", "1",
-                           "-ar", "4000", "-f", "s16le", "-"], capture_output=True)
+                           "-ar", "4000", "-f", "s16le", "-"], capture_output=True, stdin=subprocess.DEVNULL)
     if proc.returncode != 0 or not proc.stdout:
         raise ErroProvedor("não consegui ler o áudio da trilha")
     amostras = array.array("h")

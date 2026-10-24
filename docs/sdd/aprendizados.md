@@ -152,3 +152,14 @@
 - **Exportar para edição exige a mesma régua do final:** cortes por quadros acumulados, faixas com o ganho e o
   limitador da normalização, e só a mídia que tem crédito.
 - 3 rodadas de verificação (K21: 2 graves; K23: 2 graves + 3 médios; aprovado na 3ª).
+
+## Camada 4 — Servidor para o Ops e o Hermes: K28 (24/10/2026)
+- **Servidor local não é servidor seguro:** sem conferir `Content-Type`, `Origin` e `Host`, qualquer site aberto no
+  navegador põe pedido pago na fila (CSRF / DNS rebinding). Exigir JSON + origem e host locais fecha isso.
+- **Fila compartilhada entre processos precisa de dono:** SELECT + UPDATE sem condição fez 4 processos pegarem o
+  mesmo pedido 40 de 40 vezes. UPDATE condicionado + rowcount, batimento e "só retoma órfão" resolvem.
+- **MCP por stdio: o stdin é do protocolo.** Programa filho (FFmpeg) herda e consome bytes das mensagens;
+  isolar o stdin no início e `stdin=DEVNULL` em toda chamada.
+- **Toda entrada externa passa por validação que nunca lança:** tipo errado vira 422 / erro JSON-RPC, não queda.
+- **Teto por pedido vale nas retomadas** (gasto anotado em disco, de forma atômica).
+- 3 rodadas de verificação (4 altos na 1ª; aprovado com ressalvas baixas na 2ª, corrigidas).

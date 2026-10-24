@@ -38,7 +38,7 @@ def _ganho_final(trabalho):
 
 def _audio(origem, destino, ganho):
     proc = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(origem), "-af", f"volume={ganho}dB,alimiter=limit=0.84:level=disabled",  # pico ≤ −1,5 dB, sem estourar
-                           "-c:a", "pcm_s16le", str(destino)], capture_output=True, text=True)
+                           "-c:a", "pcm_s16le", str(destino)], capture_output=True, stdin=subprocess.DEVNULL, text=True)
     if proc.returncode != 0:
         raise ErroProvedor(f"ffmpeg falhou no áudio {Path(destino).name}: {proc.stderr.strip()[-200:]}")
 
@@ -71,7 +71,7 @@ def exportar_capcut(resultado, destino, *, creditos=None, titulo=None, pasta_tra
         proc = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(clipe), "-vf", "tpad=stop_mode=clone:stop=3",
                                "-frames:v", str(max(1, quadros)),  # tpad: se faltar 1 quadro no fim, repete o último
                                "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-pix_fmt", "yuv420p", "-an",
-                               str(pastas["01_clipes"] / f"cena_{i:02d}.mp4")], capture_output=True, text=True)
+                               str(pastas["01_clipes"] / f"cena_{i:02d}.mp4")], capture_output=True, stdin=subprocess.DEVNULL, text=True)
         if proc.returncode != 0:
             raise ErroProvedor(f"ffmpeg falhou ao cortar a cena {i}: {proc.stderr.strip()[-200:]}")
     ganho = _ganho_final(trabalho)  # faixas já no volume do vídeo pronto (−14 LUFS juntas)

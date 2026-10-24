@@ -44,7 +44,7 @@ def versao_leve(video, pasta, altura=720):
     cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(video), "-vf", f"scale=-2:'min({altura},trunc(ih/2)*2)'",
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "32", "-pix_fmt", "yuv420p",
            "-c:a", "aac", "-b:a", "64k", str(saida)]
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if r.returncode != 0:
         raise ErroProvedor(f"não consegui reduzir o vídeo: {r.stderr[-300:]}")
     return saida
