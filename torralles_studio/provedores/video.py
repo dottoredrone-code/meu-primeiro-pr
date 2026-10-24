@@ -25,7 +25,7 @@ class FalVideo(Provedor):
 
     tipo = "video"
 
-    def executar(self, imagem, prompt, saida, duracao=5, proporcao=None):
+    def executar(self, imagem, prompt, saida, duracao=5, proporcao=None, clima=None):
         # A proporção vem da imagem de entrada (gerada já no formato do perfil). Cada modelo nomeia o campo da imagem de um jeito (Kling v3: start_image_url; Wan: image_url).
         corpo = {"prompt": prompt, self.cfg.get("campo_imagem", "image_url"): data_uri(imagem)}
         if self.cfg.get("enviar_duracao", True):
@@ -46,8 +46,9 @@ class KenBurnsVideo(Provedor):
     def configurado(self):
         return None if shutil.which("ffmpeg") else "FFmpeg não instalado"
 
-    def executar(self, imagem, prompt, saida, duracao=5, proporcao=None):
-        """proporcao ("9:16", "16:9"…) define o tamanho do quadro; sem ela, usa largura/altura do config."""
+    def executar(self, imagem, prompt, saida, duracao=5, proporcao=None, clima=None):
+        """proporcao ("9:16", "16:9"…) define o tamanho do quadro; sem ela, usa largura/altura do config.
+        clima (do roteiro): efeitos leves por clima (efeitos_do_clima); sem clima, só o movimento."""
         if proporcao:
             largura, altura = tamanho_do_formato(proporcao)
         else:
@@ -61,6 +62,8 @@ class KenBurnsVideo(Provedor):
             f"crop={largura * 2}:{altura * 2},"
             f"zoompan=z='{z}':x='{x}':y='{y}':d={quadros}:s={largura}x{altura}:fps={fps},setsar=1"
         )
+        if clima and self.cfg.get("efeitos", True):
+            filtro += "," + ",".join(efeitos_do_clima(clima, largura, altura))
         saida = Path(saida)
         saida.parent.mkdir(parents=True, exist_ok=True)
         cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(imagem), "-vf", filtro,
@@ -92,13 +95,32 @@ def movimento(prompt, ultimo):
         tipo = _DESTINO[destino.group(1)]
     else:
         tipo = next((nome for nome, padrao in _MOVIMENTOS if re.search(padrao, t)), "aproximar")
-    p = f"(on/{max(1, ultimo)})"  # progresso 0 → 1
+    q = f"(on/{max(1, ultimo)})"  # progresso 0 → 1
+    p = f"({q}*{q}*(3-2*{q}))"  # com aceleração suave: começa e termina devagar (como câmera de verdade)
     cx, cy = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+    deriva = f"1.12+0.06*{p}"  # nos pans, um leve zoom junto dá sensação de profundidade
     return {
-        "aproximar": (f"1+0.2*{p}", cx, cy),
-        "afastar": (f"1.2-0.2*{p}", cx, cy),
-        "direita": ("1.15", f"(iw-iw/zoom)*{p}", cy),
-        "esquerda": ("1.15", f"(iw-iw/zoom)*(1-{p})", cy),
-        "subir": ("1.15", cx, f"(ih-ih/zoom)*(1-{p})"),
-        "descer": ("1.15", cx, f"(ih-ih/zoom)*{p}"),
+        "aproximar": (f"1+0.22*{p}", cx, cy),
+        "afastar": (f"1.22-0.22*{p}", cx, cy),
+        "direita": (deriva, f"(iw-iw/zoom)*{p}", cy),
+        "esquerda": (deriva, f"(iw-iw/zoom)*(1-{p})", cy),
+        "subir": (deriva, cx, f"(ih-ih/zoom)*(1-{p})"),
+        "descer": (deriva, cx, f"(ih-ih/zoom)*{p}"),
     }[tipo]
+
+
+def efeitos_do_clima(clima, largura, altura):
+    """Filtros leves do FFmpeg por clima da cena (vinheta, brilho que pulsa, granulado, tremor, cor)."""
+    clima = str(clima or "").strip().lower()
+    filtros = ["vignette=PI/5"]  # bordas um pouco mais escuras: o olhar vai para o centro
+    if clima in ("alegre", "inspirador"):
+        filtros.append("eq=brightness='0.035*sin(2*PI*t/2.5)':saturation=1.08:eval=frame")
+    elif clima == "epico":
+        filtros = ["vignette=PI/4", "eq=contrast=1.08:saturation=1.12"]
+    elif clima == "reflexivo":
+        filtros.append("noise=alls=6:allf=t")  # granulado de filme
+    elif clima == "tenso":
+        m = max(8, largura // 90)  # tremor discreto: recorta uma janela que oscila e volta ao tamanho
+        filtros = ["vignette=PI/4", f"crop={largura - 2 * m}:{altura - 2 * m}:'{m}+{m * 0.6:.1f}*sin(t*17)':"
+                   f"'{m}+{m * 0.6:.1f}*cos(t*13)'", f"scale={largura}:{altura}"]
+    return filtros

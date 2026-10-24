@@ -239,7 +239,8 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
                 avisar(f"== cena {i}/{total}: movimento")
                 dur = round((fim - ini) + folga + (1.5 if i == total else 0), 2)  # a última segura mais no fim
                 r = _gerar(video, lambda saida: funcoes.gerar_video(
-                    roteador, img, cena.get("prompt_movimento", ""), saida, duracao=dur, proporcao=proporcao))
+                    roteador, img, cena.get("prompt_movimento", ""), saida, duracao=dur, proporcao=proporcao,
+                    clima=cena.get("clima")))
                 etapa(f"cena {i}: vídeo", r.provedor)
         except TodosFalharam as e:
             raise ErroProducao(f"cena {i}: {e}") from None

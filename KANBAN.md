@@ -1,6 +1,6 @@
 # Kanban — Torralles Studio
 
-> Atualizado em 18/10/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
+> Atualizado em 24/10/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
 > Fluxo de cada cartão: **Backlog → Especificado → Em andamento → Em verificação → Pronto**.
 
 ## Regras do quadro
@@ -45,7 +45,7 @@
 ## 🛠️ Em andamento
 | ID | Cartão | Spec |
 |---|---|---|
-| K32 | Primeiro vídeo real ponta a ponta: comando `produzir` (pesquisa → roteiro com juiz → imagem, voz e cena → montagem, com retomada). Falta rodar no PC e sua aprovação | D19 |
+| K32 | Primeiro vídeo real ponta a ponta: comando `produzir` (pesquisa → roteiro com juiz → imagem, voz e cena → montagem, com retomada; foto gratuita com licença quando a IA de imagem falha). Rodou no PC em 21/10: "não ficou tão ruim, faltam animações e efeitos". Feito depois: legenda palavra por palavra, título animado, transição pelo clima, movimento com aceleração suave e efeitos por clima. Falta: trilha e efeitos sonoros (K21) e sua aprovação | D19 |
 
 ## 📋 Especificado (pronto para começar)
 

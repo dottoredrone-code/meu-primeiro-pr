@@ -131,3 +131,14 @@
 - **Juiz de vídeo (Gemini) funciona com chave real:** nota 90 no vídeo de demonstração, talvez generoso
   (nenhum problema apontado). Calibrar com suas notas no K14.
 - **Loop leva minutos:** mostrar o andamento (provedor e prazo) para não parecer travado.
+
+## Primeiro vídeo real e efeitos (21–24/10/2026)
+- **IA de imagem pode faltar sem aviso:** Gemini sem faturamento e Pollinations passando a cobrar (402).
+  Reserva com foto gratuita licenciada (acervo → Openverse) manteve o vídeo saindo a US$ 0.
+- **Busca em banco de fotos precisa do assunto, não do estilo:** tirar "cinematic", "close up"… e tentar
+  com menos palavras.
+- **PC do Diego: Intel HD 4600 (integrada).** IA de vídeo local (Wan 2.2) é inviável; movimento grátis é
+  feito pelo FFmpeg (aceleração suave, vinheta, brilho, granulado, tremor por clima). Movimento com IA só pago
+  (fal.ai), nas cenas-chave.
+- **Primeira reação ao vídeo real:** "não ficou tão ruim, faltam animações e efeitos" → legenda palavra por
+  palavra e transições pelo clima vieram antes de qualquer custo novo.
