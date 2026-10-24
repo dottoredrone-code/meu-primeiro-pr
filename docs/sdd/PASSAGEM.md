@@ -1,4 +1,4 @@
-# Passagem de bastão — Torralles Studio (atualizada em 24/10/2026)
+# Passagem de bastão — Torralles Studio (atualizada em 24/10/2026, noite)
 
 Leia este arquivo antes de continuar. O trabalho vinha numa sessão na nuvem e continua numa sessão local no PC
 do Diego (`C:\Users\Oem\meu-primeiro-pr`, branch **`claude/multi-model-integration-app-g1697x`**).
@@ -27,18 +27,25 @@ Leia também `CLAUDE.md`, `KANBAN.md`, `docs/sdd/decisoes.md` e o fim de `docs/s
 - **Voz:** edge-tts (`pip install edge-tts`). A Piper de teste fala "lh" como "l" (não usar como voz principal).
 - **Placa de vídeo:** Intel HD Graphics 4600 → IA de vídeo local inviável; Diego escolheu movimento grátis sem IA.
 
-## Próximos passos
-1. `git pull origin claude/multi-model-integration-app-g1697x`.
-2. Refazer o vídeo do chá verde com os efeitos novos, sem gastar: apagar só `saidas\beneficios-do-cha-verde\cena_*.mp4`
-   e `video_final.mp4` (manter `cena_*.png`, `voz_*.mp3`, `roteiro.json`, `fotos.json`) e rodar
-   `python -m torralles_studio produzir "benefícios do chá verde" -d 30 --pesquisa`; abrir com
-   `start saidas\beneficios-do-cha-verde\video_final.mp4` e perguntar ao Diego o que achou.
-3. **K21 — trilha e efeitos sonoros gratuitos** (pedido do Diego): trilha por clima de fontes com licença comercial
-   (acervo, Openverse áudio, Pixabay se houver chave; Freesound só com perfil `comercial = false`, D22), ligada ao
-   `produzir` (`montar(trilha=...)` já deixa a música 12 LU abaixo da voz e abaixa sob a fala); opcional: sons curtos
-   por cena (campo `sons` do roteiro, ≥ 15 LU abaixo da voz); licença de cada som em `creditos.txt`.
-   Spec: `docs/sdd/12-pesquisa-qualidade-concorrentes.md` §3.
-4. O K32 só fecha com a aprovação do Diego no vídeo completo.
+## Próximos passos (atualizado em 24/10/2026, à noite)
+Feito na nuvem desde a última passagem (tudo verificado por agente independente e na branch):
+- **K21 trilha** pelo clima do roteiro (Openverse/Jamendo, licença comercial, BPM pelo FFmpeg, crédito) — entra sozinha no `produzir`.
+- **K23 CapCut**: `produzir ... --capcut` ou `exportar-capcut saidas\<tema>`.
+- **K28 servidor** para o Ops e o Hermes: `servidor` (HTTP local) e `mcp` (docs/servidor.md).
+- **K18 voz**: voz do Gemini antes do Edge, conferência da narração por transcrição, comando `testar-voz`.
+
+No PC, nesta ordem:
+1. `git pull origin claude/multi-model-integration-app-g1697x`
+2. `python -m unittest discover -s tests` (deve passar; avisar se algo falhar no Windows)
+3. `python -m torralles_studio testar-voz` → ouvir `saidas\teste-voz\gemini_voz.mp3` ("olha", "vermelho"). Se der 404,
+   corrigir o nome do modelo TTS em `config/fallbacks.toml` (`[provedores.gemini_voz]`).
+4. Refazer o chá verde sem gastar com imagens: apagar `saidas\beneficios-do-cha-verde\voz_*.mp3`, `cena_*.mp4` e
+   `video_final.mp4` (manter `cena_*.png`, `roteiro.json`, `fotos.json`) e rodar
+   `python -m torralles_studio produzir "benefícios do chá verde" -d 30 --pesquisa --capcut`. Conferir: trilha baixou
+   do Jamendo? voz nova? pasta `capcut` abre no CapCut? Mostrar ao Diego para a aprovação do **K32**.
+5. Opcional: `python -m torralles_studio servidor` e um `POST /v1/pecas` de teste (docs/servidor.md).
+6. Depois: K29 (botão "Produzir no Studio" no repositório do Torralles Ops, com autorização do Diego) e K30 (Hermes
+   usando o MCP do Studio).
 
 ---
 
