@@ -179,16 +179,18 @@ class TestKenBurns(unittest.TestCase):
 
 class TestMovimentoKenBurns(unittest.TestCase):
     def test_le_o_movimento_do_prompt(self):
-        self.assertIn("1.22-0.22", movimento("slow zoom out", 10)[0])
-        self.assertIn("1.22-0.22", movimento("Afastar devagar", 10)[0])
+        self.assertIn("1.35-0.35", movimento("slow zoom out", 10)[0])
+        self.assertIn("1.35-0.35", movimento("Afastar devagar", 10)[0])
         self.assertIn("iw-iw/zoom", movimento("pan right", 10)[1])
         self.assertIn("(1-", movimento("câmera vai para a esquerda", 10)[1])
         self.assertIn("ih-ih/zoom", movimento("tilt up", 10)[2])
-        self.assertEqual(movimento("", 10)[0], "1+0.22*((on/10)*(on/10)*(3-2*(on/10)))")  # aproximar, suave
+        self.assertEqual(movimento("", 10)[0], "1+0.35*((on/10)*(on/10)*(3-2*(on/10)))")  # aproximar, suave
+        self.assertEqual(movimento("", 10, zoom=0.22)[0], "1+0.22*((on/10)*(on/10)*(3-2*(on/10)))")  # força no config
+        self.assertTrue(movimento("pan right", 10, zoom=5)[0].startswith("1.44+"))  # limite: nunca exagera
         # Verificador: destino vale em "da X para a Y"; palavras inteiras (sem "descobre" → descer).
         self.assertIn("(1-", movimento("pan da direita para a esquerda", 10)[1])
-        self.assertTrue(movimento("câmera descobre a cidade", 10)[0].startswith("1+0.22"))
-        self.assertTrue(movimento("zoom in revelando o recurso", 10)[0].startswith("1+0.22"))
+        self.assertTrue(movimento("câmera descobre a cidade", 10)[0].startswith("1+0.35"))
+        self.assertTrue(movimento("zoom in revelando o recurso", 10)[0].startswith("1+0.35"))
         self.assertIn("ih-ih/zoom", movimento("a câmera sobe devagar", 10)[2])
 
     def test_proporcoes(self):

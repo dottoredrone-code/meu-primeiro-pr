@@ -55,7 +55,7 @@ class KenBurnsVideo(Provedor):
             largura, altura = self.cfg.get("largura", 1280), self.cfg.get("altura", 720)
         fps = self.cfg.get("fps", 25)
         quadros = max(2, round(float(duracao) * fps))
-        z, x, y = movimento(prompt, quadros - 1)
+        z, x, y = movimento(prompt, quadros - 1, float(self.cfg.get("zoom", ZOOM_PADRAO)))
         # Amplia e recorta para cobrir o quadro antes do zoom (evita tremido e distorção).
         filtro = (
             f"scale={largura * 2}:{altura * 2}:force_original_aspect_ratio=increase,"
@@ -88,8 +88,15 @@ _DESTINO = {"direita": "direita", "esquerda": "esquerda", "cima": "subir", "baix
             "right": "direita", "left": "esquerda"}
 
 
-def movimento(prompt, ultimo):
-    """Expressões (z, x, y) do zoompan para o movimento pedido; `on` vai de 0 a `ultimo`."""
+ZOOM_PADRAO = 0.35  # quanto a câmera aproxima na cena (0.35 = 35%); o Diego pediu mais movimento que 0.22
+
+
+def movimento(prompt, ultimo, zoom=ZOOM_PADRAO):
+    """Expressões (z, x, y) do zoompan para o movimento pedido; `on` vai de 0 a `ultimo`.
+
+    zoom: amplitude do aproximar/afastar; nos pans, a imagem fica ampliada o bastante para a câmera
+    percorrer cerca de 20% da largura (com zoom 0.35)."""
+    zoom = min(max(zoom, 0.05), 0.8)
     t = "".join(c for c in unicodedata.normalize("NFD", str(prompt or "").lower()) if unicodedata.category(c) != "Mn")
     destino = re.search(r"\b(?:para|pra|to)(?: a| o| the)? (direita|esquerda|cima|baixo|right|left)\b", t)
     if destino:
@@ -99,10 +106,11 @@ def movimento(prompt, ultimo):
     q = f"(on/{max(1, ultimo)})"  # progresso 0 → 1
     p = f"({q}*{q}*(3-2*{q}))"  # com aceleração suave: começa e termina devagar (como câmera de verdade)
     cx, cy = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
-    deriva = f"1.12+0.06*{p}"  # nos pans, um leve zoom junto dá sensação de profundidade
+    base, extra = 1 + 0.55 * zoom, 0.27 * zoom
+    deriva = f"{base:.4g}+{extra:.4g}*{p}"  # nos pans, um leve zoom junto dá sensação de profundidade
     return {
-        "aproximar": (f"1+0.22*{p}", cx, cy),
-        "afastar": (f"1.22-0.22*{p}", cx, cy),
+        "aproximar": (f"1+{zoom:.4g}*{p}", cx, cy),
+        "afastar": (f"{1 + zoom:.4g}-{zoom:.4g}*{p}", cx, cy),
         "direita": (deriva, f"(iw-iw/zoom)*{p}", cy),
         "esquerda": (deriva, f"(iw-iw/zoom)*(1-{p})", cy),
         "subir": (deriva, cx, f"(ih-ih/zoom)*(1-{p})"),

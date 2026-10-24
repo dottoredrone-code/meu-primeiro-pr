@@ -183,6 +183,7 @@ timeout = 900
 [provedores.ken_burns]
 # Zoom local com FFmpeg: gratuito, garante que sempre sai um vídeo.
 classe = "ken_burns"
+zoom = 0.35  # força do movimento: 0.22 = discreto, 0.35 = padrão, 0.5 = forte (máx. 0.8)
 
 # ---------------------------------------------------------------- juiz de vídeo (assiste com som)
 
