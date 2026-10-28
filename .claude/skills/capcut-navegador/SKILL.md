@@ -7,7 +7,9 @@ description: Monta e dá acabamento a um vídeo do Torralles Studio no CapCut we
 
 O Studio já entrega o vídeo montado (`video_final.mp4`) e uma pasta para o CapCut. Aqui o Claude abre o **CapCut
 web no navegador do Claude** (painel do app desktop), monta o projeto com essa pasta, dá o acabamento e baixa o
-vídeo. O Diego aprova o resultado no fim (D19).
+vídeo, **sozinho**: o navegador do Claude opera o CapCut e o **controle do computador** opera a janela de arquivos
+do Windows. O Diego só faz o login no CapCut na primeira vez (fica salvo no navegador do Claude) e aprova o
+resultado no fim (D19).
 
 ## Antes de começar
 1. Os arquivos, o navegador do Claude, a janela de arquivos do Windows e a pasta Downloads ficam **no PC**. Por isso
@@ -23,8 +25,15 @@ vídeo. O Diego aprova o resultado no fim (D19).
    (`mcp__Claude_Browser__` no app desktop; `mcp__remote-devices__Claude_Browser__` numa sessão conectada ao PC) e
    `max_results: 64`. Se só houver `enable__mcp__remote-devices__Claude_Browser`, chame-a antes. Siga a skill
    `built-in-browser`.
+5. Carregue o **controle do computador** (ToolSearch `{ query: "computer", max_results: 60 }`; se só houver
+   `enable__mcp__remote-devices__computer`, chame-a antes) e siga a skill `computer-use`. Peça acesso **só** ao app
+   que abre a janela de arquivos (o app desktop do Claude, dono do navegador do Claude); nada de Explorer, outros
+   apps ou navegadores comuns. Se o controle do computador não estiver disponível (desligado em Configurações →
+   Este computador → Controle do computador) ou o Diego negar, siga com ele escolhendo os arquivos (passo 3, plano B).
 
 ## Regras que não podem ser quebradas
+- **Controle do computador só para a janela de arquivos** (abrir e salvar) dos arquivos de `saidas\<tema>\`.
+  Nunca para outra coisa: o CapCut é operado pelo navegador do Claude, os comandos pelo terminal da sessão.
 - **Conta do Diego:** ele faz o login no CapCut. Nunca digite senha, nunca saia da conta, nunca aceite termos novos,
   assine plano, pague, publique ou compartilhe nada pelo CapCut. Precisou de algo assim: pare e peça ao Diego.
 - **Licenças (D2, D18):** use só a mídia da pasta exportada. **Não** use músicas, sons, vídeos de banco, figurinhas,
@@ -40,10 +49,15 @@ vídeo. O Diego aprova o resultado no fim (D19).
 1. Abra `https://www.capcut.com/` com `preview_start`. Se pedir login, chame `tabs_context` (o painel precisa
    estar visível; se estiver escondido, peça Ctrl+Shift+B) e peça ao Diego para entrar na conta dele.
 2. Crie um projeto novo em branco **9:16 (1080×1920)** — ou a proporção que estiver em `linha_do_tempo.json`.
-3. **Envie os arquivos:** clique em enviar/upload. A janela de arquivos do Windows é com o Diego, **uma pasta por
-   vez**. Descubra o caminho completo com `(Resolve-Path saidas\<tema>\capcut).Path` e peça para ele selecionar:
-   (1) todos os arquivos de `...\capcut\01_clipes\`; (2) os de `...\capcut\02_audio\`; (3) `...\capcut\03_legendas\
-   legendas.srt`, se o CapCut aceitar legenda. Espere todos terminarem de subir.
+3. **Envie os arquivos**, uma pasta por vez. Descubra o caminho completo com `(Resolve-Path saidas\<tema>\capcut).Path`.
+   Para cada pasta — (1) `...\capcut\01_clipes\`; (2) `...\capcut\02_audio\`; (3) `...\capcut\03_legendas\`, se o
+   CapCut aceitar legenda — clique em enviar/upload no navegador do Claude e, na janela de arquivos do Windows, com
+   o controle do computador: clique no campo "Nome", digite o caminho da pasta e Enter (a janela entra na pasta);
+   clique na lista de arquivos, Ctrl+A e "Abrir". Tire um screenshot da janela antes de clicar em "Abrir" para
+   conferir a pasta e os arquivos (só `.mp4`, `.wav`, `.srt` desta pasta; nada fora de `saidas\<tema>\capcut`).
+   Espere todos terminarem de subir.
+   **Plano B** (sem controle do computador): peça ao Diego para selecionar os arquivos de cada pasta, com o caminho
+   completo.
 4. **Monte a linha do tempo:**
    - cenas `cena_01`, `cena_02`… em ordem, coladas, começando em 0 s. Confira a duração de cada uma com a de
      `linha_do_tempo.json` (diferença de até 0,1 s);
@@ -66,7 +80,9 @@ vídeo. O Diego aprova o resultado no fim (D19).
    - filtro leve e igual em todas as cenas, se ajudar a unir as fotos (sem exagero).
 6. **Confira na prévia** (screenshot em 3 pontos: início, meio, fim): legenda sincronizada com a fala, nada cortado
    nas bordas, sem tela preta, título, textos e CTA aparecendo.
-7. **Exporte** em 1080p, 30 fps, MP4, sem marca d'água. Se abrir uma janela para salvar, é com o Diego. Depois mova
+7. **Exporte** em 1080p, 30 fps, MP4, sem marca d'água. Se abrir uma janela para salvar, use o controle do
+   computador para salvar em `saidas\<tema>\video_capcut.mp4` (caminho completo no campo "Nome"); sem ele, peça ao
+   Diego. Se o download foi direto para Downloads, mova
    o arquivo baixado mais recente para a pasta do vídeo (PowerShell):
    `Get-ChildItem $env:USERPROFILE\Downloads\*.mp4 | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | Move-Item -Destination saidas\<tema>\video_capcut.mp4`
    Se não estiver em Downloads, pergunte ao Diego onde salvou.

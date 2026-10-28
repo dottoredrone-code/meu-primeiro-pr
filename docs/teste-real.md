@@ -98,10 +98,12 @@ julgado que não mudou não paga de novo (`--refazer` força). Os vídeos do Goo
 Gemini, são julgados pelo Gemini, da mesma família: suas notas servem para conferir esse viés.
 
 ## 2f. CapCut pelo navegador do Claude (K33)
+Antes, uma vez só: no app desktop do Claude, ligue **Configurações → Este computador → Controle do computador**.
 Abra o app desktop do Claude na pasta do repositório e peça: "monte e finalize no CapCut o vídeo de
-`saidas\beneficios-do-cha-verde`". O Claude segue a skill `capcut-navegador`: abre o CapCut web no navegador dele,
-você faz o login e escolhe os arquivos na janela do Windows quando ele pedir; ele monta, aplica o acabamento,
-exporta para `video_capcut.mp4` e compara a nota com a do `video_final.mp4`. Você aprova no fim.
+`saidas\beneficios-do-cha-verde`". O Claude segue a skill `capcut-navegador`: abre o CapCut web no navegador dele
+(na primeira vez você faz o login), pede acesso ao controle do computador para a janela de arquivos (aprove),
+envia os arquivos, monta, aplica o acabamento, exporta para `video_capcut.mp4` e compara com o `video_final.mp4`
+(avisa antes das 2 notas pagas do juiz). Você aprova no fim.
 
 ## 3. O que anotar (para ajustar o config)
 | O que | Onde aparece | O que fazer |
