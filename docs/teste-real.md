@@ -54,6 +54,24 @@ python -m torralles_studio analisar-referencia "https://www.youtube.com/shorts/<
 Escolha 3 a 5 vídeos por canal da categoria A (`config/referencias.toml`). O Gemini assiste pelo link, sem baixar.
 Cada análise vira um JSON em `dados/referencias/A/` (fora do Git): números, partes do roteiro, gancho, notas com
 evidência e âncoras sugeridas. Guarda só o link e trechos curtos, nunca o vídeo ou a transcrição inteira.
+Exemplo do que **não** fazer (vídeo de "fábrica de conteúdo"): acrescente `--negativo`.
+
+Depois de pelo menos 3 vídeos positivos na categoria:
+```bash
+python -m torralles_studio perfil-referencia -c A --salvar
+```
+Mostra as faixas típicas (25º–75º percentil) e grava em `config/perfis_referencia.toml`. Confira os números e
+commite o arquivo: a partir daí, o relatório do `produzir` avisa quando o vídeo sai da faixa da categoria do perfil.
+
+## 2d. Calibração: suas notas × juiz (K14)
+Assista a cada vídeo analisado e dê sua nota de 0 a 10 (pode dar só alguns critérios):
+```bash
+python -m torralles_studio nota-referencia "https://www.youtube.com/shorts/<id>" -c A --gancho 8 --fluxo 7 --valor 6 --tendencia 9
+python -m torralles_studio calibrar -c A
+```
+Com 3 vídeos ou mais, mostra se o juiz é mais generoso, mais rígido ou discorda de você, e o que ajustar. Para
+ajustar as âncoras, escreva-as em `config/ancoras.toml` (parta das "ancoras_sugeridas" dos JSON), rode o
+`analisar-referencia` de novo nos mesmos vídeos (suas notas são mantidas) e o `calibrar` outra vez.
 
 ## 3. O que anotar (para ajustar o config)
 | O que | Onde aparece | O que fazer |

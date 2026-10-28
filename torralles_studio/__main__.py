@@ -132,6 +132,8 @@ def comando_produzir(args, roteador, perfil):
             print(f"  {e['etapa']}: {e['provedor']} · {nota}", file=sys.stderr)
     for problema in rel["problemas"]:
         print(f"✗ {problema}")
+    for alerta in (rel.get("referencia") or {}).get("alertas", []):
+        print(f"⚠ {alerta}")
     print(f"{'✓' if rel['aprovado'] else '⚠'} {rel['video']} · {rel['duracao_s']:.1f} s · US$ {rel['custo_usd']:.3f}"
           f" · {rel['tempo_s']} s")
     if rel.get("capcut"):
@@ -182,6 +184,7 @@ def comando_analisar_referencia(args, roteador):
 
     from .config import RAIZ
     from .rede import ErroProvedor
+    from .calibracao import carregar_ancoras
     from .referencias import analisar_referencia
     from .seguranca import mascarar
     from .roteador import TodosFalharam
@@ -198,7 +201,9 @@ def comando_analisar_referencia(args, roteador):
     try:
         cat = categorias.get(categoria) or {}
         r = analisar_referencia(roteador, args.video, categoria, nome_categoria=cat.get("nome"),
-                                formato=cat.get("formato"), pasta=RAIZ / "dados" / "referencias")
+                                formato=cat.get("formato"), pasta=RAIZ / "dados" / "referencias",
+                                negativo=args.negativo,
+                                ancoras=carregar_ancoras(RAIZ / "config" / "ancoras.toml", categoria))
     except (TodosFalharam, ValueError, ErroProvedor, subprocess.CalledProcessError, OSError) as e:
         print(f"✗ não deu para analisar: {mascarar(str(e))}", file=sys.stderr)
         return 1
@@ -210,6 +215,75 @@ def comando_analisar_referencia(args, roteador):
     print("  estrutura: " + " → ".join(f"{e['parte']} ({e['inicio_s']:.0f}–{e['fim_s']:.0f} s)" for e in r["estrutura"]))
     print(f"  potencial {r['nota_potencial']:.0f}/100: " + ", ".join(f"{c} {v['nota']:.0f}" for c, v in p.items()))
     print(f"  salvo em {r['arquivo']}")
+    return 0
+
+
+def comando_perfil_referencia(args):
+    from .config import RAIZ
+    from .referencias import NOMES_MEDIDAS, carregar_analises, perfil_da_categoria, salvar_perfil
+
+    categoria = args.categoria.upper()
+    analises = carregar_analises(RAIZ / "dados" / "referencias", categoria)
+    try:
+        perfil = perfil_da_categoria(analises)
+    except ValueError as e:
+        print(f"✗ categoria {categoria}: {e}. Analise mais vídeos com analisar-referencia.", file=sys.stderr)
+        return 1
+    negativos = len(analises) - perfil["n"]
+    print(f"Categoria {categoria}: {perfil['n']} referências positivas" + (f" ({negativos} negativas fora da conta)"
+                                                                          if negativos else ""))
+    for m, (baixo, alto) in perfil["faixas"].items():
+        print(f"  {NOMES_MEDIDAS[m]}: {baixo:g} a {alto:g}")
+    print(f"  ganchos: {', '.join(perfil['gancho_tipos_aceitos']) or '—'}")
+    if perfil["nota_potencial_minima"] is not None:
+        print(f"  potencial (25º percentil): {perfil['nota_potencial_minima']:g}/100")
+    if args.salvar:
+        print(f"✓ salvo em {salvar_perfil(RAIZ / 'config' / 'perfis_referencia.toml', categoria, perfil)} (revise e commite)")
+    else:
+        print("  (use --salvar para gravar em config/perfis_referencia.toml)")
+    return 0
+
+
+def comando_nota_referencia(args):
+    from .calibracao import registrar_notas
+    from .config import RAIZ
+
+    notas = {c: getattr(args, c) for c in ("gancho", "fluxo", "valor", "tendencia") if getattr(args, c) is not None}
+    try:
+        arq = registrar_notas(RAIZ / "dados" / "referencias", args.video, args.categoria.upper(), notas)
+    except ValueError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    print(f"✓ notas guardadas em {arq}")
+    return 0
+
+
+def comando_calibrar(args):
+    from .calibracao import calibrar
+    from .config import RAIZ
+    from .referencias import carregar_analises
+
+    pasta = RAIZ / "dados" / "referencias"
+    cats = [args.categoria.upper()] if args.categoria else sorted(p.name for p in pasta.glob("*") if p.is_dir())
+    analises = [a for c in cats for a in carregar_analises(pasta, c)]
+    try:
+        r = calibrar(analises)
+    except ValueError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    g = r["geral"]
+    print(f"Calibração ({', '.join(cats) or '—'}): {r['videos']} vídeos · juiz − você = {g['media_diferenca']:+.1f} "
+          f"em média (diferença típica {g['media_absoluta']:.1f}) · {g['veredito']}")
+    for c, v in r["por_criterio"].items():
+        print(f"  {c}: {v['media_diferenca']:+.1f} (típica {v['media_absoluta']:.1f})")
+    for p, v in r["por_juiz"].items():
+        print(f"  juiz {p}: {v['media_diferenca']:+.1f} · {v['veredito']}")
+    for rec in r["recomendacoes"]:
+        print(f"→ {rec}")
+    pasta.mkdir(parents=True, exist_ok=True)
+    destino = pasta / f"calibracao_{args.categoria.upper() if args.categoria else 'todas'}.json"
+    destino.write_text(json.dumps(r, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"  salvo em {destino}")
     return 0
 
 
@@ -410,6 +484,20 @@ def main(argv=None):
     s = sub.add_parser("analisar-referencia", help="analisa um vídeo de referência (link do YouTube ou arquivo) para a régua")
     s.add_argument("video", help="link de um vídeo do YouTube (sem baixar) ou arquivo local")
     s.add_argument("-c", "--categoria", required=True, help="categoria de referência (A, B, C… de config/referencias.toml)")
+    s.add_argument("--negativo", action="store_true", help="exemplo do que NÃO fazer (fica fora das faixas do perfil)")
+
+    s = sub.add_parser("perfil-referencia", help="faixas típicas (25º–75º) de uma categoria a partir das análises")
+    s.add_argument("-c", "--categoria", required=True, help="categoria (A–F)")
+    s.add_argument("--salvar", action="store_true", help="grava em config/perfis_referencia.toml (revise e commite)")
+
+    s = sub.add_parser("nota-referencia", help="sua nota (0 a 10) para um vídeo de referência já analisado (K14)")
+    s.add_argument("video", help="o mesmo link ou arquivo usado no analisar-referencia")
+    s.add_argument("-c", "--categoria", required=True, help="categoria (A–F)")
+    for c in ("gancho", "fluxo", "valor", "tendencia"):
+        s.add_argument(f"--{c}", type=float, help=f"nota de 0 a 10 para {c}")
+
+    s = sub.add_parser("calibrar", help="compara as suas notas com as do juiz nas referências (K14)")
+    s.add_argument("-c", "--categoria", help="só uma categoria (padrão: todas)")
 
     s = sub.add_parser("testar-voz", help="grava uma frase difícil (lh, nh, rr) em cada voz pronta e mede o erro")
     s.add_argument("-o", "--pasta", default="saidas/teste-voz")
@@ -473,6 +561,12 @@ def main(argv=None):
         return comando_produzir(args, roteador, perfil)
     if args.comando == "analisar-referencia":
         return comando_analisar_referencia(args, roteador)
+    if args.comando == "perfil-referencia":
+        return comando_perfil_referencia(args)
+    if args.comando == "nota-referencia":
+        return comando_nota_referencia(args)
+    if args.comando == "calibrar":
+        return comando_calibrar(args)
     if args.comando == "testar-voz":
         return comando_testar_voz(args, roteador)
     if getattr(args, "qualidade", False):

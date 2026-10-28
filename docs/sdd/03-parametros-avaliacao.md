@@ -2,6 +2,9 @@
 
 > Status: **rascunho para revisão**. Detalha os critérios da [spec 01](01-controle-qualidade.md).
 > As faixas numéricas serão substituídas pelos perfis medidos na base de referência ([spec 09](09-referencias-qualidade.md)).
+> K13: quando `config/perfis_referencia.toml` tiver a categoria do perfil, o relatório do vídeo compara duração,
+> cortes por minuto, duração de plano e palavras por segundo com essa faixa (alerta, não reprova).
+> K14: a calibração da seção 7 roda com `nota-referencia` + `calibrar` (âncoras aprovadas em `config/ancoras.toml`).
 > Todos os números são **padrões iniciais**, ajustáveis no config e recalibrados com a sua avaliação ([calibração](#7-calibração)).
 
 ## 1. Como uma peça é aprovada

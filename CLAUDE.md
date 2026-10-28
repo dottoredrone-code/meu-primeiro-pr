@@ -38,7 +38,7 @@ torralles_studio/
   montagem.py     vídeo final: tempo da fala, transições na batida, legendas na área segura, trilha sob a voz, −14 LUFS
   banco.py        SQLite: projetos, peças, tentativas, custo, retomada e cache (dados/, fora do Git)
   biblioteca.py   mídia por hash (sem duplicatas), licença obrigatória, busca por etiqueta, créditos CC-BY
-  referencias.py  análise de vídeos de referência (estrutura, gancho, potencial) para calibrar a régua
+  referencias.py  análise de vídeos de referência e perfis por categoria (faixas 25º–75º); calibracao.py suas notas × juiz
   cerebro.py      resumo dos aprendizados de produção para colar no Cérebro (D16)
   perfis.py       perfis por projeto (dados/perfis/<id>.toml, fora do Git; modelo em config/perfil_modelo.toml)
   rede.py         HTTP com erros padronizados e downloads seguros
@@ -54,7 +54,9 @@ python -m unittest discover -s tests          # testes (rodar antes de todo comm
 python -m torralles_studio status             # cadeias e provedores prontos
 python -m torralles_studio assistir video.mp4 # relatório de percepção
 python -m torralles_studio avaliar-video video.mp4   # juiz que assiste com som (Gemini); aceita link do YouTube
-python -m torralles_studio analisar-referencia "link" -c A   # vídeo de referência → dados/referencias/A/ (K12)
+python -m torralles_studio analisar-referencia "link" -c A   # vídeo de referência → dados/referencias/A/ (K12); --negativo
+python -m torralles_studio perfil-referencia -c A --salvar    # faixas 25º–75º → config/perfis_referencia.toml (K13)
+python -m torralles_studio nota-referencia "link" -c A --gancho 8 --fluxo 7   # sua nota 0–10; 'calibrar' compara (K14)
 python -m torralles_studio perfil-novo meu-canal "Meu canal"   # cria perfil de projeto; 'perfis' lista
 python -m torralles_studio cerebro --desde 2026-10-01          # aprendizados para colar no CEREBRO_MESTRE.md
 python -m torralles_studio roteiro "tema" -p meu-canal          # gera com o perfil do projeto

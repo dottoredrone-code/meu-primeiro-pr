@@ -46,6 +46,8 @@
 ## 🔍 Em verificação
 | ID | Cartão | Spec |
 |---|---|---|
+| K13 | Perfil de referência por categoria (`perfil-referencia -c A --salvar`): faixa 25º–75º das referências positivas (negativas ficam fora), tipos de gancho, potencial mínimo; vídeo fora da faixa da categoria do perfil ganha alerta no relatório — faltam as análises reais (PC) para gerar `config/perfis_referencia.toml` e atualizar a spec 03 | [09](docs/sdd/09-referencias-qualidade.md) |
+| K14 | Calibração (`nota-referencia`, `calibrar`): suas notas 0–10 × notas do juiz por critério e por juiz (generoso, rígido, discorda muito) com recomendação; âncoras aprovadas em `config/ancoras.toml` entram no prompt da análise; reanálise mantém suas notas — faltam as suas notas (PC) | [03](docs/sdd/03-parametros-avaliacao.md) · [09](docs/sdd/09-referencias-qualidade.md) |
 
 ## 🛠️ Em andamento
 | ID | Cartão | Spec |

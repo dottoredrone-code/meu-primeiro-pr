@@ -1,4 +1,4 @@
-"""Análise de vídeos de referência (K12, specs 09 e 12): a base que vai calibrar a régua do Studio.
+"""Análise de vídeos de referência (K12, specs 09 e 12) e perfis por categoria (K13): a base que calibra a régua.
 
 analisar_referencia(roteador, video, categoria) devolve, por vídeo:
 - medições: duração, cortes/min, duração média de plano, palavras/s, música sob a voz
@@ -40,7 +40,7 @@ SISTEMA = (
 )
 
 
-def _prompt(categoria, nome_categoria=None):
+def _prompt(categoria, nome_categoria=None, ancoras=None):
     criterios = "\n".join(f'- "{c}": {d}' for c, d in CRITERIOS.items())
     formato = {
         "duracao_s": 0, "cortes_por_minuto": 0, "duracao_media_plano_s": 0, "palavras_por_segundo": 0,
@@ -57,6 +57,8 @@ def _prompt(categoria, nome_categoria=None):
         f"Estrutura do roteiro: marque as partes ({', '.join(PARTES)}) com início e fim em segundos.",
         f"Gancho: tipo (um de {', '.join(TIPOS_GANCHO)}), momento e um trecho curto.",
         "Potencial (0 a 100, evidência antes da nota):", criterios,
+        *([("Âncoras aprovadas (use como régua das notas):\n"
+            + "\n".join(f'- "{c}": {t}' for c, t in ancoras.items() if c in CRITERIOS))] if ancoras else []),
         "Âncoras sugeridas: para cada critério, uma frase curta dizendo o que vale nota 90 e o que vale nota 40, "
         "tomando este vídeo como exemplo.",
         f"Formato obrigatório: {json.dumps(formato, ensure_ascii=False)}",
@@ -171,28 +173,42 @@ def _duracao_maxima(formato):
     return max(valores) if valores else 1200
 
 
-def analisar_referencia(roteador, video, categoria, *, nome_categoria=None, formato=None, pasta=None):
-    """Analisa um vídeo (link do YouTube ou arquivo) e salva em pasta/<categoria>/<id>.json (fora do Git).
+def identificar(video):
+    """(local, id, origem) de uma referência; ValueError se não for link de vídeo do YouTube nem arquivo existente.
 
-    formato: o da categoria ("15–60 s"); a maior duração dele estima o custo de um link (duração desconhecida).
+    Mesmo vídeo por outro link (shorts/, youtu.be/, ?si=) ou o mesmo arquivo em outro caminho = mesmo id.
     """
     from .banco import _hash_arquivo
     from .provedores.juiz_video import eh_youtube
 
-    local = not eh_youtube(video)
-    if local and not Path(video).is_file():
+    if eh_youtube(video):
+        yid = _id_youtube(video)
+        # link canônico, sem tokens de compartilhamento
+        return False, sha256(f"youtube:{yid}".encode()).hexdigest()[:12], f"https://www.youtube.com/watch?v={yid}"
+    if not Path(video).is_file():
         raise ValueError(f"não é link de vídeo do YouTube nem arquivo existente: {video}")
+    return True, _hash_arquivo(video)[:12], Path(video).name  # só o nome (sem caminho do PC); hash em blocos
+
+
+def arquivo_da_analise(pasta, categoria, ident):
+    return Path(pasta) / re.sub(r"[^A-Za-z0-9_-]", "_", str(categoria)) / f"{ident}.json"
+
+
+def analisar_referencia(roteador, video, categoria, *, nome_categoria=None, formato=None, pasta=None, negativo=False,
+                        ancoras=None):
+    """Analisa um vídeo (link do YouTube ou arquivo) e salva em pasta/<categoria>/<id>.json (fora do Git).
+
+    formato: o da categoria ("15–60 s"); a maior duração dele estima o custo de um link (duração desconhecida).
+    negativo: exemplo do que NÃO fazer (spec 09); fica fora das faixas do perfil (K13).
+    ancoras: âncoras aprovadas da categoria ({critério: texto}, config/ancoras.toml; K14).
+    """
+    local, ident, origem = identificar(video)
     if local:
         medidas = _medir_local(video)  # grátis e antes da chamada paga: se o FFmpeg falhar, nada é cobrado
         duracao = medidas["duracao_s"] or None
-        ident = _hash_arquivo(video)[:12]  # mesmo arquivo em outro caminho = mesmo id (lido em blocos)
-        origem = Path(video).name  # só o nome (sem caminho do PC)
     else:
         medidas, duracao = {}, _duracao_maxima(formato)
-        yid = _id_youtube(video)
-        ident = sha256(f"youtube:{yid}".encode()).hexdigest()[:12]
-        origem = f"https://www.youtube.com/watch?v={yid}"  # link canônico, sem tokens de compartilhamento
-    r = roteador.executar("juiz_video", video=str(video).strip(), prompt=_prompt(categoria, nome_categoria),
+    r = roteador.executar("juiz_video", video=str(video).strip(), prompt=_prompt(categoria, nome_categoria, ancoras),
                           sistema=SISTEMA, duracao=duracao,
                           validar=lambda texto: validar_analise(texto, duracao if local else None))
     analise = r.valor
@@ -200,14 +216,158 @@ def analisar_referencia(roteador, video, categoria, *, nome_categoria=None, form
         if medidas.get(campo) is not None:  # medido vale mais que estimado, inclusive 0 cortes
             analise[campo] = medidas[campo]
     registro = {
-        "id": ident, "categoria": categoria, "origem": origem,
+        "id": ident, "categoria": categoria, "origem": origem, "negativo": bool(negativo),
         "analisado_em": datetime.now(timezone.utc).isoformat(timespec="seconds"), "provedor": r.provedor,
         "medido_por": "ffmpeg+gemini" if local else "gemini (estimado pelo link)",
         **analise, **({"lufs": medidas.get("lufs"), "resolucao": medidas.get("resolucao")} if local else {}),
     }
     if pasta is not None:
-        destino = Path(pasta) / re.sub(r"[^A-Za-z0-9_-]", "_", str(categoria)) / f"{registro['id']}.json"
+        destino = arquivo_da_analise(pasta, categoria, registro["id"])
         destino.parent.mkdir(parents=True, exist_ok=True)
+        try:  # reanálise (ex.: depois de ajustar as âncoras) mantém as suas notas (K14)
+            antigo = json.loads(destino.read_text(encoding="utf-8"))
+            if isinstance(antigo, dict) and isinstance(antigo.get("notas_diego"), dict):
+                registro["notas_diego"] = antigo["notas_diego"]
+        except (OSError, ValueError):
+            pass
         destino.write_text(json.dumps(registro, ensure_ascii=False, indent=2), encoding="utf-8")
         registro["arquivo"] = str(destino)
     return registro
+
+
+# ---------------------------------------------------------------- K13: perfil de referência por categoria
+
+MEDIDAS_PERFIL = ("duracao_s", "cortes_por_minuto", "duracao_media_plano_s", "palavras_por_segundo")
+MINIMO_REFERENCIAS = 3
+NOMES_MEDIDAS = {"duracao_s": "duração (s)", "cortes_por_minuto": "cortes por minuto",
+                 "duracao_media_plano_s": "duração média de plano (s)", "palavras_por_segundo": "palavras por segundo"}
+
+
+def percentil(valores, p):
+    """Percentil p (0–100) com interpolação linear (o mesmo método padrão do numpy e do Excel)."""
+    v = sorted(valores)
+    if not v:
+        raise ValueError("sem valores")
+    pos = (len(v) - 1) * p / 100
+    baixo = int(pos)
+    alto = min(baixo + 1, len(v) - 1)
+    return v[baixo] + (v[alto] - v[baixo]) * (pos - baixo)
+
+
+def carregar_analises(pasta, categoria):
+    """Análises salvas de uma categoria (arquivos ilegíveis ou de outra categoria são ignorados)."""
+    saida = []
+    for arq in sorted((Path(pasta) / re.sub(r"[^A-Za-z0-9_-]", "_", str(categoria))).glob("*.json")):
+        try:
+            dados = json.loads(arq.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(dados, dict) and dados.get("categoria") == categoria:
+            saida.append(dados)
+    return saida
+
+
+def perfil_da_categoria(analises, minimo=MINIMO_REFERENCIAS):
+    """Faixa típica (25º ao 75º percentil) das referências positivas, como pede a spec 09.
+
+    Devolve {"n", "faixas": {medida: [p25, p75]}, "gancho_tipos_aceitos", "nota_potencial_minima", "musica_sob_voz"}.
+    """
+    positivas = [a for a in analises if not a.get("negativo")]
+    if len(positivas) < minimo:
+        raise ValueError(f"precisa de pelo menos {minimo} referências positivas analisadas (tem {len(positivas)})")
+    faixas = {}
+    for m in MEDIDAS_PERFIL:
+        vals = [float(a[m]) for a in positivas
+                if isinstance(a.get(m), (int, float)) and not isinstance(a.get(m), bool) and math.isfinite(a[m])]
+        if len(vals) >= minimo:
+            faixas[m] = [round(percentil(vals, 25), 2), round(percentil(vals, 75), 2)]
+    tipos = {}
+    for a in positivas:
+        t = (a.get("gancho") or {}).get("tipo")
+        if t in TIPOS_GANCHO and t != "outro":
+            tipos[t] = tipos.get(t, 0) + 1
+    notas = [float(a["nota_potencial"]) for a in positivas if isinstance(a.get("nota_potencial"), (int, float))]
+    musica = [bool((a.get("musica") or {}).get("abaixo_da_voz")) for a in positivas if a.get("musica")]
+    return {
+        "n": len(positivas),
+        "faixas": faixas,
+        "gancho_tipos_aceitos": sorted(tipos, key=lambda t: (-tipos[t], t)),
+        "nota_potencial_minima": round(percentil(notas, 25), 1) if notas else None,
+        "musica_sob_voz": round(sum(musica) / len(musica), 2) if musica else None,
+    }
+
+
+def _toml_valor(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, (list, tuple)):
+        return "[" + ", ".join(_toml_valor(x) for x in v) + "]"
+    return json.dumps(str(v), ensure_ascii=False)  # string JSON é string TOML válida (aspas e escapes)
+
+
+def salvar_perfil(caminho, categoria, perfil, *, data=None):
+    """Grava/atualiza [referencia.<categoria>] em config/perfis_referencia.toml, mantendo as outras categorias."""
+    import tomllib
+
+    caminho = Path(caminho)
+    atuais = {}
+    if caminho.is_file():
+        atuais = tomllib.loads(caminho.read_text(encoding="utf-8")).get("referencia", {})
+    item = {"n_referencias": perfil["n"], "medido_em": data or datetime.now(timezone.utc).date().isoformat(),
+            **perfil["faixas"], "gancho_tipos_aceitos": perfil["gancho_tipos_aceitos"]}
+    for campo in ("nota_potencial_minima", "musica_sob_voz"):
+        if perfil.get(campo) is not None:
+            item[campo] = perfil[campo]
+    atuais[str(categoria)] = item
+    linhas = ["# Perfis de referência por categoria (K13, spec 09): faixa típica (25º–75º percentil) das referências",
+              "# positivas analisadas com `analisar-referencia`. Gerado por `perfil-referencia -c <categoria>`;",
+              "# revise antes de commitar. Substitui os números fixos da spec 03 nos alertas do relatório do vídeo.", ""]
+    for cat in sorted(atuais):
+        linhas.append(f"[referencia.{cat}]")
+        linhas += [f"{k} = {_toml_valor(v)}" for k, v in atuais[cat].items()]
+        linhas.append("")
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    caminho.write_text("\n".join(linhas), encoding="utf-8")
+    return caminho
+
+
+def carregar_perfil(caminho, categoria):
+    """[referencia.<categoria>] do arquivo, ou None se não existir (aí valem os padrões da spec 03)."""
+    import tomllib
+
+    try:
+        return tomllib.loads(Path(caminho).read_text(encoding="utf-8")).get("referencia", {}).get(str(categoria))
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+
+
+def medidas_do_video(resultado, roteiro):
+    """Medidas do vídeo montado comparáveis às das referências (cortes = trocas de cena)."""
+    dur = float(resultado.get("duracao_s") or 0)
+    cenas = len(resultado.get("tempos") or []) or len((roteiro or {}).get("cenas") or [])
+    falado = " ".join(str(c.get("narracao", "")) for c in (roteiro or {}).get("cenas") or [])
+    if dur <= 0:
+        return {}
+    from .pronuncia import palavras
+
+    return {"duracao_s": round(dur, 2),
+            "cortes_por_minuto": round(max(cenas - 1, 0) * 60 / dur, 1),
+            "duracao_media_plano_s": round(dur / max(cenas, 1), 2),
+            "palavras_por_segundo": round(len(palavras(falado)) / dur, 2)}
+
+
+def alertas_referencia(medidas, perfil, categoria=None):
+    """Alertas (não reprovam) quando o vídeo sai da faixa típica das referências da categoria."""
+    alertas = []
+    for m in MEDIDAS_PERFIL:
+        faixa, valor = (perfil or {}).get(m), medidas.get(m)
+        if not (isinstance(faixa, list) and len(faixa) == 2) or valor is None:
+            continue
+        baixo, alto = faixa
+        if valor < baixo or valor > alto:
+            lado = "abaixo" if valor < baixo else "acima"
+            alertas.append(f"{NOMES_MEDIDAS[m]} {valor:g} {lado} da faixa das referências"
+                           f"{f' da categoria {categoria}' if categoria else ''} ({baixo:g}–{alto:g})")
+    return alertas

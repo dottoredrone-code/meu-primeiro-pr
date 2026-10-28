@@ -145,8 +145,11 @@ def _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
 
 def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesquisar=False, trilha=None, bpm=None,
                    cfg_montagem=None, aviso=None, refazer_roteiro=False, biblioteca=None, trilha_auto=True,
-                   capcut=False, fatos=None, proporcao=None, conferir_voz=None):
+                   capcut=False, fatos=None, proporcao=None, conferir_voz=None, perfis_referencia=None):
     """Produz o vídeo e devolve o relatório (também salvo em pasta/relatorio.json).
+
+    perfis_referencia: arquivo das faixas por categoria (K13; padrão config/perfis_referencia.toml). Vídeo fora
+    da faixa da categoria do perfil ganha alertas no relatório (não reprova).
 
     biblioteca: com ela, cena cuja imagem nenhuma IA conseguiu gerar usa uma foto gratuita com licença, e
     (com trilha_auto e sem `trilha`) a música de fundo é escolhida pelo clima do roteiro (K21).
@@ -332,6 +335,15 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         "fotos_gratuitas": {k: v for k, v in fotos.items() if int(k) <= total},
         "trilha": musica,
     }
+    categoria = getattr(perfil, "categoria", None)
+    if categoria:
+        from .config import RAIZ
+        from .referencias import alertas_referencia, carregar_perfil, medidas_do_video
+
+        faixas = carregar_perfil(perfis_referencia or RAIZ / "config" / "perfis_referencia.toml", categoria)
+        medidas = medidas_do_video(resultado, roteiro)
+        relatorio["referencia"] = {"categoria": categoria, "medidas": medidas, "perfil_medido": bool(faixas),
+                                   "alertas": alertas_referencia(medidas, faixas, categoria) if faixas else []}
     terceiros = list(relatorio["fotos_gratuitas"].values()) + ([musica["ativo"]] if musica else [])
     if biblioteca is not None and terceiros:
         creditos = biblioteca.creditos(terceiros)

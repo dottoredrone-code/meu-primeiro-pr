@@ -121,6 +121,17 @@ class TestAnalisar(unittest.TestCase):
         self.assertEqual(juiz.pedidos[0]["duracao"], 1200)  # custo estimado pela maior duração da categoria
         self.assertIn("Curto", juiz.pedidos[0]["prompt"])
 
+    def test_reanalise_mantem_as_suas_notas(self):  # K14: ajustar âncora e reanalisar não apaga a calibração
+        rt = Roteador({"gemini_video": Juiz([json.dumps(BOA)] * 2)}, {"juiz_video": ["gemini_video"]})
+        with tempfile.TemporaryDirectory() as d:
+            r = analisar_referencia(rt, "https://youtu.be/abc123", "A", pasta=d)
+            dados = json.loads(Path(r["arquivo"]).read_text(encoding="utf-8"))
+            Path(r["arquivo"]).write_text(json.dumps({**dados, "notas_diego": {"gancho": 7.0}}), encoding="utf-8")
+            r2 = analisar_referencia(rt, "https://youtu.be/abc123", "A", pasta=d, negativo=True,
+                                     ancoras={"gancho": "nota 90: x"})
+            self.assertEqual(r2["notas_diego"], {"gancho": 7.0})
+            self.assertTrue(r2["negativo"])
+
     def test_entrada_que_nao_e_video(self):
         rt = Roteador({"gemini_video": Juiz([])}, {"juiz_video": ["gemini_video"]})
         with self.assertRaises(ValueError):
@@ -154,6 +165,77 @@ class TestCusto(unittest.TestCase):
         self.assertAlmostEqual(Orcamento.estimar(p, {"duracao": 30}), 0.03, places=3)
         self.assertGreater(Orcamento.estimar(p, {"duracao": 1200}), 1.0)
         self.assertAlmostEqual(Orcamento.estimar(p, {}), Orcamento.estimar(p, {"duracao": 60}))
+
+
+
+def _analise(i, **mexer):
+    a = {"id": f"v{i}", "categoria": "A", "negativo": False, "duracao_s": 20 + i * 10, "cortes_por_minuto": 10 + i,
+         "duracao_media_plano_s": 3.0, "palavras_por_segundo": 2.0 + i / 10, "musica": {"tem": True, "abaixo_da_voz": True},
+         "gancho": {"tipo": "pergunta_concreta" if i % 2 else "fato_surpreendente"}, "nota_potencial": 60 + i * 5}
+    a.update(mexer)
+    return a
+
+
+class TestPerfilCategoria(unittest.TestCase):  # K13
+    def test_percentil_como_numpy(self):
+        from torralles_studio.referencias import percentil
+
+        self.assertEqual(percentil([1, 2, 3, 4], 25), 1.75)
+        self.assertEqual(percentil([1, 2, 3, 4], 75), 3.25)
+        self.assertEqual(percentil([5], 25), 5)
+
+    def test_faixas_so_das_positivas(self):
+        from torralles_studio.referencias import perfil_da_categoria
+
+        analises = [_analise(i) for i in range(1, 6)] + [_analise(9, negativo=True, duracao_s=500)]
+        p = perfil_da_categoria(analises)
+        self.assertEqual(p["n"], 5)
+        self.assertEqual(p["faixas"]["duracao_s"], [40.0, 60.0])  # 30,40,50,60,70: o negativo (500) não entra
+        self.assertEqual(p["gancho_tipos_aceitos"], ["pergunta_concreta", "fato_surpreendente"])
+        self.assertEqual(p["nota_potencial_minima"], 70.0)
+        self.assertEqual(p["musica_sob_voz"], 1.0)
+
+    def test_poucas_referencias_ou_valor_estragado(self):
+        from torralles_studio.referencias import perfil_da_categoria
+
+        with self.assertRaises(ValueError):
+            perfil_da_categoria([_analise(1), _analise(2), _analise(3, negativo=True)])
+        p = perfil_da_categoria([_analise(1), _analise(2), _analise(3, palavras_por_segundo=None)])
+        self.assertNotIn("palavras_por_segundo", p["faixas"])  # só 2 valores válidos: sem faixa
+
+    def test_salvar_carregar_e_manter_outras_categorias(self):
+        from torralles_studio.referencias import carregar_analises, carregar_perfil, perfil_da_categoria, salvar_perfil
+
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "A").mkdir()
+            for i in range(1, 4):
+                (Path(d) / "A" / f"v{i}.json").write_text(json.dumps(_analise(i)), encoding="utf-8")
+            (Path(d) / "A" / "ruim.json").write_text("{", encoding="utf-8")
+            analises = carregar_analises(d, "A")
+            self.assertEqual(len(analises), 3)
+            arq = Path(d) / "perfis.toml"
+            salvar_perfil(arq, "B", perfil_da_categoria([_analise(i) for i in range(1, 4)]), data="2026-10-28")
+            salvar_perfil(arq, "A", perfil_da_categoria(analises), data="2026-10-28")
+            a, b = carregar_perfil(arq, "A"), carregar_perfil(arq, "B")
+            self.assertEqual(a["duracao_s"], [35.0, 45.0])
+            self.assertEqual(a["n_referencias"], 3)
+            self.assertIsNotNone(b)
+            self.assertIsNone(carregar_perfil(arq, "C"))
+            self.assertIsNone(carregar_perfil(Path(d) / "nao-existe.toml", "A"))
+
+    def test_alertas_do_video_fora_da_faixa(self):
+        from torralles_studio.referencias import alertas_referencia, medidas_do_video
+
+        roteiro = {"cenas": [{"narracao": "um dois três quatro cinco"}, {"narracao": "seis sete oito nove dez"}]}
+        m = medidas_do_video({"duracao_s": 10, "tempos": [{}, {}]}, roteiro)
+        self.assertEqual(m, {"duracao_s": 10.0, "cortes_por_minuto": 6.0, "duracao_media_plano_s": 5.0,
+                             "palavras_por_segundo": 1.0})
+        alertas = alertas_referencia(m, {"duracao_s": [20, 45], "palavras_por_segundo": [0.5, 2.0],
+                                         "cortes_por_minuto": "lixo"}, "A")
+        self.assertEqual(len(alertas), 1)
+        self.assertIn("abaixo da faixa", alertas[0])
+        self.assertIn("categoria A", alertas[0])
+        self.assertEqual(medidas_do_video({"duracao_s": 0}, roteiro), {})
 
 
 if __name__ == "__main__":

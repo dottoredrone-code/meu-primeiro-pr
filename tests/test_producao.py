@@ -116,8 +116,15 @@ class TestProduzirVideo(unittest.TestCase):
             self.assertTrue((Path(d) / "v" / "capcut" / "01_clipes" / "cena_02.mp4").is_file())
 
             rt2, loop2 = self.montar(roteiros=[])  # sem respostas: se tentar gerar de novo, quebra
+            faixas = Path(d) / "perfis_referencia.toml"  # K13: faixas da categoria do perfil viram alertas
+            faixas.write_text("[referencia.A]\nduracao_s = [20.0, 45.0]\n", encoding="utf-8")
+            from types import SimpleNamespace
             rel2 = produzir_video(rt2, loop2, "chá verde", Path(d) / "v", duracao=8,
-                                  cfg_montagem={"preset": "ultrafast"})
+                                  cfg_montagem={"preset": "ultrafast"}, perfis_referencia=faixas,
+                                  perfil=SimpleNamespace(categoria="A", formato={}))
+            self.assertTrue(rel2["referencia"]["perfil_medido"])
+            self.assertEqual(len(rel2["referencia"]["alertas"]), 1)
+            self.assertIn("duração", rel2["referencia"]["alertas"][0])
             self.assertEqual(self.voz.chamadas, 0)
             self.assertEqual(self.img.pedidos, [])
             self.assertTrue(all(e["reaproveitado"] for e in rel2["etapas"]))
