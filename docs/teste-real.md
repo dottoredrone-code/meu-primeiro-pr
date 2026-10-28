@@ -97,6 +97,12 @@ Passa todos pela mesma régua e grava o comparativo em `dados/benchmark/relatori
 julgado que não mudou não paga de novo (`--refazer` força). Os vídeos do Google (Flow/Veo) e o do Studio, se usou
 Gemini, são julgados pelo Gemini, da mesma família: suas notas servem para conferir esse viés.
 
+## 2f. CapCut pelo navegador do Claude (K33)
+Abra o app desktop do Claude na pasta do repositório e peça: "monte e finalize no CapCut o vídeo de
+`saidas\beneficios-do-cha-verde`". O Claude segue a skill `capcut-navegador`: abre o CapCut web no navegador dele,
+você faz o login e escolhe os arquivos na janela do Windows quando ele pedir; ele monta, aplica o acabamento,
+exporta para `video_capcut.mp4` e compara a nota com a do `video_final.mp4`. Você aprova no fim.
+
 ## 3. O que anotar (para ajustar o config)
 | O que | Onde aparece | O que fazer |
 |---|---|---|

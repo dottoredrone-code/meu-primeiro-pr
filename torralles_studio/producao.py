@@ -360,7 +360,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         avisar("== exportação para o CapCut")
         try:
             relatorio["capcut"] = str(exportar_capcut(resultado, pasta / "capcut", creditos=relatorio.get("creditos"),
-                                                      titulo=roteiro.get("titulo")))
+                                                      titulo=roteiro.get("titulo"), roteiro=roteiro))
         except (ErroExportacao, ErroProvedor, OSError) as e:  # o vídeo já está pronto: só avisa
             relatorio["capcut_erro"] = str(e)
             avisar(f"  ⚠ não deu para gerar a pasta do CapCut ({e}). Feche o CapCut se estiver com a pasta aberta "

@@ -444,8 +444,12 @@ def comando_exportar_capcut(args):
         rel = json.loads((pasta / "relatorio.json").read_text(encoding="utf-8")) if (pasta / "relatorio.json").is_file() else {}
         guardada = Path(resultado.get("pasta_trabalho") or "")
         trabalho = guardada if guardada.is_dir() else pasta / "montagem"  # a pasta do vídeo pode ter sido movida
+        try:
+            roteiro = json.loads((pasta / "roteiro.json").read_text(encoding="utf-8")).get("roteiro")
+        except (OSError, ValueError, AttributeError):
+            roteiro = None
         destino = exportar_capcut(resultado, pasta / "capcut", creditos=rel.get("creditos"), titulo=rel.get("titulo"),
-                                  pasta_trabalho=trabalho)
+                                  pasta_trabalho=trabalho, roteiro=roteiro if isinstance(roteiro, dict) else None)
     except FileNotFoundError:
         print(f"✗ {pasta} não tem montagem.json: produza o vídeo primeiro (comando produzir)", file=sys.stderr)
         return 1

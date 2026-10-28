@@ -37,7 +37,10 @@ class TestExportarCapCut(unittest.TestCase):
 
     def test_pasta_pronta_para_o_capcut(self):
         r = self.montagem(trilha=True)
-        destino = exportar_capcut(r, self.d / "capcut", creditos="Créditos:\n- Música por Bia", titulo="Chá verde")
+        roteiro = {"titulo": "Chá verde", "cta": "Siga para mais", "cenas": [
+            {"clima": "alegre", "narracao": "O chá verde\n tem história."}, "lixo"]}
+        destino = exportar_capcut(r, self.d / "capcut", creditos="Créditos:\n- Música por Bia", titulo="Chá verde",
+                                  roteiro=roteiro)
         cenas = sorted((destino / "01_clipes").glob("*.mp4"))
         self.assertEqual([c.name for c in cenas], ["cena_01.mp4", "cena_02.mp4"])
         for c, tp in zip(cenas, r["tempos"]):  # cada clipe com a duração exata da cena (sem a sobra da transição)
@@ -50,6 +53,11 @@ class TestExportarCapCut(unittest.TestCase):
         self.assertIn("Música por Bia", leia)
         linha = json.loads((destino / "linha_do_tempo.json").read_text(encoding="utf-8"))
         self.assertEqual(len(linha["cenas"]), 2)
+        # K33: o Claude monta no CapCut pelo navegador lendo clima, narração, título, CTA e créditos daqui
+        self.assertEqual((linha["cenas"][0]["clima"], linha["cenas"][0]["narracao"]), ("alegre", "O chá verde tem história."))
+        self.assertEqual((linha["cenas"][1]["clima"], linha["cenas"][1]["narracao"]), (None, None))
+        self.assertEqual((linha["titulo"], linha["cta"]), ("Chá verde", "Siga para mais"))
+        self.assertIn("Bia", linha["creditos"])
 
     def test_sem_trilha_e_refazer_limpa_a_pasta(self):
         r = self.montagem()
@@ -99,6 +107,16 @@ class TestExportarCapCut(unittest.TestCase):
         with self.assertRaises(ErroExportacao):
             exportar_capcut({"pasta_trabalho": str(self.d / "nada"), "tempos": [{"inicio": 0, "duracao": 2}]},
                             self.d / "capcut")
+
+
+
+class TestSkillCapcut(unittest.TestCase):  # K33
+    def test_skill_do_navegador_existe_e_cita_as_regras(self):
+        raiz = Path(__file__).resolve().parent.parent
+        texto = (raiz / ".claude" / "skills" / "capcut-navegador" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertTrue(texto.startswith("---\nname: capcut-navegador\n"))
+        for regra in ("linha_do_tempo.json", "login", "biblioteca do CapCut", "avaliar-video", "aprovação"):
+            self.assertIn(regra, texto)
 
 
 if __name__ == "__main__":

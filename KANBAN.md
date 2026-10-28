@@ -53,6 +53,7 @@
 ## 🛠️ Em andamento
 | ID | Cartão | Spec |
 |---|---|---|
+| K33 | CapCut operado pelo Claude no navegador do Claude: skill `capcut-navegador` (montagem + acabamento no CapCut web, login e aprovação do Diego, só mídia do Studio) e `linha_do_tempo.json` com clima, narração, título, CTA e créditos — teste real no PC pendente | [13](docs/sdd/13-capcut-navegador.md) · D23 |
 | K32 | Primeiro vídeo real ponta a ponta: comando `produzir` (pesquisa → roteiro com juiz → imagem, voz e cena → montagem, com retomada; foto gratuita com licença quando a IA de imagem falha). Rodou no PC em 21/10: "não ficou tão ruim, faltam animações e efeitos". Feito depois: legenda palavra por palavra, título animado, transição pelo clima, movimento com aceleração suave e efeitos por clima. Falta: trilha e efeitos sonoros (K21) e sua aprovação | D19 |
 
 ## 📋 Especificado (pronto para começar)

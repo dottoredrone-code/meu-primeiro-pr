@@ -45,6 +45,7 @@ torralles_studio/
   rede.py         HTTP com erros padronizados e downloads seguros
   config.py       carrega config/fallbacks.toml e o .env
 config/fallbacks.toml   cadeias, modelos, custos, segurança
+.claude/skills/capcut-navegador/  o Claude monta e finaliza no CapCut web pelo navegador do Claude (K33)
 docs/sdd/               specs (SDD) e decisões
 exemplos/               vídeos de teste da percepção
 ```

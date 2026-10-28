@@ -43,10 +43,23 @@ def _audio(origem, destino, ganho):
         raise ErroProvedor(f"ffmpeg falhou no áudio {Path(destino).name}: {proc.stderr.strip()[-200:]}")
 
 
-def exportar_capcut(resultado, destino, *, creditos=None, titulo=None, pasta_trabalho=None):
+def _cenas_do_roteiro(roteiro, total):
+    """Clima e narração de cada cena (o Claude usa no CapCut para escolher efeitos e conferir a ordem; K33)."""
+    cenas = (roteiro or {}).get("cenas") if isinstance((roteiro or {}).get("cenas"), list) else []
+    saida = []
+    for i in range(total):
+        c = cenas[i] if i < len(cenas) and isinstance(cenas[i], dict) else {}
+        saida.append({"clima": str(c.get("clima") or "") or None,
+                      "narracao": " ".join(str(c.get("narracao") or "").split())[:300] or None})
+    return saida
+
+
+def exportar_capcut(resultado, destino, *, creditos=None, titulo=None, pasta_trabalho=None, roteiro=None):
     """Cria a pasta para o CapCut a partir do resultado de `montagem.montar` (com pasta de trabalho).
 
     pasta_trabalho: onde estão os arquivos da montagem, se a pasta do vídeo foi movida depois.
+    roteiro: com ele, a linha do tempo leva clima e narração por cena, título e CTA (para o Claude montar no
+    CapCut pelo navegador, K33).
     """
     trabalho = Path(pasta_trabalho or resultado.get("pasta_trabalho") or "")
     tempos = resultado.get("tempos") or []
@@ -108,9 +121,13 @@ def exportar_capcut(resultado, destino, *, creditos=None, titulo=None, pasta_tra
     if creditos:
         leia += ["", creditos]
     (destino / "LEIA-ME.txt").write_text("\n".join(leia) + "\n", encoding="utf-8")
+    extras = _cenas_do_roteiro(roteiro, len(tempos))
     (destino / "linha_do_tempo.json").write_text(json.dumps(
         {"proporcao": resultado.get("proporcao"), "duracao_s": resultado.get("duracao_s"),
-         "cenas": [{"arquivo": f"01_clipes/cena_{i:02d}.mp4", **tp} for i, tp in enumerate(tempos, 1)],
+         "titulo": titulo or (roteiro or {}).get("titulo"), "cta": (roteiro or {}).get("cta"),
+         "creditos": creditos or None,
+         "cenas": [{"arquivo": f"01_clipes/cena_{i:02d}.mp4", **tp, **extras[i - 1]}
+                   for i, tp in enumerate(tempos, 1)],
          "audio": ["02_audio/narracao.wav"] + (["02_audio/trilha.wav"] if tem_trilha else []),
          "legendas": "03_legendas/legendas.srt"}, ensure_ascii=False, indent=2), encoding="utf-8")
     return destino
