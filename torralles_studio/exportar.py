@@ -44,13 +44,15 @@ def _audio(origem, destino, ganho):
 
 
 def _cenas_do_roteiro(roteiro, total):
-    """Clima e narração de cada cena (o Claude usa no CapCut para escolher efeitos e conferir a ordem; K33)."""
-    cenas = (roteiro or {}).get("cenas") if isinstance((roteiro or {}).get("cenas"), list) else []
+    """Clima, narração e texto na tela de cada cena (o Claude usa no CapCut para o acabamento e a ordem; K33)."""
+    cenas = roteiro.get("cenas") if isinstance(roteiro.get("cenas"), list) else []
     saida = []
     for i in range(total):
         c = cenas[i] if i < len(cenas) and isinstance(cenas[i], dict) else {}
-        saida.append({"clima": str(c.get("clima") or "") or None,
-                      "narracao": " ".join(str(c.get("narracao") or "").split())[:300] or None})
+        texto = lambda campo, limite: (" ".join(c[campo].split())[:limite] or None
+                                       if isinstance(c.get(campo), str) else None)
+        saida.append({"clima": texto("clima", 40), "narracao": texto("narracao", 300),
+                      "texto_tela": texto("texto_tela", 120)})
     return saida
 
 
@@ -61,6 +63,7 @@ def exportar_capcut(resultado, destino, *, creditos=None, titulo=None, pasta_tra
     roteiro: com ele, a linha do tempo leva clima e narração por cena, título e CTA (para o Claude montar no
     CapCut pelo navegador, K33).
     """
+    roteiro = roteiro if isinstance(roteiro, dict) else {}
     trabalho = Path(pasta_trabalho or resultado.get("pasta_trabalho") or "")
     tempos = resultado.get("tempos") or []
     clipes = [trabalho / f"clipe_{i:02d}.mp4" for i in range(1, len(tempos) + 1)]
@@ -121,10 +124,10 @@ def exportar_capcut(resultado, destino, *, creditos=None, titulo=None, pasta_tra
     if creditos:
         leia += ["", creditos]
     (destino / "LEIA-ME.txt").write_text("\n".join(leia) + "\n", encoding="utf-8")
-    extras = _cenas_do_roteiro(roteiro, len(tempos))
+    extras = _cenas_do_roteiro(roteiro, len(tempos))  # sem roteiro: campos vazios
     (destino / "linha_do_tempo.json").write_text(json.dumps(
         {"proporcao": resultado.get("proporcao"), "duracao_s": resultado.get("duracao_s"),
-         "titulo": titulo or (roteiro or {}).get("titulo"), "cta": (roteiro or {}).get("cta"),
+         "titulo": titulo or roteiro.get("titulo"), "cta": roteiro.get("cta"),
          "creditos": creditos or None,
          "cenas": [{"arquivo": f"01_clipes/cena_{i:02d}.mp4", **tp, **extras[i - 1]}
                    for i, tp in enumerate(tempos, 1)],

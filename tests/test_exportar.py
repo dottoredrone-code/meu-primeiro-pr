@@ -38,7 +38,7 @@ class TestExportarCapCut(unittest.TestCase):
     def test_pasta_pronta_para_o_capcut(self):
         r = self.montagem(trilha=True)
         roteiro = {"titulo": "Chá verde", "cta": "Siga para mais", "cenas": [
-            {"clima": "alegre", "narracao": "O chá verde\n tem história."}, "lixo"]}
+            {"clima": "alegre", "narracao": "O chá verde\n tem história.", "texto_tela": "Desde 2737 a.C."}, "lixo"]}
         destino = exportar_capcut(r, self.d / "capcut", creditos="Créditos:\n- Música por Bia", titulo="Chá verde",
                                   roteiro=roteiro)
         cenas = sorted((destino / "01_clipes").glob("*.mp4"))
@@ -55,7 +55,9 @@ class TestExportarCapCut(unittest.TestCase):
         self.assertEqual(len(linha["cenas"]), 2)
         # K33: o Claude monta no CapCut pelo navegador lendo clima, narração, título, CTA e créditos daqui
         self.assertEqual((linha["cenas"][0]["clima"], linha["cenas"][0]["narracao"]), ("alegre", "O chá verde tem história."))
+        self.assertEqual(linha["cenas"][0]["texto_tela"], "Desde 2737 a.C.")  # o vídeo do Studio mostra: o CapCut também
         self.assertEqual((linha["cenas"][1]["clima"], linha["cenas"][1]["narracao"]), (None, None))
+        exportar_capcut(r, self.d / "capcut2", roteiro=["não é dicionário"])  # chamada direta errada não quebra
         self.assertEqual((linha["titulo"], linha["cta"]), ("Chá verde", "Siga para mais"))
         self.assertIn("Bia", linha["creditos"])
 

@@ -12,13 +12,15 @@
 
 ## Como funciona
 1. `produzir ... --capcut` (ou `exportar-capcut`) gera `saidas/<tema>/capcut/` com clipes cortados por cena,
-   áudios no volume final, legenda `.srt` e `linha_do_tempo.json`, que agora leva também **clima e narração por
-   cena, título, CTA e créditos**.
+   áudios no volume final, legenda `.srt` e `linha_do_tempo.json`, que agora leva também **clima, narração e texto
+   na tela por cena, título, CTA e créditos**.
 2. Numa sessão do Claude no app desktop, na pasta do repositório, o Diego pede o acabamento. O Claude segue a skill
    `.claude/skills/capcut-navegador/SKILL.md`: abre o CapCut web, o Diego faz o login, o Claude cria o projeto
    9:16, pede ao Diego para escolher os arquivos na janela do Windows (o navegador do Claude não opera essa janela),
    monta cenas, narração, trilha e legendas, aplica o acabamento, exporta e salva `saidas/<tema>/video_capcut.mp4`.
-3. O vídeo do CapCut passa pela mesma régua (`avaliar-video --percepcao`) e é comparado com o `video_final.mp4`.
+3. O vídeo do CapCut passa pela mesma régua: medidas grátis (`assistir`: volume, duração) e nota do juiz
+   (`avaliar-video --percepcao`, 2 chamadas pagas de ~US$ 0,03–0,06, avisadas ao Diego antes), comparada com a do
+   `video_final.mp4` (só conta como pior com 5 pontos ou mais de diferença: a nota do juiz varia).
    O Diego aprova o final (D19). Fica um registro em `saidas/<tema>/capcut_navegador.json`.
 
 ## Regras
@@ -31,11 +33,17 @@
 ## Limites conhecidos
 - A interface do CapCut web muda: a skill manda ler a página antes de clicar e perguntar quando a tela for outra.
 - Arrastar na linha do tempo é a parte mais frágil; conferir durações com `linha_do_tempo.json` e prévia em 3 pontos.
-- Só funciona com o app desktop aberto no PC (o navegador do Claude roda lá). Uma sessão na nuvem conectada ao PC
-  também usa esse navegador, desde que o app esteja aberto.
-- Escolher arquivos na janela do sistema é com o Diego.
+- Só funciona com a sessão rodando no PC: app desktop do Claude aberto na pasta do repositório, ou sessão na nuvem
+  conectada à pasta do repositório no PC (Remote Control). Uma sessão na nuvem com os arquivos no container não
+  serve: o navegador, a janela de arquivos e a pasta Downloads ficam no PC.
+- Escolher arquivos (uma pasta por vez) e, se aparecer, a janela de salvar são com o Diego.
+- **Transições do CapCut podem encurtar o vídeo** (sobrepõem as cenas) e adiantar a fala e a legenda no fim. Os
+  clipes saem com a duração exata da cena; a skill confere a duração total depois das transições e encurta ou tira
+  transições até bater. O teste real mostra qual é o comportamento do CapCut web.
+- **Enviar para o CapCut põe a mídia na nuvem dele**, sob os termos de uso dele para conteúdo enviado (inclusive as
+  fotos CC-BY de terceiros). O Diego sabe e decide; nada é publicado pelo CapCut.
 
 ## Critérios de pronto
-- [x] `linha_do_tempo.json` com clima, narração, título, CTA e créditos (testado)
+- [x] `linha_do_tempo.json` com clima, narração, texto na tela, título, CTA e créditos (testado)
 - [x] Skill do passo a passo com as regras de conta, licença e régua
 - [ ] Teste real no PC: um vídeo montado no CapCut web pelo Claude, exportado, medido e aprovado pelo Diego
