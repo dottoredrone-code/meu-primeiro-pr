@@ -75,6 +75,25 @@ mínima recomendada já sai na escala do config (0 a 100). Para
 ajustar as âncoras, escreva-as em `config/ancoras.toml` (parta das "ancoras_sugeridas" dos JSON), rode o
 `analisar-referencia` de novo nos mesmos vídeos (suas notas são mantidas) e o `calibrar` outra vez.
 
+## 2e. Benchmark prático (K31)
+```bash
+python -m torralles_studio benchmark briefings
+python -m torralles_studio benchmark produzir
+```
+O primeiro mostra os 3 briefings e onde salvar os vídeos; o segundo faz os 3 vídeos do Studio (cada um com o
+próprio teto de US$ 1,50; se parar, rode de novo). Gere os mesmos 3 vídeos nas outras ferramentas (planos
+grátis) e salve como `dados/benchmark/A/capcut.mp4`, `dados/benchmark/A/invideo.mp4`… Para cada um, anote:
+```bash
+python -m torralles_studio benchmark dados A capcut --tempo-min 15 --custo 0 --intervencoes 4 --tentativas 2 --nota 7 --voz 6 --legenda 8 --obs "travou uma vez"
+```
+Faça o mesmo para o Studio (`torralles-studio`; tempo, custo e tentativas já vêm anotados: só as suas notas).
+No fim:
+```bash
+python -m torralles_studio benchmark avaliar --doc
+```
+Passa todos pela mesma régua e grava o comparativo em `dados/benchmark/relatorio.md` e em
+`docs/sdd/04b-benchmark-pratico.md` (revise e commite). O juiz custa ~US$ 0,03–0,06 por vídeo.
+
 ## 3. O que anotar (para ajustar o config)
 | O que | Onde aparece | O que fazer |
 |---|---|---|

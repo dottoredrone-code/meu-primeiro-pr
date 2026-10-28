@@ -206,7 +206,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         (pasta / "roteiro.json").write_text(json.dumps(
             {"tema": tema, "duracao": duracao, "proporcao": proporcao, "aprovado": r.aprovado, "nota": r.nota,
              "roteiro": roteiro}, ensure_ascii=False, indent=2), encoding="utf-8")
-        etapa("roteiro", r.provedor, nota=r.nota, aprovado=r.aprovado,
+        etapa("roteiro", r.provedor, nota=r.nota, aprovado=r.aprovado, tentativas=len(r.tentativas or []) or 1,
               problemas=list(getattr(r.avaliacao, "problemas", None) or [])[:5])
         for arq in pasta.iterdir():  # roteiro novo: mídia das cenas antigas não serve mais (só os nomes do Studio)
             if arq.is_file() and _MIDIA_DA_CENA.fullmatch(arq.name):

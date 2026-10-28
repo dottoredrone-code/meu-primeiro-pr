@@ -295,6 +295,88 @@ def comando_calibrar(args):
     return 0
 
 
+def comando_benchmark(args):
+    from pathlib import Path
+
+    from . import benchmark as bm
+    from .config import RAIZ
+
+    pasta = Path(args.pasta) if args.pasta else RAIZ / "dados" / "benchmark"
+    if args.acao == "briefings":
+        for b, info in bm.BRIEFINGS.items():
+            print(f"{b}. {info['tema']} ({info['tipo']}; testa {info['testa']}) → {pasta / b}/<ferramenta>.mp4")
+        print(f"Todos em pt-BR, {bm.PROPORCAO}, ~{bm.DURACAO_S} s. Depois: benchmark dados <briefing> <ferramenta> …")
+        return 0
+    if args.acao == "dados":
+        valores = {c: getattr(args, c) for c in bm.CAMPOS_MANUAIS}
+        try:
+            arq = bm.registrar_dados(pasta, args.briefing, args.ferramenta, valores, args.obs)
+        except ValueError as e:
+            print(f"✗ {e}", file=sys.stderr)
+            return 1
+        print(f"✓ anotado em {arq}")
+        return 0
+    if args.acao == "produzir":
+        return comando_benchmark_produzir(args, pasta)
+    from .config import carregar_avaliador
+
+    resultados = bm.avaliar_benchmark(pasta, lambda: carregar_avaliador(caminho=args.config),
+                                      aviso=lambda t: print(t, file=sys.stderr, flush=True))
+    if not resultados:
+        print(f"✗ nenhum vídeo em {pasta}/<A|B|C>/ (veja: benchmark briefings)", file=sys.stderr)
+        return 1
+    texto = bm.relatorio_markdown(resultados)
+    (pasta / "relatorio.md").write_text(texto, encoding="utf-8")
+    for r in bm.ranking(resultados):
+        nota = "sem juiz" if r["nota_juiz"] is None else f"juiz {r['nota_juiz']:g}"
+        print(f"  {r['ferramenta']}: {nota} · {r['videos']} vídeo(s) · {r['problemas']} problema(s) automático(s)")
+    print(f"✓ relatório em {pasta / 'relatorio.md'}")
+    if args.doc:
+        doc = RAIZ / "docs" / "sdd" / "04b-benchmark-pratico.md"
+        doc.write_text(texto, encoding="utf-8")
+        print(f"✓ também em {doc} (revise e commite)")
+    return 0
+
+
+def comando_benchmark_produzir(args, pasta):
+    from . import benchmark as bm
+    from .config import carregar_biblioteca, carregar_config, carregar_loop
+    from .montagem import ErroMontagem
+    from .producao import ErroProducao, produzir_video
+    from .pronuncia import conferir_voz
+    from .rede import ErroProvedor
+
+    try:
+        briefings = [bm.briefing_valido(b) for b in args.briefing]
+    except ValueError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    falhas = 0
+    for b in briefings:
+        tema = bm.BRIEFINGS[b]["tema"]
+        print(f"== briefing {b}: {tema}", file=sys.stderr)
+        roteador = carregar_roteador(args.config)  # um teto de US$ 1,50 por vídeo, não um para os três
+        roteador.aviso = lambda texto: print(texto, file=sys.stderr, flush=True)
+        trabalho = pasta / b / "_studio"
+        try:
+            rel = produzir_video(roteador, carregar_loop(roteador, args.config), tema, trabalho,
+                                 duracao=bm.DURACAO_S, proporcao=bm.PROPORCAO, pesquisar=not args.sem_pesquisa,
+                                 cfg_montagem=carregar_config(args.config).get("montagem"),
+                                 aviso=lambda t: print(t, file=sys.stderr, flush=True),
+                                 biblioteca=carregar_biblioteca(args.config), conferir_voz=conferir_voz)
+        except KeyboardInterrupt:
+            print(f"\n✗ interrompido. Rode de novo para continuar (o que ficou pronto está em {trabalho}).",
+                  file=sys.stderr)
+            return 130
+        except (ErroProducao, ErroMontagem, ErroProvedor, OSError) as e:
+            print(f"✗ briefing {b} parou: {e}. Rode de novo para continuar.", file=sys.stderr)
+            falhas += 1
+            continue
+        destino = bm.registrar_estudio(pasta, b, rel)
+        print(f"{'✓' if rel['aprovado'] else '⚠'} {destino} · US$ {rel['custo_usd']:.3f} · {rel['tempo_s']} s")
+    return 1 if falhas else 0
+
+
 def comando_testar_voz(args, roteador):
     from pathlib import Path
 
@@ -511,6 +593,29 @@ def main(argv=None):
     s = sub.add_parser("calibrar", help="compara as suas notas com as do juiz nas referências (K14)")
     s.add_argument("-c", "--categoria", help="só uma categoria (padrão: todas)")
 
+    s = sub.add_parser("benchmark", help="teste prático: mesmos 3 briefings e mesma régua para todas as ferramentas (K31)")
+    comum = argparse.ArgumentParser(add_help=False)
+    comum.add_argument("--pasta", help="pasta do benchmark (padrão dados/benchmark)")
+    bm = s.add_subparsers(dest="acao", required=True)
+    b = bm.add_parser("produzir", parents=[comum], help="faz os vídeos do Studio para os briefings (cada um com o próprio teto)")
+    b.add_argument("-b", "--briefing", nargs="+", default=["A", "B", "C"], help="quais briefings (A, B, C)")
+    b.add_argument("--sem-pesquisa", action="store_true", help="não pesquisa fontes antes do roteiro")
+    b = bm.add_parser("dados", parents=[comum], help="anota tempo, custo, intervenções e suas notas de uma ferramenta num briefing")
+    b.add_argument("briefing", help="A, B ou C")
+    b.add_argument("ferramenta", help="nome da ferramenta, igual ao nome do arquivo do vídeo (ex.: capcut)")
+    b.add_argument("--tempo-min", type=float, help="minutos até o vídeo pronto")
+    b.add_argument("--custo", type=float, dest="custo_usd", help="custo real em US$ (0 no grátis)")
+    b.add_argument("--creditos", type=float, help="créditos gastos")
+    b.add_argument("--intervencoes", type=float, help="quantas vezes você precisou mexer à mão")
+    b.add_argument("--tentativas", type=float, help="tentativas até um resultado aceitável")
+    b.add_argument("--nota", type=float, dest="nota_diego", help="sua nota geral de 0 a 10")
+    b.add_argument("--voz", type=float, dest="voz_ptbr", help="voz em pt-BR, de 0 a 10")
+    b.add_argument("--legenda", type=float, dest="legenda_ptbr", help="legenda em pt-BR, de 0 a 10")
+    b.add_argument("--obs", help="observação curta")
+    b = bm.add_parser("avaliar", parents=[comum], help="passa todos os vídeos pela mesma régua e gera o relatório comparativo")
+    b.add_argument("--doc", action="store_true", help="grava também docs/sdd/04b-benchmark-pratico.md")
+    bm.add_parser("briefings", parents=[comum], help="mostra os 3 briefings e onde salvar os vídeos")
+
     s = sub.add_parser("testar-voz", help="grava uma frase difícil (lh, nh, rr) em cada voz pronta e mede o erro")
     s.add_argument("-o", "--pasta", default="saidas/teste-voz")
     s.add_argument("--frase", help="frase de teste (padrão: palavras com lh, nh, r e rr)")
@@ -550,6 +655,8 @@ def main(argv=None):
         return comando_avaliar_video(args)
     if args.comando == "cerebro":
         return comando_cerebro(args)
+    if args.comando == "benchmark":
+        return comando_benchmark(args)
     roteador = carregar_roteador(args.config)
     roteador.aviso = lambda texto: print(texto, file=sys.stderr, flush=True)  # mostra quem está trabalhando
 

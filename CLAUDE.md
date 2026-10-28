@@ -39,6 +39,7 @@ torralles_studio/
   banco.py        SQLite: projetos, peças, tentativas, custo, retomada e cache (dados/, fora do Git)
   biblioteca.py   mídia por hash (sem duplicatas), licença obrigatória, busca por etiqueta, créditos CC-BY
   referencias.py  análise de vídeos de referência e perfis por categoria (faixas 25º–75º); calibracao.py suas notas × juiz
+  benchmark.py    teste prático: 3 briefings, mesma régua para o Studio e as outras ferramentas (spec 04)
   cerebro.py      resumo dos aprendizados de produção para colar no Cérebro (D16)
   perfis.py       perfis por projeto (dados/perfis/<id>.toml, fora do Git; modelo em config/perfil_modelo.toml)
   rede.py         HTTP com erros padronizados e downloads seguros
@@ -57,6 +58,7 @@ python -m torralles_studio avaliar-video video.mp4   # juiz que assiste com som 
 python -m torralles_studio analisar-referencia "link" -c A   # vídeo de referência → dados/referencias/A/ (K12); --negativo
 python -m torralles_studio perfil-referencia -c A --salvar    # faixas 25º–75º → config/perfis_referencia.toml (K13)
 python -m torralles_studio nota-referencia "link" -c A --gancho 8 --fluxo 7   # sua nota 0–10; 'calibrar' compara (K14)
+python -m torralles_studio benchmark briefings                # K31: 'produzir', 'dados A capcut --nota 7', 'avaliar --doc'
 python -m torralles_studio perfil-novo meu-canal "Meu canal"   # cria perfil de projeto; 'perfis' lista
 python -m torralles_studio cerebro --desde 2026-10-01          # aprendizados para colar no CEREBRO_MESTRE.md
 python -m torralles_studio roteiro "tema" -p meu-canal          # gera com o perfil do projeto

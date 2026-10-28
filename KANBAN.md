@@ -48,6 +48,7 @@
 ## 🔍 Em verificação
 | ID | Cartão | Spec |
 |---|---|---|
+| K31 | Benchmark prático (`benchmark briefings|produzir|dados|avaliar`): os 3 briefings da spec 04, vídeos do Studio com um teto por vídeo, dados anotados à mão das outras ferramentas, mesma régua para todos (checagens do FFmpeg + mesmo juiz) e relatório comparativo (`--doc` grava a 04b) — rodar no PC e gerar os vídeos nas outras ferramentas pendente | [04](docs/sdd/04-benchmark.md) |
 
 ## 🛠️ Em andamento
 | ID | Cartão | Spec |
@@ -90,7 +91,6 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 ### Camada 6 — Validação
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
-| K31 | Teste prático do benchmark (3 briefings, mesma régua para todos) | [04](docs/sdd/04-benchmark.md) | K22 · K13 | Relatório comparativo |
 | K32 | Primeiro vídeo real ponta a ponta, **aprovado por você** | D19 | K22 · K09 | Você aprova o vídeo completo |
 
 ## 🔁 Recorrentes
