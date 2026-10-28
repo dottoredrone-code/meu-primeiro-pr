@@ -81,7 +81,8 @@ python -m torralles_studio benchmark briefings
 python -m torralles_studio benchmark produzir
 ```
 O primeiro mostra os 3 briefings e onde salvar os vídeos; o segundo faz os 3 vídeos do Studio (cada um com o
-próprio teto de US$ 1,50; se parar, rode de novo). Gere os mesmos 3 vídeos nas outras ferramentas (planos
+próprio teto de US$ 1,50; se parar, rode de novo: o custo e o tempo se somam e cada retomada conta como
+intervenção; briefing que já tem vídeo do Studio é pulado, a não ser com `--refazer`). Gere os mesmos 3 vídeos nas outras ferramentas (planos
 grátis) e salve como `dados/benchmark/A/capcut.mp4`, `dados/benchmark/A/invideo.mp4`… Para cada um, anote:
 ```bash
 python -m torralles_studio benchmark dados A capcut --tempo-min 15 --custo 0 --intervencoes 4 --tentativas 2 --nota 7 --voz 6 --legenda 8 --obs "travou uma vez"
@@ -92,7 +93,9 @@ No fim:
 python -m torralles_studio benchmark avaliar --doc
 ```
 Passa todos pela mesma régua e grava o comparativo em `dados/benchmark/relatorio.md` e em
-`docs/sdd/04b-benchmark-pratico.md` (revise e commite). O juiz custa ~US$ 0,03–0,06 por vídeo.
+`docs/sdd/04b-benchmark-pratico.md` (revise e commite). O juiz custa ~US$ 0,03–0,06 por vídeo; vídeo já
+julgado que não mudou não paga de novo (`--refazer` força). Os vídeos do Google (Flow/Veo) e o do Studio, se usou
+Gemini, são julgados pelo Gemini, da mesma família: suas notas servem para conferir esse viés.
 
 ## 3. O que anotar (para ajustar o config)
 | O que | Onde aparece | O que fazer |

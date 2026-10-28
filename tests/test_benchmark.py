@@ -38,24 +38,60 @@ class TestDados(unittest.TestCase):
             bm.registrar_dados(d, "A", "capcut", {"nota_diego": 7.5})
             self.assertEqual(arq, Path(d) / "A" / "capcut.json")
             self.assertEqual(json.loads(arq.read_text(encoding="utf-8")),
-                             {"tempo_min": 12.0, "custo_usd": 0.0, "observacoes": "travou | uma vez", "nota_diego": 7.5})
+                             {"tempo_min": 12.0, "custo_usd": 0.0, "observacoes": "travou | uma vez", "nota_diego": 7.5,
+                              "anotado_a_mao": ["custo_usd", "nota_diego", "tempo_min"]})
             for briefing, valores in (("D", {"tempo_min": 1}), ("A", {}), ("A", {"nota_diego": 11}),
                                       ("A", {"tempo_min": float("nan")}), ("A", {"tentativas": True}),
                                       ("A", {"inventado": 1})):
                 with self.assertRaises(ValueError):
                     bm.registrar_dados(d, briefing, "capcut", valores)
 
-    def test_registrar_estudio(self):
+    def test_inteiros_onde_precisa(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError):
+                bm.registrar_dados(d, "A", "capcut", {"intervencoes": 2.5})
+            bm.registrar_dados(d, "A", "capcut", {"intervencoes": 2})
+
+    def test_execucoes_do_studio_se_somam(self):  # verificador: retomar não pode zerar o que foi gasto
         with tempfile.TemporaryDirectory() as d:
             origem = Path(d) / "final.mp4"
             origem.write_bytes(b"x")
-            rel = {"video": str(origem), "tempo_s": 300, "custo_usd": 0.042, "aprovado": True,
-                   "etapas": [{"etapa": "roteiro", "tentativas": 3}, {"etapa": "voz"}]}
-            destino = bm.registrar_estudio(Path(d) / "bm", "B", rel)
+            pasta = Path(d) / "bm"
+            bm.registrar_execucao(pasta, "B", custo_usd=0.9, tempo_s=600)  # 1ª: parou no meio
+            rel = {"video": str(origem), "tempo_s": 120, "custo_usd": 0.3, "aprovado": True,
+                   "etapas": [{"etapa": "roteiro", "tentativas": 3}, {"etapa": "voz", "reaproveitado": True}]}
+            destino = bm.registrar_execucao(pasta, "B", custo_usd=0.3, tempo_s=120,
+                                            tentativas=bm.tentativas_do_relatorio(rel), relatorio=rel)
             self.assertEqual(destino.name, "torralles-studio.mp4")
+            self.assertTrue(destino.is_file())
             dados = json.loads(destino.with_suffix(".json").read_text(encoding="utf-8"))
-            self.assertEqual((dados["tempo_min"], dados["custo_usd"], dados["intervencoes"], dados["tentativas"]),
-                             (5.0, 0.042, 0.0, 3.0))
+            self.assertEqual((dados["custo_usd"], dados["tempo_min"], dados["tentativas"], dados["intervencoes"]),
+                             (1.2, 12.0, 3.0, 1.0))  # a retomada contou como intervenção
+            self.assertFalse(dados["acima_do_teto"])
+            bm.registrar_dados(pasta, "B", "torralles-studio", {"intervencoes": 0, "nota_diego": 8})
+            bm.registrar_execucao(pasta, "B", custo_usd=0.4, tempo_s=60, relatorio=rel)
+            dados = json.loads(destino.with_suffix(".json").read_text(encoding="utf-8"))
+            self.assertEqual(dados["intervencoes"], 0.0)  # o que você anotou fica
+            self.assertEqual(dados["nota_diego"], 8.0)
+            self.assertEqual(dados["custo_usd"], 1.6)
+            self.assertTrue(dados["acima_do_teto"])
+
+    def test_nada_novo(self):
+        self.assertTrue(bm.nada_novo({"custo_usd": 0, "etapas": [{"reaproveitado": True}]}))
+        self.assertFalse(bm.nada_novo({"custo_usd": 0, "etapas": [{"reaproveitado": False}]}))
+        self.assertFalse(bm.nada_novo({"custo_usd": 0.01, "etapas": []}))
+
+    def test_listar_ignora_ocultos_e_avisa_duplicados(self):
+        with tempfile.TemporaryDirectory() as d:
+            for nome in ("._capcut.mp4", "capcut.mp4", "Google Flow.mp4", "google-flow.webm", "notas.txt"):
+                (Path(d) / "A").mkdir(exist_ok=True)
+                (Path(d) / "A" / nome).write_bytes(b"x")
+            avisos = []
+            achados = bm.listar_videos(d, aviso=avisos.append)
+            self.assertEqual([(f, v.name) for _, f, v in achados], [("capcut", "capcut.mp4"),
+                                                                     ("google-flow", "Google Flow.mp4")])
+            self.assertEqual(len(avisos), 1)
+            self.assertIn("google-flow.webm", avisos[0])
 
 
 class TestRelatorio(unittest.TestCase):
@@ -66,7 +102,7 @@ class TestRelatorio(unittest.TestCase):
             {"briefing": "B", "ferramenta": "torralles-studio", "nota_juiz": 78, "problemas": [],
              "manual": {"custo_usd": 0.04}},
             {"briefing": "A", "ferramenta": "capcut", "nota_juiz": 85, "problemas": ["volume -20 LUFS"],
-             "manual": {"intervencoes": 6, "observacoes": "editei | à mão"}},
+             "manual": {"intervencoes": 6, "observacoes": "editei | à mão\nduas vezes"}},
             {"briefing": "A", "ferramenta": "canva", "nota_juiz": None, "sem_juiz": True, "problemas_juiz": ["x"],
              "problemas": [], "manual": {}},
         ]
@@ -75,9 +111,11 @@ class TestRelatorio(unittest.TestCase):
         estudio = r[1]
         self.assertEqual((estudio["nota_juiz"], estudio["custo_usd"], estudio["videos"]), (80.0, 0.09, 2))
         md = bm.relatorio_markdown(resultados)
-        self.assertIn("| capcut | 1 | 85 |", md)
+        self.assertIn("| capcut | A | 85 |", md)
+        self.assertIn("| torralles-studio | AB | 80 |", md)
         self.assertIn("história do café no Brasil", md)
-        self.assertIn("editei / à mão", md)  # barra vertical não quebra a tabela
+        self.assertIn("editei / à mão duas vezes", md)  # barra vertical e quebra de linha não quebram a tabela
+        self.assertIn("D15", md)  # exceção do juiz da mesma família explicada no relatório
         self.assertNotIn("Briefing C", md)
         self.assertIn("Nenhum vídeo", bm.relatorio_markdown([]))
 
@@ -112,7 +150,7 @@ class TestAvaliar(unittest.TestCase):
             self.assertEqual(set(por), {("A", "capcut"), ("A", "torralles-studio"), ("B", "lixo")})
             self.assertEqual(por[("A", "torralles-studio")]["problemas"], [])
             capcut = por[("A", "capcut")]
-            self.assertTrue(any("proporção" in p for p in capcut["problemas"]))
+            self.assertTrue(any("resolução 720x720" in p for p in capcut["problemas"]))
             self.assertTrue(any("sem áudio" in p for p in capcut["problemas"]))
             self.assertEqual(capcut["manual"], {"nota_diego": 6})
             lixo = por[("B", "lixo")]
@@ -120,6 +158,36 @@ class TestAvaliar(unittest.TestCase):
             self.assertNotIn("abcdefghijklmnop", json.dumps(lixo))  # erro mascarado
             self.assertTrue(all("história do café" in c for n, c in chamadas if n != "lixo.mp4"))
             self.assertTrue((pasta / "resultados.json").is_file())
+            self.assertNotIn(str(pasta), json.dumps(res))  # sem caminho do PC no relatório
+
+            antes = len(chamadas)  # 2ª rodada: vídeos já julgados não pagam de novo
+            (pasta / "A" / "capcut.json").write_text('{"nota_diego": 9}', encoding="utf-8")
+            res2 = bm.avaliar_benchmark(pasta, novo, checar=lambda v: bm.checar_video(v, duracao_alvo=4),
+                                        avaliar=avaliar)
+            self.assertEqual(len(chamadas) - antes, 1)  # só o que ficou sem nota (lixo)
+            self.assertEqual({(r["ferramenta"], r["manual"].get("nota_diego")) for r in res2
+                              if r["briefing"] == "A"}, {("capcut", 9), ("torralles-studio", None)})
+            bm.avaliar_benchmark(pasta, novo, checar=lambda v: bm.checar_video(v, duracao_alvo=4),
+                                 avaliar=avaliar, refazer=True)
+            self.assertEqual(len(chamadas) - antes, 4)
+
+    def test_checagens_de_rotacao_formato_e_so_audio(self):
+        with tempfile.TemporaryDirectory() as d:
+            deitado = Path(d) / "celular.mp4"
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-display_rotation", "90", "-i",
+                            str(_video(Path(d) / "base.mp4", tamanho="1920x1080", dur=2)), "-c", "copy",
+                            str(deitado)], check=True)
+            r = bm.checar_video(deitado, duracao_alvo=2)
+            self.assertEqual(r["medidas"]["resolucao"], "1080x1920")  # rotação do celular respeitada
+            self.assertFalse(any("resolução" in p for p in r["problemas"]))
+            audio = Path(d) / "so_audio.mp4"
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=d=2", "-c:a", "aac",
+                            str(audio)], check=True)
+            self.assertEqual(bm.checar_video(audio)["problemas"], ["o arquivo não tem imagem (só áudio)"])
+            webm = Path(d) / "x.webm"
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=s=1080x1920:d=2:r=5",
+                            "-f", "lavfi", "-i", "sine=d=2", "-shortest", str(webm)], check=True)
+            self.assertTrue(any("formato" in p for p in bm.checar_video(webm, duracao_alvo=2)["problemas"]))
 
     def test_cli_dados_e_avaliar_sem_videos(self):
         from torralles_studio.__main__ import main

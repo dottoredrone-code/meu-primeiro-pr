@@ -48,7 +48,7 @@
 ## 🔍 Em verificação
 | ID | Cartão | Spec |
 |---|---|---|
-| K31 | Benchmark prático (`benchmark briefings|produzir|dados|avaliar`): os 3 briefings da spec 04, vídeos do Studio com um teto por vídeo, dados anotados à mão das outras ferramentas, mesma régua para todos (checagens do FFmpeg + mesmo juiz) e relatório comparativo (`--doc` grava a 04b) — rodar no PC e gerar os vídeos nas outras ferramentas pendente | [04](docs/sdd/04-benchmark.md) |
+| K31 | Benchmark prático (`benchmark` com `briefings`, `produzir`, `dados` e `avaliar`): os 3 briefings da spec 04, vídeos do Studio com um teto por vídeo, dados anotados à mão das outras ferramentas, mesma régua para todos (checagens do FFmpeg + mesmo juiz) e relatório comparativo (`--doc` grava a 04b) — rodar no PC e gerar os vídeos nas outras ferramentas pendente | [04](docs/sdd/04-benchmark.md) |
 
 ## 🛠️ Em andamento
 | ID | Cartão | Spec |
