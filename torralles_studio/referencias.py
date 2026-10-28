@@ -194,12 +194,13 @@ def arquivo_da_analise(pasta, categoria, ident):
     return Path(pasta) / re.sub(r"[^A-Za-z0-9_-]", "_", str(categoria)) / f"{ident}.json"
 
 
-def analisar_referencia(roteador, video, categoria, *, nome_categoria=None, formato=None, pasta=None, negativo=False,
+def analisar_referencia(roteador, video, categoria, *, nome_categoria=None, formato=None, pasta=None, negativo=None,
                         ancoras=None):
     """Analisa um vídeo (link do YouTube ou arquivo) e salva em pasta/<categoria>/<id>.json (fora do Git).
 
     formato: o da categoria ("15–60 s"); a maior duração dele estima o custo de um link (duração desconhecida).
-    negativo: exemplo do que NÃO fazer (spec 09); fica fora das faixas do perfil (K13).
+    negativo: exemplo do que NÃO fazer (spec 09); fica fora das faixas do perfil (K13). None = mantém o que a
+    análise anterior do mesmo vídeo dizia (reanalisar depois de ajustar as âncoras não vira positivo).
     ancoras: âncoras aprovadas da categoria ({critério: texto}, config/ancoras.toml; K14).
     """
     local, ident, origem = identificar(video)
@@ -224,12 +225,17 @@ def analisar_referencia(roteador, video, categoria, *, nome_categoria=None, form
     if pasta is not None:
         destino = arquivo_da_analise(pasta, categoria, registro["id"])
         destino.parent.mkdir(parents=True, exist_ok=True)
-        try:  # reanálise (ex.: depois de ajustar as âncoras) mantém as suas notas (K14)
+        try:  # reanálise (ex.: depois de ajustar as âncoras) mantém as suas notas (K14) e o "negativo"
             antigo = json.loads(destino.read_text(encoding="utf-8"))
-            if isinstance(antigo, dict) and isinstance(antigo.get("notas_diego"), dict):
-                registro["notas_diego"] = antigo["notas_diego"]
         except (OSError, ValueError):
-            pass
+            antigo = None
+        if isinstance(antigo, dict):
+            if isinstance(antigo.get("notas_diego"), dict):
+                registro["notas_diego"] = antigo["notas_diego"]
+                if antigo.get("notas_diego_em"):
+                    registro["notas_diego_em"] = antigo["notas_diego_em"]
+            if negativo is None:
+                registro["negativo"] = bool(antigo.get("negativo"))
         destino.write_text(json.dumps(registro, ensure_ascii=False, indent=2), encoding="utf-8")
         registro["arquivo"] = str(destino)
     return registro
@@ -267,33 +273,39 @@ def carregar_analises(pasta, categoria):
     return saida
 
 
+def _finito(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
 def perfil_da_categoria(analises, minimo=MINIMO_REFERENCIAS):
     """Faixa típica (25º ao 75º percentil) das referências positivas, como pede a spec 09.
 
     Devolve {"n", "faixas": {medida: [p25, p75]}, "gancho_tipos_aceitos", "nota_potencial_minima", "musica_sob_voz"}.
     """
-    positivas = [a for a in analises if not a.get("negativo")]
+    positivas = [a for a in analises if isinstance(a, dict) and not a.get("negativo")]
     if len(positivas) < minimo:
         raise ValueError(f"precisa de pelo menos {minimo} referências positivas analisadas (tem {len(positivas)})")
     faixas = {}
     for m in MEDIDAS_PERFIL:
-        vals = [float(a[m]) for a in positivas
-                if isinstance(a.get(m), (int, float)) and not isinstance(a.get(m), bool) and math.isfinite(a[m])]
+        vals = [float(a[m]) for a in positivas if _finito(a.get(m))]
         if len(vals) >= minimo:
             faixas[m] = [round(percentil(vals, 25), 2), round(percentil(vals, 75), 2)]
     tipos = {}
     for a in positivas:
-        t = (a.get("gancho") or {}).get("tipo")
+        t = a["gancho"].get("tipo") if isinstance(a.get("gancho"), dict) else None
         if t in TIPOS_GANCHO and t != "outro":
             tipos[t] = tipos.get(t, 0) + 1
-    notas = [float(a["nota_potencial"]) for a in positivas if isinstance(a.get("nota_potencial"), (int, float))]
-    musica = [bool((a.get("musica") or {}).get("abaixo_da_voz")) for a in positivas if a.get("musica")]
+    notas = [float(a["nota_potencial"]) for a in positivas if _finito(a.get("nota_potencial"))]
+    musica = [bool(a["musica"].get("abaixo_da_voz")) for a in positivas if isinstance(a.get("musica"), dict)]
+    por_ffmpeg = sum(1 for a in positivas if str(a.get("medido_por", "")).startswith("ffmpeg"))
     return {
         "n": len(positivas),
         "faixas": faixas,
         "gancho_tipos_aceitos": sorted(tipos, key=lambda t: (-tipos[t], t)),
         "nota_potencial_minima": round(percentil(notas, 25), 1) if notas else None,
         "musica_sob_voz": round(sum(musica) / len(musica), 2) if musica else None,
+        # links: números estimados pelo Gemini; arquivos: medidos pelo FFmpeg (cortes < 1 s são juntados)
+        "medidas_ffmpeg": por_ffmpeg, "medidas_estimadas": len(positivas) - por_ffmpeg,
     }
 
 
@@ -307,29 +319,47 @@ def _toml_valor(v):
     return json.dumps(str(v), ensure_ascii=False)  # string JSON é string TOML válida (aspas e escapes)
 
 
+def _toml_chave(k):
+    k = str(k)
+    return k if re.fullmatch(r"[A-Za-z0-9_-]+", k) else json.dumps(k, ensure_ascii=False)
+
+
 def salvar_perfil(caminho, categoria, perfil, *, data=None):
-    """Grava/atualiza [referencia.<categoria>] em config/perfis_referencia.toml, mantendo as outras categorias."""
+    """Grava/atualiza [referencia.<categoria>] em config/perfis_referencia.toml, mantendo as outras categorias.
+
+    O arquivo é gerado: comentários e outras seções escritos à mão não são mantidos. ValueError se o arquivo atual
+    estiver com erro de formato (nada é gravado).
+    """
     import tomllib
 
     caminho = Path(caminho)
     atuais = {}
     if caminho.is_file():
-        atuais = tomllib.loads(caminho.read_text(encoding="utf-8")).get("referencia", {})
+        try:
+            atuais = tomllib.loads(caminho.read_text(encoding="utf-8")).get("referencia", {})
+        except (UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
+            raise ValueError(f"o arquivo {caminho.name} está com erro de formato ({e}); corrija ou apague") from None
+        if not isinstance(atuais, dict):
+            raise ValueError(f"o arquivo {caminho.name} tem 'referencia' que não é uma seção; corrija ou apague")
+        atuais = {k: v for k, v in atuais.items() if isinstance(v, dict)}
     item = {"n_referencias": perfil["n"], "medido_em": data or datetime.now(timezone.utc).date().isoformat(),
             **perfil["faixas"], "gancho_tipos_aceitos": perfil["gancho_tipos_aceitos"]}
-    for campo in ("nota_potencial_minima", "musica_sob_voz"):
+    for campo in ("nota_potencial_minima", "musica_sob_voz", "medidas_ffmpeg", "medidas_estimadas"):
         if perfil.get(campo) is not None:
             item[campo] = perfil[campo]
     atuais[str(categoria)] = item
     linhas = ["# Perfis de referência por categoria (K13, spec 09): faixa típica (25º–75º percentil) das referências",
               "# positivas analisadas com `analisar-referencia`. Gerado por `perfil-referencia -c <categoria>`;",
-              "# revise antes de commitar. Substitui os números fixos da spec 03 nos alertas do relatório do vídeo.", ""]
+              "# revise antes de commitar. Substitui os números fixos da spec 03 nos alertas do relatório do vídeo.",
+              "# Arquivo gerado: comentários e mudanças à mão são reescritos no próximo --salvar.", ""]
     for cat in sorted(atuais):
-        linhas.append(f"[referencia.{cat}]")
-        linhas += [f"{k} = {_toml_valor(v)}" for k, v in atuais[cat].items()]
+        linhas.append(f"[referencia.{_toml_chave(cat)}]")
+        linhas += [f"{_toml_chave(k)} = {_toml_valor(v)}" for k, v in atuais[cat].items()]
         linhas.append("")
+    texto = "\n".join(linhas)
+    tomllib.loads(texto)  # confere antes de gravar: arquivo ilegível desligaria os alertas sem aviso
     caminho.parent.mkdir(parents=True, exist_ok=True)
-    caminho.write_text("\n".join(linhas), encoding="utf-8")
+    caminho.write_text(texto, encoding="utf-8")
     return caminho
 
 
@@ -338,33 +368,42 @@ def carregar_perfil(caminho, categoria):
     import tomllib
 
     try:
-        return tomllib.loads(Path(caminho).read_text(encoding="utf-8")).get("referencia", {}).get(str(categoria))
-    except (OSError, tomllib.TOMLDecodeError):
+        ref = tomllib.loads(Path(caminho).read_text(encoding="utf-8")).get("referencia", {})
+    except (OSError, ValueError):  # inclui erro de formato e arquivo que não é UTF-8
         return None
+    perfil = ref.get(str(categoria)) if isinstance(ref, dict) else None
+    return perfil if isinstance(perfil, dict) else None
 
 
 def medidas_do_video(resultado, roteiro):
-    """Medidas do vídeo montado comparáveis às das referências (cortes = trocas de cena)."""
+    """Medidas do vídeo montado comparáveis às das referências.
+
+    Aproximação: cortes = trocas de cena (cada cena é um plano; transições suaves contam como corte).
+    """
     dur = float(resultado.get("duracao_s") or 0)
-    cenas = len(resultado.get("tempos") or []) or len((roteiro or {}).get("cenas") or [])
-    falado = " ".join(str(c.get("narracao", "")) for c in (roteiro or {}).get("cenas") or [])
-    if dur <= 0:
+    lista = (roteiro or {}).get("cenas") if isinstance((roteiro or {}).get("cenas"), list) else []
+    cenas = len(resultado.get("tempos") or []) or len(lista)
+    if dur <= 0 or not cenas:
         return {}
     from .pronuncia import palavras
 
-    return {"duracao_s": round(dur, 2),
-            "cortes_por_minuto": round(max(cenas - 1, 0) * 60 / dur, 1),
-            "duracao_media_plano_s": round(dur / max(cenas, 1), 2),
-            "palavras_por_segundo": round(len(palavras(falado)) / dur, 2)}
+    medidas = {"duracao_s": round(dur, 2), "cortes_por_minuto": round((cenas - 1) * 60 / dur, 1),
+               "duracao_media_plano_s": round(dur / cenas, 2)}
+    falado = " ".join(str(c.get("narracao") or "") for c in lista if isinstance(c, dict))
+    if palavras(falado):  # sem narração conhecida, não compara a fala
+        medidas["palavras_por_segundo"] = round(len(palavras(falado)) / dur, 2)
+    return medidas
 
 
 def alertas_referencia(medidas, perfil, categoria=None):
     """Alertas (não reprovam) quando o vídeo sai da faixa típica das referências da categoria."""
     alertas = []
     for m in MEDIDAS_PERFIL:
-        faixa, valor = (perfil or {}).get(m), medidas.get(m)
-        if not (isinstance(faixa, list) and len(faixa) == 2) or valor is None:
-            continue
+        faixa = perfil.get(m) if isinstance(perfil, dict) else None
+        valor = medidas.get(m)
+        if not (isinstance(faixa, list) and len(faixa) == 2 and all(_finito(x) for x in faixa)
+                and faixa[0] <= faixa[1]) or not _finito(valor):
+            continue  # faixa escrita errado no arquivo: ignora (nunca derruba o relatório)
         baixo, alto = faixa
         if valor < baixo or valor > alto:
             lado = "abaixo" if valor < baixo else "acima"

@@ -19,7 +19,8 @@ class TestCalibrar(unittest.TestCase):
         self.assertEqual(r["videos"], 3)
         self.assertEqual(r["por_juiz"]["gemini_video"]["veredito"], "mais generoso")
         self.assertAlmostEqual(r["geral"]["media_diferenca"], 1.75)
-        self.assertIn("suba a nota mínima em 2", r["recomendacoes"][0])
+        self.assertIn("suba a nota mínima em 18 pontos", r["recomendacoes"][0])  # escala 0–100 do config
+        self.assertIn("70 → 88", r["recomendacoes"][0])
 
         rigido = [_analise(i, {"valor": 50}, {"valor": 7}) for i in range(3)]
         self.assertEqual(calibrar(rigido)["geral"]["veredito"], "mais rígido")
@@ -34,6 +35,17 @@ class TestCalibrar(unittest.TestCase):
         r = calibrar([_analise(i, {"tendencia": j}, {"tendencia": s}) for i, (j, s) in enumerate(notas)])
         self.assertEqual(r["por_juiz"]["gemini_video"]["veredito"], "discorda muito")
         self.assertTrue(any("tendencia" in x and "âncora" in x for x in r["recomendacoes"]))
+
+    def test_diferenca_constante_e_vies_nao_discordancia(self):  # verificador: +2,5 sempre = generoso
+        r = calibrar([_analise(i, {"gancho": 85, "fluxo": 75}, {"gancho": 6, "fluxo": 5}) for i in range(3)])
+        self.assertEqual(r["por_juiz"]["gemini_video"]["veredito"], "mais generoso")
+        self.assertIn("25 pontos", r["recomendacoes"][0])
+        self.assertFalse(any("âncora" in x for x in r["recomendacoes"]))
+
+    def test_arquivo_estragado_nao_derruba(self):
+        dados = [_analise(i, {"gancho": 80}, {"gancho": 8}) for i in range(3)]
+        dados += ["lixo", {"potencial": {"gancho": 5}, "notas_diego": {"gancho": 5}}, {"notas_diego": "x"}]
+        self.assertEqual(calibrar(dados)["videos"], 3)
 
     def test_por_juiz_e_minimo_de_videos(self):
         dados = [_analise(0, {"gancho": 90}, {"gancho": 6}, "a"), _analise(1, {"gancho": 60}, {"gancho": 6}, "b"),

@@ -131,6 +131,12 @@ class TestAnalisar(unittest.TestCase):
                                      ancoras={"gancho": "nota 90: x"})
             self.assertEqual(r2["notas_diego"], {"gancho": 7.0})
             self.assertTrue(r2["negativo"])
+            rt3 = Roteador({"gemini_video": Juiz([json.dumps(BOA)] * 2)}, {"juiz_video": ["gemini_video"]})
+            r3 = analisar_referencia(rt3, "https://youtu.be/abc123", "A", pasta=d, ancoras={"gancho": "nota 90: y"})
+            self.assertTrue(r3["negativo"])  # reanalisar sem marcar mantém o negativo (não entra nas faixas)
+            r4 = analisar_referencia(rt3, "https://youtu.be/abc123", "A", pasta=d, negativo=False,
+                                     ancoras={"gancho": "nota 90: y"})
+            self.assertFalse(r4["negativo"])
 
     def test_entrada_que_nao_e_video(self):
         rt = Roteador({"gemini_video": Juiz([])}, {"juiz_video": ["gemini_video"]})
@@ -236,6 +242,45 @@ class TestPerfilCategoria(unittest.TestCase):  # K13
         self.assertIn("abaixo da faixa", alertas[0])
         self.assertIn("categoria A", alertas[0])
         self.assertEqual(medidas_do_video({"duracao_s": 0}, roteiro), {})
+        self.assertEqual(medidas_do_video({"duracao_s": 10}, {}), {})  # sem cenas: não compara
+        sem_fala = medidas_do_video({"duracao_s": 10, "tempos": [{}]}, {"cenas": [{"narracao": None}]})
+        self.assertNotIn("palavras_por_segundo", sem_fala)  # "None" não conta como palavra
+
+    def test_arquivo_de_faixas_escrito_errado_nao_derruba_o_relatorio(self):  # verificador
+        from torralles_studio.referencias import alertas_referencia, carregar_perfil
+
+        m = {"duracao_s": 30.0, "cortes_por_minuto": 10.0}
+        for faixas in ({"duracao_s": ["20", "45"]}, {"duracao_s": [[1], [2]]}, {"duracao_s": [45, 20]},
+                       {"duracao_s": [True, 50]}, {"duracao_s": 30}, 3, None, "x"):
+            self.assertEqual(alertas_referencia(m, faixas, "A"), [])
+        with tempfile.TemporaryDirectory() as d:
+            arq = Path(d) / "p.toml"
+            for conteudo in (b"[referencia]\nA = 3\n", b"referencia = 3\n", b"\xff\xfe lixo", b"[referencia.A"):
+                arq.write_bytes(conteudo)
+                self.assertIsNone(carregar_perfil(arq, "A"))
+
+    def test_salvar_com_nomes_estranhos_ou_arquivo_ruim(self):
+        from torralles_studio.referencias import carregar_perfil, perfil_da_categoria, salvar_perfil
+
+        p = perfil_da_categoria([_analise(i) for i in range(1, 4)])
+        with tempfile.TemporaryDirectory() as d:
+            arq = Path(d) / "p.toml"
+            for cat in ("curto informativo", "ção", "a.b", 'x"y'):
+                salvar_perfil(arq, cat, p)
+                self.assertIsNotNone(carregar_perfil(arq, cat), cat)
+            self.assertIsNotNone(carregar_perfil(arq, "curto informativo"))  # as outras continuam lá
+            arq.write_text("[referencia.A", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                salvar_perfil(arq, "A", p)
+            self.assertEqual(arq.read_text(encoding="utf-8"), "[referencia.A")  # nada foi gravado por cima
+
+    def test_perfil_ignora_campos_estragados(self):
+        from torralles_studio.referencias import perfil_da_categoria
+
+        analises = [_analise(i, gancho="x", musica=[1], nota_potencial=float("nan")) for i in range(1, 4)]
+        p = perfil_da_categoria(analises + ["lixo"])
+        self.assertEqual((p["gancho_tipos_aceitos"], p["nota_potencial_minima"], p["musica_sob_voz"]), ([], None, None))
+        self.assertEqual((p["medidas_ffmpeg"], p["medidas_estimadas"]), (0, 3))
 
 
 if __name__ == "__main__":

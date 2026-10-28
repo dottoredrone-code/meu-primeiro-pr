@@ -235,10 +235,18 @@ def comando_perfil_referencia(args):
     for m, (baixo, alto) in perfil["faixas"].items():
         print(f"  {NOMES_MEDIDAS[m]}: {baixo:g} a {alto:g}")
     print(f"  ganchos: {', '.join(perfil['gancho_tipos_aceitos']) or '—'}")
+    if perfil["medidas_estimadas"]:
+        print(f"  {perfil['medidas_estimadas']} de {perfil['n']} com números estimados pelo Gemini (link); "
+              "arquivos locais são medidos pelo FFmpeg")
     if perfil["nota_potencial_minima"] is not None:
         print(f"  potencial (25º percentil): {perfil['nota_potencial_minima']:g}/100")
     if args.salvar:
-        print(f"✓ salvo em {salvar_perfil(RAIZ / 'config' / 'perfis_referencia.toml', categoria, perfil)} (revise e commite)")
+        try:
+            destino = salvar_perfil(RAIZ / "config" / "perfis_referencia.toml", categoria, perfil)
+        except ValueError as e:
+            print(f"✗ {e}", file=sys.stderr)
+            return 1
+        print(f"✓ salvo em {destino} (revise e commite)")
     else:
         print("  (use --salvar para gravar em config/perfis_referencia.toml)")
     return 0
@@ -484,7 +492,11 @@ def main(argv=None):
     s = sub.add_parser("analisar-referencia", help="analisa um vídeo de referência (link do YouTube ou arquivo) para a régua")
     s.add_argument("video", help="link de um vídeo do YouTube (sem baixar) ou arquivo local")
     s.add_argument("-c", "--categoria", required=True, help="categoria de referência (A, B, C… de config/referencias.toml)")
-    s.add_argument("--negativo", action="store_true", help="exemplo do que NÃO fazer (fica fora das faixas do perfil)")
+    marca = s.add_mutually_exclusive_group()
+    marca.add_argument("--negativo", dest="negativo", action="store_const", const=True,
+                       help="exemplo do que NÃO fazer (fica fora das faixas do perfil)")
+    marca.add_argument("--positivo", dest="negativo", action="store_const", const=False,
+                       help="desfaz um --negativo anterior (sem nenhum dos dois, mantém o que estava)")
 
     s = sub.add_parser("perfil-referencia", help="faixas típicas (25º–75º) de uma categoria a partir das análises")
     s.add_argument("-c", "--categoria", required=True, help="categoria (A–F)")

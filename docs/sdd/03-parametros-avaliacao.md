@@ -5,6 +5,8 @@
 > K13: quando `config/perfis_referencia.toml` tiver a categoria do perfil, o relatório do vídeo compara duração,
 > cortes por minuto, duração de plano e palavras por segundo com essa faixa (alerta, não reprova).
 > K14: a calibração da seção 7 roda com `nota-referencia` + `calibrar` (âncoras aprovadas em `config/ancoras.toml`).
+> Ela mede o juiz que analisa as referências; para os juízes de produção (outra família, D15) o resultado é
+> indicação. A nota mínima do config é de 0 a 100 (1 ponto da sua nota de 0 a 10 = 10 pontos).
 > Todos os números são **padrões iniciais**, ajustáveis no config e recalibrados com a sua avaliação ([calibração](#7-calibração)).
 
 ## 1. Como uma peça é aprovada
@@ -152,7 +154,7 @@ Dizer **o que manter** evita que a correção estrague o que já estava bom.
 
 ```toml
 [avaliacao.roteiro]
-nota_minima = 7
+nota_minima = 70
 juizes = ["claude_haiku", "gemini_flash", "openai_mini"]
 num_juizes = 1
 pesos = { gancho = 25, precisao = 20, aderencia = 15, clareza = 15, ritmo = 15, cta = 10 }
@@ -161,7 +163,7 @@ palavras_por_segundo = 2.5
 tolerancia_duracao = 0.20
 
 [avaliacao.imagem]
-nota_minima = 7
+nota_minima = 70
 juizes = ["gemini_flash", "claude_haiku", "openai_mini"]
 num_juizes = 2
 divergencia_maxima = 2
