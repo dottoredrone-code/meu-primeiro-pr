@@ -332,7 +332,8 @@ def comando_benchmark(args):
         print(f"  {r['ferramenta']}: {nota} · {r['videos']} vídeo(s) · {r['problemas']} problema(s) automático(s)")
     for r in resultados:
         if r.get("sem_juiz"):
-            motivo = next(iter(r.get("problemas_juiz") or []), "motivo desconhecido")
+            motivos = [m for m in r.get("problemas_juiz") or [] if not m.startswith("nenhum juiz disponível")]
+            motivo = "; ".join(motivos) or "nenhum juiz disponível"
             print(f"  ⚠ {r['briefing']} · {r['ferramenta']} sem juiz: {motivo}")
     print(f"✓ relatório em {pasta / 'relatorio.md'}")
     if args.doc:
@@ -362,9 +363,16 @@ def comando_benchmark_produzir(args, pasta):
     falhas = 0
     for b in briefings:
         tema = bm.BRIEFINGS[b]["tema"]
-        if (pasta / b / f"{bm.ESTUDIO}.mp4").is_file() and not args.refazer:
-            print(f"== briefing {b}: já tem vídeo do Studio (use --refazer para rodar de novo)", file=sys.stderr)
-            continue
+        if (pasta / b / f"{bm.ESTUDIO}.mp4").is_file():
+            if not args.refazer:
+                print(f"== briefing {b}: já tem vídeo do Studio (use --refazer para fazer de novo)", file=sys.stderr)
+                continue
+            import shutil
+
+            # do zero: trabalho, vídeo e números antigos saem (as notas eram do vídeo anterior)
+            shutil.rmtree(pasta / b / "_studio", ignore_errors=True)
+            for velho in (pasta / b / f"{bm.ESTUDIO}.mp4", pasta / b / f"{bm.ESTUDIO}.json"):
+                velho.unlink(missing_ok=True)
         print(f"== briefing {b}: {tema}", file=sys.stderr)
         inicio = time.monotonic()
         roteador = carregar_roteador(args.config)  # um teto de US$ 1,50 por vídeo, não um para os três
@@ -387,14 +395,8 @@ def comando_benchmark_produzir(args, pasta):
             print(f"✗ briefing {b} parou: {e}. Rode de novo para continuar.", file=sys.stderr)
             falhas += 1
             continue
-        if bm.nada_novo(rel) and (pasta / b / f"{bm.ESTUDIO}.json").is_file():
-            destino = pasta / b / f"{bm.ESTUDIO}.mp4"  # só reaproveitou: não soma outra execução
-            import shutil
-
-            shutil.copyfile(rel["video"], destino)
-        else:
-            destino = bm.registrar_execucao(pasta, b, custo_usd=rel["custo_usd"], tempo_s=rel["tempo_s"],
-                                            tentativas=bm.tentativas_do_relatorio(rel), relatorio=rel)
+        destino = bm.registrar_execucao(pasta, b, custo_usd=rel["custo_usd"], tempo_s=rel["tempo_s"],
+                                        tentativas=bm.tentativas_do_relatorio(rel), relatorio=rel)
         print(f"{'✓' if rel['aprovado'] else '⚠'} {destino} · US$ {rel['custo_usd']:.3f} · {rel['tempo_s']} s")
     return 1 if falhas else 0
 
@@ -622,7 +624,8 @@ def main(argv=None):
     b = bm.add_parser("produzir", parents=[comum], help="faz os vídeos do Studio para os briefings (cada um com o próprio teto)")
     b.add_argument("-b", "--briefing", nargs="+", default=["A", "B", "C"], help="quais briefings (A, B, C)")
     b.add_argument("--sem-pesquisa", action="store_true", help="não pesquisa fontes antes do roteiro")
-    b.add_argument("--refazer", action="store_true", help="roda de novo os briefings que já têm vídeo do Studio")
+    b.add_argument("--refazer", action="store_true",
+                   help="faz de novo do zero os briefings que já têm vídeo do Studio (apaga o anterior e paga de novo)")
     b = bm.add_parser("dados", parents=[comum], help="anota tempo, custo, intervenções e suas notas de uma ferramenta num briefing")
     b.add_argument("briefing", help="A, B ou C")
     b.add_argument("ferramenta", help="nome da ferramenta, igual ao nome do arquivo do vídeo (ex.: capcut)")

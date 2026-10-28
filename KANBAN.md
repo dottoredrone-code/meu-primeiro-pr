@@ -25,6 +25,7 @@
 | K12 | `analisar-referencia` (`referencias.py`): métricas, estrutura do roteiro, tipo de gancho, 4 critérios de potencial com evidência e âncoras sugeridas; link do YouTube sem baixar, arquivo local medido pelo FFmpeg; JSON em `dados/referencias/` — teste real no PC pendente | [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) · [09](docs/sdd/09-referencias-qualidade.md) |
 | K13 | Perfil de referência por categoria (`perfil-referencia -c A --salvar`): faixa 25º–75º das referências positivas (negativas ficam fora), tipos de gancho, potencial mínimo; vídeo fora da faixa da categoria do perfil ganha alerta no relatório — gerar `config/perfis_referencia.toml` com as análises reais no PC pendente | [09](docs/sdd/09-referencias-qualidade.md) |
 | K14 | Calibração (`nota-referencia`, `calibrar`): suas notas 0–10 × notas do juiz por critério e por juiz (generoso, rígido, discorda muito) com recomendação; âncoras aprovadas em `config/ancoras.toml` entram no prompt da análise; reanálise mantém suas notas — suas notas nas referências (PC) pendentes | [03](docs/sdd/03-parametros-avaliacao.md) · [09](docs/sdd/09-referencias-qualidade.md) |
+| K31 | Benchmark prático (`benchmark` com `briefings`, `produzir`, `dados` e `avaliar`): os 3 briefings da spec 04, vídeos do Studio com um teto por vídeo, dados anotados à mão das outras ferramentas, mesma régua para todos (checagens do FFmpeg + mesmo juiz) e relatório comparativo (`--doc` grava a 04b) — rodar no PC e gerar os vídeos nas outras ferramentas pendente | [04](docs/sdd/04-benchmark.md) |
 | K00c | Planejamento: specs 00–12 e decisões D1–D20 | [decisões](docs/sdd/decisoes.md) |
 | K01 | Modelos atualizados + Kling v3 `start_image_url` (teste de contrato por família) | [00](docs/sdd/00-descoberta.md) |
 | K02 | Pacote renomeado para `torralles_studio` | D1 |
@@ -48,7 +49,6 @@
 ## 🔍 Em verificação
 | ID | Cartão | Spec |
 |---|---|---|
-| K31 | Benchmark prático (`benchmark` com `briefings`, `produzir`, `dados` e `avaliar`): os 3 briefings da spec 04, vídeos do Studio com um teto por vídeo, dados anotados à mão das outras ferramentas, mesma régua para todos (checagens do FFmpeg + mesmo juiz) e relatório comparativo (`--doc` grava a 04b) — rodar no PC e gerar os vídeos nas outras ferramentas pendente | [04](docs/sdd/04-benchmark.md) |
 
 ## 🛠️ Em andamento
 | ID | Cartão | Spec |

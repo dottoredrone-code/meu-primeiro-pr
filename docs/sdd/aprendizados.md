@@ -193,3 +193,14 @@
 - **Recomendação na escala de quem vai aplicar:** a pessoa dá nota de 0 a 10, o config usa 0 a 100.
 - **Reprocessar não pode apagar decisão humana:** reanálise mantém as notas e a marca de negativo.
 - 2 rodadas de verificação (4 médios na 1ª; aprovado com 1 baixo na 2ª, corrigido).
+
+## Camada 6 — Benchmark prático: K31 (28/10/2026)
+- **Retomar não pode apagar história:** relatório por execução ("custo desta rodada") sobrescrevia o custo real;
+  números de comparação se somam entre execuções, inclusive as que pararam, e cada retomada é uma intervenção.
+- **Comparar exige a régua mais rígida, não uma frouxa:** as checagens do benchmark são as mesmas do vídeo final do
+  Studio (spec 03 §3.6); régua própria mais leve favorecia os concorrentes e contradizia a doc.
+- **Arquivos do mundo real:** rotação do celular, `._arquivo` do macOS, nomes repetidos, arquivo só de áudio —
+  cada um vira aviso ou problema claro, nunca escolha silenciosa nem queda.
+- **Relatório que vai para o Git:** sem caminho do PC, sem quebra de tabela por `|` ou nova linha.
+- **Exceção a uma regra do projeto tem de aparecer no resultado** (mesmo juiz para todos ≠ juiz de outra família, D15).
+- 3 rodadas de verificação (1 alto + 4 médios na 1ª; 1 médio na 2ª; corrigidos).

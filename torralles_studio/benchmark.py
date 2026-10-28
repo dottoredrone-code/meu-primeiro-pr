@@ -131,7 +131,10 @@ def registrar_execucao(pasta, briefing, *, custo_usd, tempo_s, tentativas=0, rel
             "tempo_min": round(float(atual.get("tempo_min_total", 0)) + float(tempo_s or 0) / 60, 1),
             "tentativas": float(int(atual.get("tentativas_total", 0)) + max(0, int(tentativas)))}
     if relatorio is not None and not soma["tentativas"]:
-        soma["tentativas"] = 1.0  # o roteiro saiu numa execução que parou depois: ao menos 1 tentativa
+        # o roteiro saiu numa execução que parou depois: usa as tentativas guardadas no roteiro.json (mín. 1)
+        guardadas = [int(e["tentativas"]) for e in relatorio.get("etapas", [])
+                     if isinstance(e, dict) and e.get("etapa") == "roteiro" and _finito(e.get("tentativas"))]
+        soma["tentativas"] = float(max(guardadas + [1]))
     novo.update(custo_usd_total=soma["custo_usd"], tempo_min_total=soma["tempo_min"],
                 tentativas_total=int(soma["tentativas"]))
     for campo, valor in (*soma.items(), ("intervencoes", float(execucoes - 1))):
@@ -153,12 +156,6 @@ def tentativas_do_relatorio(relatorio):
         if isinstance(e, dict) and not e.get("reaproveitado") and _finito(e.get("tentativas")):
             total += max(0, int(e["tentativas"]))
     return total
-
-
-def nada_novo(relatorio):
-    """Execução que só reaproveitou o que já existia (nada gerado, nada pago)."""
-    etapas = [e for e in relatorio.get("etapas", []) if isinstance(e, dict)]
-    return not float(relatorio.get("custo_usd") or 0) and all(e.get("reaproveitado") for e in etapas)
 
 
 def listar_videos(pasta, aviso=None):
@@ -238,9 +235,12 @@ def checar_video(video, duracao_alvo=DURACAO_S):
             problemas.append(f"volume {lufs:.1f} LUFS (redes: −14 ±1)")
         if pico is not None and pico > PICO_MAXIMO_DB:
             problemas.append(f"pico {pico:.1f} dB (máx. −1)")
-    if (info.get("codec_video"), info.get("codec_audio"), info.get("pix_fmt")) != ("h264", "aac", "yuv420p"):
-        problemas.append(f"formato {info.get('codec_video')}/{info.get('codec_audio')}/{info.get('pix_fmt')} "
-                         "(redes aceitam melhor h264/aac/yuv420p)")
+    formato = [(info.get("codec_video"), "h264"), (info.get("pix_fmt"), "yuv420p")]
+    if info.get("codec_audio"):  # sem áudio já é outro problema: não conta duas vezes
+        formato.append((info["codec_audio"], "aac"))
+    if any(atual != certo for atual, certo in formato):
+        problemas.append(f"formato {'/'.join(str(a) for a, _ in formato)} (redes aceitam melhor "
+                         f"{'/'.join(c for _, c in formato)})")
     pretas = sum(f - i for i, f in rel.get("telas_pretas_s") or [] if _finito(i) and _finito(f))
     congelado = sum(f - i for i, f in rel.get("congelamentos_s") or [] if _finito(i) and _finito(f))
     if pretas > 0.5:

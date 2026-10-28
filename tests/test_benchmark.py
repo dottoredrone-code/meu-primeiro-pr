@@ -72,14 +72,16 @@ class TestDados(unittest.TestCase):
             bm.registrar_execucao(pasta, "B", custo_usd=0.4, tempo_s=60, relatorio=rel)
             dados = json.loads(destino.with_suffix(".json").read_text(encoding="utf-8"))
             self.assertEqual(dados["intervencoes"], 0.0)  # o que você anotou fica
+            # roteiro feito numa execução que parou: as tentativas vêm do roteiro.json reaproveitado
+            reuso = {"video": str(origem), "etapas": [{"etapa": "roteiro", "reaproveitado": True, "tentativas": 3}]}
+            bm.registrar_execucao(pasta, "C", custo_usd=0.5, tempo_s=60)
+            bm.registrar_execucao(pasta, "C", custo_usd=0, tempo_s=30, tentativas=bm.tentativas_do_relatorio(reuso),
+                                  relatorio=reuso)
+            c = json.loads((pasta / "C" / "torralles-studio.json").read_text(encoding="utf-8"))
+            self.assertEqual((c["tentativas"], c["intervencoes"], c["aprovado_pelo_studio"]), (3.0, 1.0, False))
             self.assertEqual(dados["nota_diego"], 8.0)
             self.assertEqual(dados["custo_usd"], 1.6)
             self.assertTrue(dados["acima_do_teto"])
-
-    def test_nada_novo(self):
-        self.assertTrue(bm.nada_novo({"custo_usd": 0, "etapas": [{"reaproveitado": True}]}))
-        self.assertFalse(bm.nada_novo({"custo_usd": 0, "etapas": [{"reaproveitado": False}]}))
-        self.assertFalse(bm.nada_novo({"custo_usd": 0.01, "etapas": []}))
 
     def test_listar_ignora_ocultos_e_avisa_duplicados(self):
         with tempfile.TemporaryDirectory() as d:
@@ -184,6 +186,9 @@ class TestAvaliar(unittest.TestCase):
             subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=d=2", "-c:a", "aac",
                             str(audio)], check=True)
             self.assertEqual(bm.checar_video(audio)["problemas"], ["o arquivo não tem imagem (só áudio)"])
+            mudo = _video(Path(d) / "mudo.mp4", dur=2, som=False)
+            probs = bm.checar_video(mudo, duracao_alvo=2)["problemas"]
+            self.assertEqual(probs, ["sem áudio medível"])  # sem áudio não vira também "formato"
             webm = Path(d) / "x.webm"
             subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=s=1080x1920:d=2:r=5",
                             "-f", "lavfi", "-i", "sine=d=2", "-shortest", str(webm)], check=True)

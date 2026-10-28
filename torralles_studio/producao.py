@@ -192,7 +192,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
     # 2. Roteiro com juiz e loop de correção
     if guardado:
         roteiro = guardado["roteiro"]
-        etapa("roteiro", reaproveitado=True, aprovado=guardado.get("aprovado"))
+        etapa("roteiro", reaproveitado=True, aprovado=guardado.get("aprovado"), tentativas=guardado.get("tentativas"))
         if not guardado.get("aprovado"):
             avisar("⚠ usando o roteiro já feito, que não foi aprovado pelo juiz (para refazer: --refazer-roteiro)")
     else:
@@ -205,7 +205,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         roteiro = r.valor
         (pasta / "roteiro.json").write_text(json.dumps(
             {"tema": tema, "duracao": duracao, "proporcao": proporcao, "aprovado": r.aprovado, "nota": r.nota,
-             "roteiro": roteiro}, ensure_ascii=False, indent=2), encoding="utf-8")
+             "tentativas": len(r.tentativas or []) or 1, "roteiro": roteiro}, ensure_ascii=False, indent=2), encoding="utf-8")
         etapa("roteiro", r.provedor, nota=r.nota, aprovado=r.aprovado, tentativas=len(r.tentativas or []) or 1,
               problemas=list(getattr(r.avaliacao, "problemas", None) or [])[:5])
         for arq in pasta.iterdir():  # roteiro novo: mídia das cenas antigas não serve mais (só os nomes do Studio)
