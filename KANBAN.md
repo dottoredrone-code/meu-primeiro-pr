@@ -23,6 +23,8 @@
 | K28 | Servidor do Studio para o Ops e o Hermes: contrato da spec 08, fila assíncrona no SQLite (sem produção em dobro, retomada de órfãos, teto nas retomadas), HTTP local protegido (CSRF, host, token) e MCP por stdio — teste real com o Ops/Hermes pendente | [08](docs/sdd/08-contrato-ops-studio.md) · D13 · D14 |
 | K18 | Voz com fallback (voz do Gemini antes do Edge) e conferência da narração por transcrição (erro de palavras ≤ 10%, números por extenso, refaz com outra voz e fica com a melhor, dentro do teto); `testar-voz` — teste real no PC pendente (nome do modelo TTS) | [11](docs/sdd/11-banco-midia-gratuita.md) |
 | K12 | `analisar-referencia` (`referencias.py`): métricas, estrutura do roteiro, tipo de gancho, 4 critérios de potencial com evidência e âncoras sugeridas; link do YouTube sem baixar, arquivo local medido pelo FFmpeg; JSON em `dados/referencias/` — teste real no PC pendente | [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) · [09](docs/sdd/09-referencias-qualidade.md) |
+| K13 | Perfil de referência por categoria (`perfil-referencia -c A --salvar`): faixa 25º–75º das referências positivas (negativas ficam fora), tipos de gancho, potencial mínimo; vídeo fora da faixa da categoria do perfil ganha alerta no relatório — gerar `config/perfis_referencia.toml` com as análises reais no PC pendente | [09](docs/sdd/09-referencias-qualidade.md) |
+| K14 | Calibração (`nota-referencia`, `calibrar`): suas notas 0–10 × notas do juiz por critério e por juiz (generoso, rígido, discorda muito) com recomendação; âncoras aprovadas em `config/ancoras.toml` entram no prompt da análise; reanálise mantém suas notas — suas notas nas referências (PC) pendentes | [03](docs/sdd/03-parametros-avaliacao.md) · [09](docs/sdd/09-referencias-qualidade.md) |
 | K00c | Planejamento: specs 00–12 e decisões D1–D20 | [decisões](docs/sdd/decisoes.md) |
 | K01 | Modelos atualizados + Kling v3 `start_image_url` (teste de contrato por família) | [00](docs/sdd/00-descoberta.md) |
 | K02 | Pacote renomeado para `torralles_studio` | D1 |
@@ -46,8 +48,6 @@
 ## 🔍 Em verificação
 | ID | Cartão | Spec |
 |---|---|---|
-| K13 | Perfil de referência por categoria (`perfil-referencia -c A --salvar`): faixa 25º–75º das referências positivas (negativas ficam fora), tipos de gancho, potencial mínimo; vídeo fora da faixa da categoria do perfil ganha alerta no relatório — faltam as análises reais (PC) para gerar `config/perfis_referencia.toml` e atualizar a spec 03 | [09](docs/sdd/09-referencias-qualidade.md) |
-| K14 | Calibração (`nota-referencia`, `calibrar`): suas notas 0–10 × notas do juiz por critério e por juiz (generoso, rígido, discorda muito) com recomendação; âncoras aprovadas em `config/ancoras.toml` entram no prompt da análise; reanálise mantém suas notas — faltam as suas notas (PC) | [03](docs/sdd/03-parametros-avaliacao.md) · [09](docs/sdd/09-referencias-qualidade.md) |
 
 ## 🛠️ Em andamento
 | ID | Cartão | Spec |
@@ -68,9 +68,6 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 ### Camada 2 — Referências (D17; corre em paralelo à Camada 1)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
-| K12 | `analisar_referencia(url)`: métricas + estrutura do roteiro + 4 critérios de potencial | [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) | K06 · K11 | Analisa por link, sem baixar; JSON por vídeo |
-| K13 | Perfis de referência por categoria (faixas 25º–75º) substituindo números da spec 03 | [09](docs/sdd/09-referencias-qualidade.md) | K12 | `config` com faixas medidas; spec 03 atualizada |
-| K14 | Calibração: suas notas × notas dos juízes nas referências | [03](docs/sdd/03-parametros-avaliacao.md) | K07 · K12 | Divergência medida; âncoras ajustadas |
 
 ### Camada 3 — Produção (depende das Camadas 0 e 1)
 | ID | Cartão | Spec | Depende de | Critérios de aceite |

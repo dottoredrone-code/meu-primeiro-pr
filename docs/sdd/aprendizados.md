@@ -182,3 +182,14 @@
   a maior da categoria. Campo novo de custo também fica fora da chave do cache e fora do alcance dos perfis.
 - **Preço "a favor do bolso" é o maior da faixa,** conferido pela conta, não pelo comentário.
 - 2 rodadas de verificação (5 médios na 1ª; aprovado com 4 baixos na 2ª, corrigidos).
+
+## Camada 5 — Régua medida: K13 + K14 (28/10/2026)
+- **Arquivo de config que a pessoa edita é entrada externa:** faixa com texto, invertida ou seção que não é tabela
+  não pode derrubar o relatório no fim de um vídeo já pago. Conferir tipo, finitude e ordem; na dúvida, ignorar.
+- **Gerar TOML à mão exige conferir antes de gravar** (`tomllib.loads`): um nome com espaço ou acento gravava um
+  arquivo ilegível e desligava os alertas em silêncio.
+- **Viés ≠ discordância:** juiz que sempre dá +2,5 é generoso (corrige na nota mínima); discordância é a variação em
+  torno da média. Usar só a média do |erro| confunde os dois.
+- **Recomendação na escala de quem vai aplicar:** a pessoa dá nota de 0 a 10, o config usa 0 a 100.
+- **Reprocessar não pode apagar decisão humana:** reanálise mantém as notas e a marca de negativo.
+- 2 rodadas de verificação (4 médios na 1ª; aprovado com 1 baixo na 2ª, corrigido).

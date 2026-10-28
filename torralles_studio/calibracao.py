@@ -77,6 +77,11 @@ def _pontos_0_100(diferenca):
     return int(math.floor(abs(diferenca) * 10 + 0.5))
 
 
+def _longe(r):
+    """Viés grande demais para corrigir só na nota mínima (mais de 3 pontos de 0–10)."""
+    return "; a diferença é grande: considere trocar esse juiz" if abs(r["media_diferenca"]) > 3 else ""
+
+
 def _veredito(r):
     if r["dispersao"] > DIVERGENCIA_MAXIMA:
         return "discorda muito"
@@ -106,11 +111,13 @@ def calibrar(analises, minimo=MINIMO_NOTAS):
         if v == "mais generoso":
             recomendacoes.append(f"{p} dá em média {r['media_diferenca']:+.1f} ponto(s) a mais que você (0–10): suba a "
                                  f"nota mínima em {_pontos_0_100(r['media_diferenca'])} pontos na escala do config "
-                                 f"(ex.: 70 → {70 + _pontos_0_100(r['media_diferenca'])})")
+                                 f"(ex.: 70 → {min(100, 70 + _pontos_0_100(r['media_diferenca']))})"
+                                 + _longe(r))
         elif v == "mais rígido":
             recomendacoes.append(f"{p} dá em média {abs(r['media_diferenca']):.1f} ponto(s) a menos que você (0–10): "
                                  f"desça a nota mínima em {_pontos_0_100(r['media_diferenca'])} pontos na escala do "
-                                 f"config (ex.: 70 → {70 - _pontos_0_100(r['media_diferenca'])}) ou ajuste os pesos")
+                                 f"config (ex.: 70 → {max(0, 70 - _pontos_0_100(r['media_diferenca']))}) ou ajuste os pesos"
+                                 + _longe(r))
         elif v == "discorda muito":
             recomendacoes.append(f"{p} discorda de você de forma irregular (ora mais, ora menos; variação "
                                  f"{r['dispersao']:.1f}): ajuste as âncoras ou tire esse juiz da cadeia")

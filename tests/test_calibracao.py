@@ -42,6 +42,13 @@ class TestCalibrar(unittest.TestCase):
         self.assertIn("25 pontos", r["recomendacoes"][0])
         self.assertFalse(any("âncora" in x for x in r["recomendacoes"]))
 
+    def test_vies_enorme_nao_passa_de_100_e_sugere_trocar(self):
+        r = calibrar([_analise(i, {"gancho": 100}, {"gancho": 1}) for i in range(3)])
+        self.assertIn("70 → 100", r["recomendacoes"][0])
+        self.assertIn("trocar esse juiz", r["recomendacoes"][0])
+        r = calibrar([_analise(i, {"gancho": 0}, {"gancho": 9}) for i in range(3)])
+        self.assertIn("70 → 0", r["recomendacoes"][0])
+
     def test_arquivo_estragado_nao_derruba(self):
         dados = [_analise(i, {"gancho": 80}, {"gancho": 8}) for i in range(3)]
         dados += ["lixo", {"potencial": {"gancho": 5}, "notas_diego": {"gancho": 5}}, {"notas_diego": "x"}]
