@@ -38,6 +38,8 @@ Feito na nuvem desde a última passagem (tudo verificado por agente independente
 
 No PC, nesta ordem:
 1. `git pull origin claude/multi-model-integration-app-g1697x`
+   - **Cérebro:** com o ok do Diego, cole `docs/cerebro/2026-10-28-studio.md` na seção do Torralles Studio do
+     `Cerebro_Centralizado\CEREBRO_MESTRE.md` (editar só lá) e rode o script de sincronização do Cérebro.
 2. `python -m unittest discover -s tests` (deve passar; avisar se algo falhar no Windows)
 3. `python -m torralles_studio testar-voz` → ouvir `saidas\teste-voz\gemini_voz.mp3` ("olha", "vermelho"). Se der 404,
    corrigir o nome do modelo TTS em `config/fallbacks.toml` (`[provedores.gemini_voz]`).
