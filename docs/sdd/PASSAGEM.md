@@ -1,4 +1,4 @@
-# Passagem de bastão — Torralles Studio (atualizada em 24/10/2026, noite)
+# Passagem de bastão — Torralles Studio (atualizada em 28/10/2026)
 
 Leia este arquivo antes de continuar. O trabalho vinha numa sessão na nuvem e continua numa sessão local no PC
 do Diego (`C:\Users\Oem\meu-primeiro-pr`, branch **`claude/multi-model-integration-app-g1697x`**).
@@ -33,6 +33,8 @@ Feito na nuvem desde a última passagem (tudo verificado por agente independente
 - **K23 CapCut**: `produzir ... --capcut` ou `exportar-capcut saidas\<tema>`.
 - **K28 servidor** para o Ops e o Hermes: `servidor` (HTTP local) e `mcp` (docs/servidor.md).
 - **K18 voz**: voz do Gemini antes do Edge, conferência da narração por transcrição, comando `testar-voz`.
+- **KR1** preços revisados (24/10). **K12** `analisar-referencia`, **K13** `perfil-referencia`, **K14**
+  `nota-referencia` + `calibrar`, **K31** `benchmark` (28/10).
 
 No PC, nesta ordem:
 1. `git pull origin claude/multi-model-integration-app-g1697x`
@@ -43,8 +45,13 @@ No PC, nesta ordem:
    `video_final.mp4` (manter `cena_*.png`, `roteiro.json`, `fotos.json`) e rodar
    `python -m torralles_studio produzir "benefícios do chá verde" -d 30 --pesquisa --capcut`. Conferir: trilha baixou
    do Jamendo? voz nova? pasta `capcut` abre no CapCut? Mostrar ao Diego para a aprovação do **K32**.
-5. Opcional: `python -m torralles_studio servidor` e um `POST /v1/pecas` de teste (docs/servidor.md).
-6. Depois: K29 (botão "Produzir no Studio" no repositório do Torralles Ops, com autorização do Diego) e K30 (Hermes
+5. Régua medida (docs/teste-real.md 2c e 2d): `analisar-referencia` em 3–5 Shorts por canal da categoria A,
+   `perfil-referencia -c A --salvar` (commitar o `config/perfis_referencia.toml`), notas do Diego com
+   `nota-referencia` e `calibrar -c A`.
+6. Benchmark (docs/teste-real.md 2e): `benchmark produzir`; Diego gera os 3 briefings no CapCut, InVideo, Canva,
+   Flow…; `benchmark dados` para cada um; `benchmark avaliar --doc` (commitar a 04b).
+7. Opcional: `python -m torralles_studio servidor` e um `POST /v1/pecas` de teste (docs/servidor.md).
+8. Depois: K29 (botão "Produzir no Studio" no repositório do Torralles Ops, com autorização do Diego) e K30 (Hermes
    usando o MCP do Studio).
 
 ---
