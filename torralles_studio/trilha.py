@@ -146,16 +146,29 @@ def escolher_trilha(roteador, biblioteca, roteiro, duracao_video, *, perfil=None
                     "detalhe": {"camada": "acervo"}}
         avisar("  … trilha do acervo indisponível: buscando outra")
 
-    consulta = f"{CONSULTA_POR_CLIMA[clima]} instrumental"
-    avisar(f"  … trilha: buscando música '{consulta}' (clima {clima})")
-    try:
-        r = roteador.executar("midia_trilha", consulta=consulta, tipo="audio", max_resultados=12,
-                              categoria="music", usar_cache=False)
-    except (TodosFalharam, KeyError) as e:
-        raise SemTrilha(f"busca de trilha falhou: {e}") from None
-    candidatos = [c for c in candidatos_aceitos(r.valor) if not tem_voz(c)]
+    # O Openverse exige todas as palavras: "playful curious instrumental" volta vazio. Tenta com menos.
+    palavras = CONSULTA_POR_CLIMA[clima].split()
+    consultas = list(dict.fromkeys([" ".join(palavras + ["instrumental"]), " ".join(palavras), palavras[0]]))
+    candidatos, motivo = [], None
+    for consulta in consultas:
+        avisar(f"  … trilha: buscando música '{consulta}' (clima {clima})")
+        try:
+            r = roteador.executar("midia_trilha", consulta=consulta, tipo="audio", max_resultados=12,
+                                  categoria="music", usar_cache=False)
+        except KeyError as e:
+            raise SemTrilha(f"busca de trilha falhou: {e}") from None
+        except TodosFalharam as e:
+            if not all("sem resultados" in str(t.detalhe) for t in e.tentativas):
+                # rede, servidor fora do ar ou provedor em descanso: outra consulta só faria esperar de novo
+                raise SemTrilha(f"busca de trilha falhou: {e}") from None
+            motivo = f"nenhuma música encontrada (tentei {', '.join(repr(c) for c in consultas)})"
+            continue
+        candidatos = [c for c in candidatos_aceitos(r.valor) if not tem_voz(c)]
+        if candidatos:
+            break
+        motivo = "nenhuma música instrumental com licença comercial"
     if not candidatos:
-        raise SemTrilha("nenhuma música instrumental com licença comercial")
+        raise SemTrilha(motivo)
     candidatos.sort(key=lambda c: (bool(_palavras(c) & _INSTRUMENTAL), (c.get("duracao") or 0) >= duracao_video),
                     reverse=True)
     melhores, motivos = [], []

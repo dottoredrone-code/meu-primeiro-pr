@@ -214,6 +214,7 @@ chave_env = "PIXABAY_API_KEY"    # grátis em pixabay.com/api/docs
 [provedores.openverse_midia]
 cache = false  # links temporários e resultados que mudam: sempre busca de novo
 classe = "openverse"
+timeout = 30  # o Openverse às vezes trava: melhor desistir logo e seguir sem trilha
 chave_env = "OPENVERSE_TOKEN"    # opcional: funciona sem, com limite menor
 
 [provedores.freesound_midia]

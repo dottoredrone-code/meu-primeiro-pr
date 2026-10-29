@@ -127,6 +127,43 @@ class TestComFFmpeg(unittest.TestCase):
             self.assertEqual(t2["detalhe"], {"camada": "acervo"})
             self.assertEqual(len(midia.pedidos), 1)
 
+    def test_sem_resultado_tenta_com_menos_palavras(self):  # teste real 29/10: 3 palavras voltavam vazio
+        from torralles_studio.rede import ErroProvedor
+
+        class Exigente(Midia):
+            def executar(self, consulta, **kw):
+                super().executar(consulta, **kw)
+                if len(consulta.split()) > 1:
+                    raise ErroProvedor("busca de mídia sem resultados")
+                return self.candidatos
+
+        arquivo = _musica(self.d / "a.mp3", 100)
+        midia = Exigente([{"url": "https://x.storage.jamendo.com/a", "licenca": "cc0", "titulo": "Playful loop",
+                           "fonte": "Openverse (jamendo)", "duracao": 60}])
+        rt = Roteador({"openverse_midia": midia}, {"midia_trilha": ["openverse_midia"]}, dormir=lambda s: None)
+        with Banco(self.d / "b.db") as banco:
+            t = escolher_trilha(rt, Biblioteca(self.d / "bib", banco), {"cenas": [{"clima": "curioso"}]}, 30,
+                                baixar_arquivo=lambda url: arquivo.read_bytes())
+        self.assertEqual([p["consulta"] for p in midia.pedidos],
+                         ["playful curious instrumental", "playful curious", "playful"])
+        self.assertEqual(t["ativo"]["titulo"], "Playful loop")
+
+    def test_falha_de_rede_nao_repete_com_menos_palavras(self):  # verificador: 3 × prazo com o Openverse fora
+        from torralles_studio.rede import ErroProvedor
+
+        class Fora(Midia):
+            def executar(self, consulta, **kw):
+                super().executar(consulta, **kw)
+                raise ErroProvedor("HTTP 504", status=504, temporario=True)
+
+        midia = Fora([])
+        rt = Roteador({"openverse_midia": midia}, {"midia_trilha": ["openverse_midia"]}, dormir=lambda s: None)
+        with Banco(self.d / "b.db") as banco, self.assertRaises(SemTrilha) as erro:
+            escolher_trilha(rt, Biblioteca(self.d / "bib", banco), {"cenas": [{"clima": "curioso"}]}, 30,
+                            baixar_arquivo=lambda url: b"")
+        self.assertEqual({p["consulta"] for p in midia.pedidos}, {"playful curious instrumental"})
+        self.assertIn("504", str(erro.exception))
+
     def test_so_musica_com_voz_nao_serve(self):
         midia = Midia([{"url": "https://x.storage.jamendo.com/v", "licenca": "cc-by", "autor": "C",
                         "titulo": "Love song", "fonte": "Openverse"}])
