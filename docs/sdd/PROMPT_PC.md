@@ -9,7 +9,7 @@ Continue o Torralles Studio aqui no meu PC (Windows, PowerShell), na pasta C:\Us
    - K12 analisar-referencia, K13 perfil-referencia, K14 nota-referencia + calibrar (régua medida com vídeos de referência).
    - K31 benchmark (briefings, produzir, dados, avaliar --doc).
    - K33 (em andamento): o CapCut é operado pelo Claude no navegador do Claude, pela skill .claude/skills/capcut-navegador/SKILL.md (decisão D23, spec docs/sdd/13-capcut-navegador.md). Precisa de sessão rodando no PC (esta). Controle do computador para a janela de arquivos do Windows: não apareceu nas Configurações do app 4.29.0; sem ele, eu escolho os arquivos quando você pedir.
-4. Primeira tarefa: com o meu ok, cole docs/cerebro/2026-10-28-studio.md na seção do Torralles Studio do Cerebro_Centralizado\CEREBRO_MESTRE.md (editar só lá) e rode o script de sincronização do Cérebro.
+4. Primeira tarefa: veja se a sincronização do Cérebro está ativa ou suspensa (script, agendamento, último horário em que rodou) e me diga. Depois, com o meu ok, cole docs/cerebro/2026-10-28-studio.md na seção do Torralles Studio do Cerebro_Centralizado\CEREBRO_MESTRE.md (editar só lá). Se a sincronização estiver ativa, rode o script; se estiver suspensa, não a religue sem eu pedir: só grave no mestre e me avise.
 5. Depois, siga os testes reais nesta ordem (passo a passo em docs/teste-real.md, seções 2a a 2f), me mostrando o resultado de cada um:
    a. testar-voz (ouvir a voz do Gemini: "olha", "vermelho"; se der 404, corrigir o nome do modelo TTS no config).
    b. Refazer o vídeo do chá verde com trilha e --capcut, como está na PASSAGEM, para eu aprovar o K32.
