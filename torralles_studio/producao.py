@@ -145,14 +145,16 @@ def _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
 
 def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesquisar=False, trilha=None, bpm=None,
                    cfg_montagem=None, aviso=None, refazer_roteiro=False, biblioteca=None, trilha_auto=True,
-                   capcut=False, fatos=None, proporcao=None, conferir_voz=None, perfis_referencia=None):
+                   capcut=False, fatos=None, proporcao=None, conferir_voz=None, perfis_referencia=None,
+                   efeitos_auto=True):
     """Produz o vídeo e devolve o relatório (também salvo em pasta/relatorio.json).
 
     perfis_referencia: arquivo das faixas por categoria (K13; padrão config/perfis_referencia.toml). Vídeo fora
     da faixa da categoria do perfil ganha alertas no relatório (não reprova).
 
     biblioteca: com ela, cena cuja imagem nenhuma IA conseguiu gerar usa uma foto gratuita com licença, e
-    (com trilha_auto e sem `trilha`) a música de fundo é escolhida pelo clima do roteiro (K21).
+    (com trilha_auto e sem `trilha`) a música de fundo é escolhida pelo clima do roteiro (K21); com efeitos_auto,
+    cada corte ganha um som curto do acervo local, pelo clima da cena que entra.
     """
     for programa in ("ffmpeg", "ffprobe"):
         if not shutil.which(programa):
@@ -310,6 +312,28 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         if musica:
             trilha, bpm = musica["arquivo"], bpm or musica.get("bpm")
 
+    # 4b. Efeitos sonoros nos cortes (K21): só do acervo local (grátis, licença conferida, sem Freesound — D22)
+    sons = []
+    if efeitos_auto and biblioteca is not None and len(cenas) > 1:
+        from .efeitos import escolher_efeitos
+        from .montagem import duracao as duracao_audio
+
+        escolhas = escolher_efeitos(biblioteca, [c.get("clima") for c in cenas], perfil=perfil,
+                                    duracao_de=duracao_audio)
+        for i, (cena, e) in enumerate(zip(cenas, escolhas), 1):
+            if e:
+                cena["efeito"] = e["arquivo"]
+                sons.append({"cena": i, "nome": e["nome"],
+                             **{k: e["ativo"].get(k) for k in ("hash", "caminho", "licenca", "fonte", "autor",
+                                                               "link", "titulo")}})
+        if sons:
+            etapa("efeitos", "acervo", quantidade=len(sons))
+        else:
+            aviso_sons = ("sem efeitos sonoros no acervo; para ter: importar-sons <pasta> --licenca pixabay "
+                          "--fonte Pixabay")
+            avisar(f"  · {aviso_sons}")
+            etapa("efeitos", None, aviso=aviso_sons)
+
     # 5. Montagem final + régua da spec 03 §3.6
     avisar("== montagem final")
     final = pasta / "video_final.mp4"
@@ -317,12 +341,17 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         resultado = montar(cenas, final, proporcao=proporcao, trilha=trilha, bpm=bpm, cfg=cfg_montagem,
                            pasta_trabalho=pasta / "montagem", duracao_alvo=duracao)
     except (ErroMontagem, ErroProvedor) as e:
-        if not musica:
+        if not musica and not sons:
             raise
-        avisar(f"  ⚠ a trilha atrapalhou a montagem ({e}); montando só com a narração")
-        _apagar(pasta / "trilha.json")
-        etapas.append({"etapa": "trilha", "provedor": None, "reaproveitado": False, "aviso": str(e)})
-        musica = None
+        avisar(f"  ⚠ a trilha ou os efeitos atrapalharam a montagem ({e}); montando só com a narração")
+        if musica:
+            _apagar(pasta / "trilha.json")
+            etapas.append({"etapa": "trilha", "provedor": None, "reaproveitado": False, "aviso": str(e)})
+        if sons:
+            etapas.append({"etapa": "efeitos", "provedor": None, "reaproveitado": False, "aviso": str(e)})
+        musica, sons = None, []
+        for cena in cenas:
+            cena.pop("efeito", None)
         resultado = montar(cenas, final, proporcao=proporcao, cfg=cfg_montagem, pasta_trabalho=pasta / "montagem",
                            duracao_alvo=duracao)
     conferencia = verificar_montagem(resultado, duracao_pedida=duracao)
@@ -334,6 +363,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         "titulo": roteiro.get("titulo"), "cta": roteiro.get("cta"),
         "fotos_gratuitas": {k: v for k, v in fotos.items() if int(k) <= total},
         "trilha": musica,
+        "efeitos": sons,  # som de cada corte, com fonte e licença (D18)
     }
     categoria = getattr(perfil, "categoria", None)
     if categoria:
@@ -344,7 +374,8 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         medidas = medidas_do_video(resultado, roteiro)
         relatorio["referencia"] = {"categoria": categoria, "medidas": medidas, "perfil_medido": bool(faixas),
                                    "alertas": alertas_referencia(medidas, faixas, categoria) if faixas else []}
-    terceiros = list(relatorio["fotos_gratuitas"].values()) + ([musica["ativo"]] if musica else [])
+    terceiros = (list(relatorio["fotos_gratuitas"].values()) + ([musica["ativo"]] if musica else [])
+                 + [{k: v for k, v in s.items() if k not in ("cena", "nome")} for s in sons])
     if biblioteca is not None and terceiros:
         creditos = biblioteca.creditos(terceiros)
         relatorio["creditos"] = creditos  # vai na descrição do vídeo (CC-BY exige crédito)

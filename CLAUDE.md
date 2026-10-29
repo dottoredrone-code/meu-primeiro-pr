@@ -34,6 +34,7 @@ torralles_studio/
   loop.py         loop de correção; relatorio.py relatório de qualidade e custo
   producao.py     vídeo completo de um tema: pesquisa → roteiro → imagem, voz e cena → montagem (retoma sem pagar de novo)
   trilha.py       trilha pelo clima do roteiro (BPM e energia pelo FFmpeg, voz eliminatória); exportar.py pasta para o CapCut
+  efeitos.py      sons curtos nos cortes, pelo clima, só do acervo local (importar-sons)
   contrato.py     pedido Ops → Studio (spec 08); servico.py fila de pedidos; servidor.py HTTP local e MCP
   montagem.py     vídeo final: tempo da fala, transições na batida, legendas na área segura, trilha sob a voz, −14 LUFS
   banco.py        SQLite: projetos, peças, tentativas, custo, retomada e cache (dados/, fora do Git)
@@ -66,6 +67,7 @@ python -m torralles_studio roteiro "tema" -p meu-canal          # gera com o per
 python -m torralles_studio roteiro "tema" -q                    # com juiz e loop de correção (também em pesquisa)
 python -m torralles_studio produzir "tema" -d 30 --pesquisa      # vídeo completo (saidas/<tema>/video_final.mp4); --capcut, --sem-trilha
 python -m torralles_studio exportar-capcut saidas/<tema>         # pasta para editar no CapCut
+python -m torralles_studio importar-sons <pasta> --licenca pixabay --fonte Pixabay   # efeitos dos cortes no acervo
 python -m torralles_studio testar-voz                          # frase com lh, nh, rr em cada voz pronta (ouvir + erro de palavras)
 python -m torralles_studio servidor                           # HTTP local para o Ops (docs/servidor.md); 'mcp' para o Hermes
 python -m torralles_studio montar projeto.json -o final.mp4   # montagem final + régua (docs/montagem.md)

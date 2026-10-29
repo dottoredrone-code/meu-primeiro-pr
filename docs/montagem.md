@@ -22,7 +22,8 @@ Caminhos relativos valem a partir da pasta do JSON.
 }
 ```
 - `video` pode ser um vídeo ou uma imagem (vira cena parada).
-- `voz`, `narracao`, `texto_tela`, `trilha` e `bpm` são opcionais.
+- `voz`, `narracao`, `texto_tela`, `efeito`, `trilha` e `bpm` são opcionais. `efeito` (por cena) é um som curto que toca
+  no corte que abre a cena.
 
 ## O que a montagem faz
 | Etapa | Regra |
@@ -37,18 +38,20 @@ Caminhos relativos valem a partir da pasta do JSON.
 | Texto na tela | quebrado em linhas; mais de 2 linhas reprova (encurte o `texto_tela`) |
 | Área segura (9:16) | legenda acima dos 20% de baixo; `texto_tela` abaixo dos 10% de cima |
 | Trilha | medida e ajustada para 12 LU abaixo da voz (mínimo 10), abaixando quando a voz entra |
+| Efeitos sonoros | cada som começa 0,12 s antes do corte e fica 15 LU abaixo da voz (mínimo 14); faixa `efeitos.wav` |
 | Volume | −14 LUFS e pico −1,5 dBTP (loudnorm em duas passadas) |
 
 A pasta `--trabalho` guarda clipes, `voz.wav`, `trilha.wav`, `legendas.ass` e `legendas.srt` (base da exportação para o CapCut, K23).
 
 ## Conferência automática
 `verificar_montagem()` mede o arquivo pronto: H.264 + AAC + yuv420p, resolução, duração ±10%, −14 LUFS ±1,
-pico ≤ −1 dBTP, legibilidade das legendas, área segura, trilha ≥ 10 LU abaixo da voz e sincronia (cada legenda
+pico ≤ −1 dBTP, legibilidade das legendas, área segura, trilha ≥ 10 LU e efeitos ≥ 14 LU abaixo da voz e sincronia (cada legenda
 começa até 0,3 s de uma entrada real de fala e nenhuma fica mais de 1 s na tela durante silêncio longo). A
 sincronia é medida já na montagem; sem essa medida e sem a faixa de voz, a conferência reprova. O comando sai
 com código 2 se algum eliminatório falhar.
 
 **Limite conhecido:** dentro de uma mesma fala, a divisão entre blocos de legenda segue as pausas da voz ou a
 proporção de letras. A conferência palavra por palavra com transcrição fica para quando houver chave (Gemini)
-ou Whisper instalado. A trilha pelo clima (K21) é escolhida no `produzir` (`torralles_studio/trilha.py`); os efeitos sonoros por cena,
-também depois.
+ou Whisper instalado. A trilha pelo clima (K21) é escolhida no `produzir` (`torralles_studio/trilha.py`), e os efeitos dos cortes
+também, pelo clima da cena que entra, só do acervo local (`torralles_studio/efeitos.py`; ponha os sons com
+`importar-sons`).

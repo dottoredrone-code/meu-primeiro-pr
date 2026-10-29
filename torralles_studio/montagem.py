@@ -39,6 +39,8 @@ PADROES = {
     "pico_dbtp": -1.5,            # alvo com margem; o eliminatório é −1
     "trilha_lu_abaixo": 12.0,     # alvo voz − trilha
     "trilha_lu_minimo": 10.0,     # eliminatório
+    "efeito_lu_abaixo": 15.0,     # efeitos sonoros curtos: ao menos 15 LU abaixo da voz (spec 12 §3)
+    "efeito_antes_s": 0.12,       # o som começa um pouco antes do corte
     "fonte": "Arial",             # o FFmpeg troca por uma parecida se não houver
     "crf": 20,
     "preset": "medium",
@@ -48,6 +50,7 @@ CHARS_LINHA = {"9:16": 28, "4:5": 32, "1:1": 32, "16:9": 42}  # menos que 42 no 
 AREA_SEGURA = {"9:16": (0.10, 0.20)}  # (cima, baixo) ocupados pela interface das redes; demais formatos: 5%
 _IMAGENS = {".png", ".jpg", ".jpeg", ".webp"}
 TOLERANCIA_SINCRONIA_S = 0.3
+EFEITO_LU_MINIMO = 14.0  # eliminatório dos efeitos sonoros (alvo 15 LU abaixo da voz, 1 LU de medida)
 VOZ_LUFS = -18.0  # nível comum das falas antes da mistura (o volume final vem depois)
 
 
@@ -57,8 +60,15 @@ class ErroMontagem(Exception):
 
 # ---------------------------------------------------------------- FFmpeg
 
+FFMPEG_PRAZO_S = 900  # nenhuma etapa da montagem leva tanto: passou disso, o FFmpeg travou
+
+
 def _ff(args, cwd=None):
-    proc = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-nostdin", *args], capture_output=True, stdin=subprocess.DEVNULL, text=True, cwd=cwd)
+    try:
+        proc = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-nostdin", *args], capture_output=True,
+                              stdin=subprocess.DEVNULL, text=True, cwd=cwd, timeout=FFMPEG_PRAZO_S)
+    except subprocess.TimeoutExpired:
+        raise ErroProvedor(f"ffmpeg travou (mais de {FFMPEG_PRAZO_S // 60} min) e foi interrompido") from None
     if proc.returncode != 0:
         raise ErroProvedor(f"ffmpeg falhou: {proc.stderr.strip()[-400:]}")
     return proc.stderr
@@ -83,6 +93,14 @@ def medir_volume(arquivo):
     def num(m):
         return float(m.group(1)) if m and m.group(1) != "-inf" and float(m.group(1)) > -70 else None
     return {"lufs": num(lufs), "pico_dbtp": num(pico)}
+
+
+def _nivel_curto(arquivo):
+    """LUFS de um som curto: o ebur128 precisa de 0,4 s, então completa com silêncio até 1 s (o silêncio não
+    entra na média). None quando não há som medível."""
+    log = _ff(["-i", str(arquivo), "-vn", "-af", "apad=whole_dur=1,ebur128", "-f", "null", "-"])
+    m = re.search(r"I:\s*(-?[\d.]+|-inf) LUFS", log[log.rfind("Summary:"):])
+    return float(m.group(1)) if m and m.group(1) != "-inf" and float(m.group(1)) > -70 else None
 
 
 def pausas(arquivo, ruido_db=-35, minimo_s=0.15):
@@ -404,6 +422,8 @@ def _validar_cenas(cenas):
             raise ErroMontagem(f"cena {i}: arquivo de vídeo ou imagem não encontrado")
         if c.get("voz") and not Path(c["voz"]).is_file():
             raise ErroMontagem(f"cena {i}: arquivo de voz não encontrado")
+        if c.get("efeito") and not Path(c["efeito"]).is_file():
+            raise ErroMontagem(f"cena {i}: arquivo do efeito sonoro não encontrado")
 
 
 def _clipe(origem, destino, comprimento, largura, altura, c):
@@ -447,7 +467,8 @@ def montar(cenas, saida, *, proporcao="9:16", trilha=None, bpm=None, primeira_ba
     """Monta o vídeo final. Devolve um dict com tempos, legendas, medidas da trilha e caminhos de trabalho.
 
     cenas: [{"video": arquivo (vídeo ou imagem), "voz": arquivo ou None, "narracao": texto da legenda,
-             "texto_tela": texto curto no alto (opcional), "duracao": segundos do roteiro (opcional)}]
+             "texto_tela": texto curto no alto (opcional), "duracao": segundos do roteiro (opcional),
+             "efeito": som curto que toca no corte que abre a cena (opcional; 15 LU abaixo da voz)}]
     trilha: arquivo de música (opcional; repete se for curta). bpm: batidas por minuto da trilha (opcional).
     tamanho: (largura, altura) para forçar outro tamanho (testes); o padrão vem da proporção.
     duracao_alvo: duração pedida; se a fala ficar curta, a última cena segura até 1,5 s a mais e as outras
@@ -554,11 +575,42 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
         rotulos.append(f"[v{n}]")
     if rotulos:
         filtros.append(f"{''.join(rotulos)}amix=inputs={len(rotulos)}:normalize=0:duration=longest,"
-                       f"apad,atrim=0:{total}[voz]")
+                       f"apad=whole_dur={total},atrim=0:{total}[voz]")
     else:
         entradas, filtros = ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"], [f"[0:a]atrim=0:{total}[voz]"]
     _ff([*entradas, "-filter_complex", ";".join(filtros), "-map", "[voz]", "-c:a", "pcm_f32le", str(voz)])
     medida_voz = medir_volume(voz) if rotulos else {"lufs": None, "pico_dbtp": None}
+
+    # 4b. Efeitos sonoros curtos (K21): cena["efeito"] toca no corte que abre a cena, 15 LU abaixo da voz
+    info_efeitos, efeitos_wav = None, pasta / "efeitos.wav"
+    for velho in ("efeitos.wav", "mistura_efeitos.wav"):  # de uma montagem anterior na mesma pasta
+        (pasta / velho).unlink(missing_ok=True)
+    marcas = [(tp["inicio"], cena["efeito"]) for cena, tp in zip(cenas, tempos) if cena.get("efeito")]
+    if marcas:
+        alvo = (medida_voz["lufs"] if medida_voz["lufs"] is not None else VOZ_LUFS) - c["efeito_lu_abaixo"]
+        entradas, filtros, rotulos_ef = [], [], []
+        for n, (inicio, arquivo) in enumerate(marcas):
+            nivel = _nivel_curto(arquivo)
+            ganho = -20.0 if nivel is None else max(-40.0, min(20.0, alvo - nivel))
+            atraso = round(max(0.0, inicio - c["efeito_antes_s"]) * 1000)
+            entradas += ["-i", str(arquivo)]
+            filtros.append(f"[{n}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={ganho:.2f}dB,"
+                           f"adelay={atraso}:all=1[e{n}]")
+            rotulos_ef.append(f"[e{n}]")
+        filtros.append(f"{''.join(rotulos_ef)}amix=inputs={len(rotulos_ef)}:normalize=0:duration=longest,"
+                       f"apad=whole_dur={total},atrim=0:{total},afade=t=out:st={max(0.0, total - 0.3):.3f}:d=0.3[ef]")
+        _ff([*entradas, "-filter_complex", ";".join(filtros), "-map", "[ef]", "-c:a", "pcm_f32le", str(efeitos_wav)])
+        nivel_ef = _nivel_curto(efeitos_wav)
+        # a faixa inteira mede até ~1 LU acima de cada som: se passou do alvo, abaixa a faixa (nunca sobe)
+        if nivel_ef is not None and medida_voz["lufs"] is not None                 and medida_voz["lufs"] - nivel_ef < c["efeito_lu_abaixo"]:
+            ajuste = medida_voz["lufs"] - nivel_ef - c["efeito_lu_abaixo"] - 0.5
+            ajustada = pasta / "efeitos_ajustados.wav"
+            _ff(["-i", str(efeitos_wav), "-af", f"volume={ajuste:.2f}dB", "-c:a", "pcm_f32le", str(ajustada)])
+            ajustada.replace(efeitos_wav)
+            nivel_ef = _nivel_curto(efeitos_wav)
+        info_efeitos = {"quantidade": len(marcas), "arquivos": [str(a) for _, a in marcas], "lufs": nivel_ef,
+                        "voz_menos_efeitos_lu": None if nivel_ef is None or medida_voz["lufs"] is None
+                        else round(medida_voz["lufs"] - nivel_ef, 1)}
 
     # 5. Trilha abaixo da voz e abaixando quando ela entra
     info_trilha, mistura = None, voz
@@ -592,9 +644,16 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
              "[0:a][1:a]amix=inputs=2:normalize=0:duration=first[a]", "-map", "[a]", "-c:a", "pcm_f32le",
              str(mistura)])
 
+    if info_efeitos:  # efeitos por cima de voz + trilha (a trilha só abaixa para a voz, não para os efeitos)
+        com_efeitos = pasta / "mistura_efeitos.wav"
+        _ff(["-i", str(mistura), "-i", str(efeitos_wav), "-filter_complex",
+             "[0:a][1:a]amix=inputs=2:normalize=0:duration=first[a]", "-map", "[a]", "-c:a", "pcm_f32le",
+             str(com_efeitos)])
+        mistura = com_efeitos
+
     # 6. Volume final
     audio = pasta / "audio_final.wav"
-    if medida_voz["lufs"] is None and not trilha:
+    if medida_voz["lufs"] is None and not trilha and not info_efeitos:
         shutil.copyfile(mistura, audio)  # vídeo sem som algum: nada a normalizar
     else:
         _loudnorm(mistura, audio, c)
@@ -626,7 +685,7 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
         "cortes_na_batida": sum(1 for tp in tempos if tp.get("na_batida")),
         "legendas": [{"inicio": a, "fim": b, "linhas": linhas} for a, b, linhas in legendas],
         "textos_tela": [{"inicio": a, "fim": b, "linhas": linhas} for a, b, linhas in textos_tela],
-        "estilo_legenda": estilo, "voz": medida_voz, "trilha": info_trilha,
+        "estilo_legenda": estilo, "voz": medida_voz, "trilha": info_trilha, "efeitos": info_efeitos,
         "sincronia": dict(zip(("desvios", "problemas"), sincronia(legendas, voz))) if legendas else None,
         "pasta_trabalho": str(pasta), "fps": c["fps"],
     }
@@ -695,6 +754,12 @@ def verificar_montagem(resultado, duracao_pedida=None, voz=None):
         medidas["voz_menos_trilha_lu"] = dif
         if dif is not None and dif < PADROES["trilha_lu_minimo"]:
             problemas.append(f"trilha só {dif} LU abaixo da voz (mín. 10)")
+    efeitos = resultado.get("efeitos")
+    if efeitos:
+        dif = efeitos.get("voz_menos_efeitos_lu")
+        medidas["voz_menos_efeitos_lu"] = dif
+        if dif is not None and dif < EFEITO_LU_MINIMO:
+            problemas.append(f"efeitos sonoros só {dif} LU abaixo da voz (mín. {EFEITO_LU_MINIMO:.0f})")
 
     for n, t in enumerate(resultado.get("textos_tela", []), 1):
         if len(t["linhas"]) > LIMITES_LEGENDA["linhas"]:

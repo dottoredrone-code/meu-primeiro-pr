@@ -47,6 +47,13 @@ O vídeo sai em `saidas/beneficios-do-cha-verde/video_final.mp4`, com `relatorio
 Se parar no meio, rode o mesmo comando: o que já ficou pronto é reaproveitado sem pagar de novo.
 Para refazer do zero, apague a pasta do tema.
 
+Efeitos sonoros nos cortes (grátis): ponha uma pasta de sons com licença comercial no acervo uma vez, por exemplo
+os da Pixabay que vêm com a skill media-use do HyperFrames:
+```powershell
+python -m torralles_studio importar-sons "$env:USERPROFILE\.claude\skills\media-use\audio\assets\sfx" --licenca pixabay --fonte Pixabay --link https://pixabay.com/service/license-summary/
+```
+Depois disso o `produzir` põe um som em cada corte (`--sem-efeitos` desliga).
+
 ## 2c. Vídeos de referência (K12)
 ```bash
 python -m torralles_studio analisar-referencia "https://www.youtube.com/shorts/<id>" -c A

@@ -61,7 +61,7 @@ resultado no fim (D19).
 4. **Monte a linha do tempo:**
    - cenas `cena_01`, `cena_02`… em ordem, coladas, começando em 0 s. Confira a duração de cada uma com a de
      `linha_do_tempo.json` (diferença de até 0,1 s);
-   - `narracao.wav` numa faixa de áudio em 0 s; `trilha.wav` (se existir) em outra faixa em 0 s. **Não mexa nos
+   - `narracao.wav` numa faixa de áudio em 0 s; `trilha.wav` e `efeitos.wav` (se existirem) cada um em outra faixa em 0 s. **Não mexa nos
      volumes**: já saem com o equilíbrio do vídeo pronto (≈ −14 LUFS juntos; a medição do passo 8 confirma);
    - legendas: importe o `legendas.srt`. Se o CapCut web não importar, use as legendas automáticas em português e
      corrija o texto e os tempos para ficarem iguais aos do `legendas.srt` (abra o arquivo e compare).

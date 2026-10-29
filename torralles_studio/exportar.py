@@ -28,7 +28,8 @@ def _ganho_final(trabalho):
     """Ganho (dB) que a normalização final deu à mistura, para as faixas soltas soarem como no vídeo pronto."""
     from .montagem import medir_volume
 
-    antes = trabalho / "mistura.wav" if (trabalho / "mistura.wav").is_file() else trabalho / "voz.wav"
+    antes = next((trabalho / n for n in ("mistura_efeitos.wav", "mistura.wav") if (trabalho / n).is_file()),
+                 trabalho / "voz.wav")  # o que entrou na normalização final
     depois = trabalho / "audio_final.wav"
     if not (antes.is_file() and depois.is_file()):
         return 0.0
@@ -96,6 +97,9 @@ def exportar_capcut(resultado, destino, *, creditos=None, titulo=None, pasta_tra
     tem_trilha = bool(resultado.get("trilha")) and (trabalho / "trilha.wav").is_file()
     if tem_trilha:
         _audio(trabalho / "trilha.wav", pastas["02_audio"] / "trilha.wav", ganho)
+    tem_efeitos = bool(resultado.get("efeitos")) and (trabalho / "efeitos.wav").is_file()
+    if tem_efeitos:  # sons das transições, já no lugar e no volume (15 LU abaixo da voz)
+        _audio(trabalho / "efeitos.wav", pastas["02_audio"] / "efeitos.wav", ganho)
     if (trabalho / "legendas.srt").is_file():
         shutil.copyfile(trabalho / "legendas.srt", pastas["03_legendas"] / "legendas.srt")
     if Path(resultado.get("arquivo") or "").is_file():
@@ -111,7 +115,8 @@ def exportar_capcut(resultado, destino, *, creditos=None, titulo=None, pasta_tra
         "2. Importe a pasta 01_clipes e arraste as cenas para a linha do tempo, em ordem (cena_01, cena_02…),",
         "   uma colada na outra, começando em 0 s.",
         "3. Arraste 02_audio/narracao.wav para uma faixa de áudio começando em 0 s."
-        + (" Faça o mesmo com 02_audio/trilha.wav (já está abaixo da voz)." if tem_trilha else ""),
+        + (" Faça o mesmo com 02_audio/trilha.wav (já está abaixo da voz)." if tem_trilha else "")
+        + (" E com 02_audio/efeitos.wav (sons das transições, já no lugar)." if tem_efeitos else ""),
         "   Os volumes já estão como no video_final.mp4: não precisa ajustar.",
         "4. Legendas → Importar legendas → 03_legendas/legendas.srt.",
         "5. Agora é só editar: transições, efeitos, textos. Compare com video_final.mp4 se precisar.",
@@ -131,6 +136,7 @@ def exportar_capcut(resultado, destino, *, creditos=None, titulo=None, pasta_tra
          "creditos": creditos or None,
          "cenas": [{"arquivo": f"01_clipes/cena_{i:02d}.mp4", **tp, **extras[i - 1]}
                    for i, tp in enumerate(tempos, 1)],
-         "audio": ["02_audio/narracao.wav"] + (["02_audio/trilha.wav"] if tem_trilha else []),
+         "audio": ["02_audio/narracao.wav"] + (["02_audio/trilha.wav"] if tem_trilha else [])
+                  + (["02_audio/efeitos.wav"] if tem_efeitos else []),
          "legendas": "03_legendas/legendas.srt"}, ensure_ascii=False, indent=2), encoding="utf-8")
     return destino

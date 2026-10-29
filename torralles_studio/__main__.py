@@ -104,6 +104,31 @@ def comando_avaliar_video(args):
     return 0
 
 
+def comando_importar_sons(args):
+    from .biblioteca import ErroLicenca, conferir_licenca
+    from .config import carregar_biblioteca
+    from .efeitos import importar_pasta
+
+    try:
+        conferir_licenca(args.licenca)  # licença recusada: nem abre a biblioteca
+        importados, problemas = importar_pasta(carregar_biblioteca(args.config), args.pasta, args.licenca,
+                                               args.fonte, link=args.link, autor=args.autor)
+    except (ErroLicenca, FileNotFoundError) as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    for p in problemas[:5]:
+        print(f"  ⚠ {p}", file=sys.stderr)
+    if len(problemas) > 5:
+        print(f"  … e mais {len(problemas) - 5} arquivos com problema", file=sys.stderr)
+    if not importados:
+        motivo = "nenhum som entrou" if problemas else f"nenhum arquivo de áudio em {args.pasta}"
+        print(f"✗ {motivo}", file=sys.stderr)
+        return 1
+    novos = sum(1 for a in importados if not a.get("duplicado"))
+    print(f"✓ {len(importados)} sons no acervo ({novos} novos, {len(importados) - novos} já estavam)")
+    return 0
+
+
 def comando_produzir(args, roteador, perfil):
     from .config import carregar_biblioteca, carregar_config, carregar_loop
     from .montagem import ErroMontagem
@@ -118,7 +143,7 @@ def comando_produzir(args, roteador, perfil):
                              cfg_montagem=carregar_config(args.config).get("montagem"),
                              aviso=lambda t: print(t, file=sys.stderr, flush=True),
                              refazer_roteiro=args.refazer_roteiro, biblioteca=carregar_biblioteca(args.config),
-                             trilha_auto=not args.sem_trilha, capcut=args.capcut,
+                             trilha_auto=not args.sem_trilha, capcut=args.capcut, efeitos_auto=not args.sem_efeitos,
                              conferir_voz=None if args.sem_conferir_voz else conferir_voz)
     except KeyboardInterrupt:
         print(f"\n✗ interrompido. O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
@@ -592,12 +617,20 @@ def main(argv=None):
     s.add_argument("--pesquisa", action="store_true", help="pesquisa na web antes do roteiro (fontes reais)")
     s.add_argument("--trilha", help="arquivo de música (padrão: escolhida pelo clima do roteiro)")
     s.add_argument("--sem-trilha", action="store_true", help="vídeo só com a narração")
+    s.add_argument("--sem-efeitos", action="store_true", help="sem os sons curtos nos cortes (acervo local)")
     s.add_argument("--bpm", type=float, help="batidas por minuto da trilha (opcional)")
     s.add_argument("-o", "--pasta", help="pasta do vídeo (padrão: saidas/<tema>)")
     s.add_argument("--refazer-roteiro", action="store_true", help="faz um roteiro novo (e cenas novas) mesmo se já houver")
     s.add_argument("--capcut", action="store_true", help="também gera a pasta para editar no CapCut (<pasta>/capcut)")
     s.add_argument("--sem-conferir-voz", action="store_true",
                    help="não transcreve a narração para conferir a pronúncia (mais rápido, sem custo de transcrição)")
+
+    s = sub.add_parser("importar-sons", help="põe uma pasta de efeitos sonoros no acervo local, com a licença")
+    s.add_argument("pasta", help="pasta com os arquivos de áudio (mp3, wav, ogg…)")
+    s.add_argument("--licenca", required=True, help="licença de todos os arquivos (ex.: pixabay, cc0)")
+    s.add_argument("--fonte", required=True, help="de onde vieram (ex.: Pixabay)")
+    s.add_argument("--link", help="página da licença ou da fonte (http/https)")
+    s.add_argument("--autor", help="autor (obrigatório em CC BY)")
 
     s = sub.add_parser("analisar-referencia", help="analisa um vídeo de referência (link do YouTube ou arquivo) para a régua")
     s.add_argument("video", help="link de um vídeo do YouTube (sem baixar) ou arquivo local")
@@ -669,6 +702,8 @@ def main(argv=None):
         return comando_servidor(args)
     if args.comando == "exportar-capcut":
         return comando_exportar_capcut(args)
+    if args.comando == "importar-sons":
+        return comando_importar_sons(args)
     if args.comando == "montar":
         return comando_montar(args)
     if args.comando == "assistir":

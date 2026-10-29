@@ -206,6 +206,30 @@ class TestProduzirVideo(unittest.TestCase):
                                   cfg_montagem={"preset": "ultrafast"})
             self.assertTrue(next(e for e in rel2["etapas"] if e["etapa"] == "trilha")["reaproveitado"])
 
+    def test_efeitos_do_acervo_nos_cortes_com_licenca(self):  # K21: sons curtos nas transições
+        from torralles_studio.banco import Banco
+        from torralles_studio.biblioteca import Biblioteca
+        from torralles_studio.efeitos import importar_pasta
+
+        rt, loop = self.montar()
+        with tempfile.TemporaryDirectory() as d, Banco(Path(d) / "b.db") as banco:
+            bib = Biblioteca(Path(d) / "bib", banco)
+            sons = Path(d) / "sons"
+            sons.mkdir()
+            for nome in ("whoosh.mp3", "pop.mp3"):
+                _ff("-f", "lavfi", "-i", "sine=f=1500:d=0.4", str(sons / nome))
+            importar_pasta(bib, sons, "pixabay", "Pixabay", link="https://pixabay.com/service/license-summary/")
+            rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, biblioteca=bib, capcut=True,
+                                 cfg_montagem={"preset": "ultrafast"})
+            self.assertEqual([(s["cena"], s["nome"], s["licenca"]) for s in rel["efeitos"]], [(2, "pop", "pixabay")])
+            self.assertGreaterEqual(rel["medidas"]["voz_menos_efeitos_lu"], 14)
+            self.assertFalse([p for p in rel["problemas"] if "efeito" in p])
+            self.assertTrue((Path(d) / "v" / "capcut" / "02_audio" / "efeitos.wav").is_file())
+            sem = produzir_video(*self.montar(roteiros=[]), "chá verde", Path(d) / "v", duracao=8, biblioteca=bib,
+                                 efeitos_auto=False, cfg_montagem={"preset": "ultrafast"})
+            self.assertEqual(sem["efeitos"], [])
+            self.assertNotIn("voz_menos_efeitos_lu", sem["medidas"])
+
     def test_narracao_errada_e_refeita_com_outra_voz(self):  # K18
         rt, loop = self.montar()
         voz2 = Voz()
