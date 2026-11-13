@@ -90,6 +90,66 @@ class TestBuscarMidia(unittest.TestCase):
             buscar_midia(self.roteador(fonte), self.bib, "chá", baixar_arquivo=lambda url: b"x")
         self.assertEqual(self.bib.buscar(["cha"]), [])
 
+    def test_foto_que_combina_com_a_cena_vem_primeiro(self):  # chá verde: foto de evento policial na cena 6
+        fonte = FonteFalsa("openverse_midia", [[
+            candidato("cc0", url="https://upload.wikimedia.org/policia.jpg", titulo="Constabulary event 1968",
+                      tags=["police"]),
+            candidato("cc0", url="https://upload.wikimedia.org/cha.jpg", titulo="Green tea cups", tags=["tea"]),
+        ]])
+        ativo = buscar_midia(self.roteador(fonte), self.bib, "green tea cup", baixar_arquivo=lambda url: url.encode())
+        self.assertEqual(self.bib.caminho(ativo).read_bytes(), b"https://upload.wikimedia.org/cha.jpg")
+
+    def test_minimo_de_relevancia_descarta_foto_fora_do_tema(self):
+        fonte = FonteFalsa("openverse_midia", [[candidato("cc0", url="https://upload.wikimedia.org/p.jpg",
+                                                          titulo="All aboard!", tags=["train"])]])
+        baixados = []
+        with self.assertRaises(SemMidia) as erro:
+            buscar_midia(self.roteador(fonte), self.bib, "green tea mouth", minimo_relevancia=1,
+                         baixar_arquivo=lambda url: baixados.append(url) or b"x")
+        self.assertEqual(baixados, [])  # nem baixa
+        self.assertIn("não combinam", str(erro.exception))
+
+    def test_foto_fora_do_tema_nao_volta_pelo_acervo(self):  # verificador: atalho do acervo contornava o mínimo
+        fonte = FonteFalsa("openverse_midia", [[candidato("cc0", url="https://upload.wikimedia.org/p.jpg",
+                                                          titulo="Constabulary event", tags=["police"])]])
+        policia = buscar_midia(self.roteador(fonte), self.bib, "green tea", baixar_arquivo=lambda url: b"p")
+        self.assertNotIn("green", policia["tags"])  # aceita como último recurso, mas sem as palavras da busca
+        self.assertEqual(policia["parametros"]["relevancia"], 0)
+        fonte.respostas.append([candidato("cc0", url="https://upload.wikimedia.org/c.jpg", titulo="Green tea cup")])
+        cha = buscar_midia(self.roteador(fonte), self.bib, "green tea", minimo_relevancia=1,
+                           baixar_arquivo=lambda url: b"c")
+        self.assertEqual((cha["camada"], self.bib.caminho(cha).read_bytes()), ("api", b"c"))
+        de_novo = buscar_midia(self.roteador(fonte), self.bib, "green tea", minimo_relevancia=1)
+        self.assertEqual((de_novo["camada"], de_novo["hash"]), ("acervo", cha["hash"]))
+        fonte.respostas.append([candidato("cc0", url="https://upload.wikimedia.org/x.jpg", titulo="Police car")])
+        so_policia = buscar_midia(self.roteador(fonte), self.bib, "police tea", baixar_arquivo=lambda url: b"x")
+        self.assertEqual(so_policia["camada"], "api")  # a do acervo não combina com "tea": nem na última tentativa
+
+    def test_acervo_mede_a_busca_atual_e_nao_a_antiga(self):  # verificador: "moderation" valia para "green tea"
+        fonte = FonteFalsa("openverse_midia", [[candidato("cc0", url="https://upload.wikimedia.org/p.jpg",
+                                                          titulo="Constabulary moderation", tags=["police"])]])
+        buscar_midia(self.roteador(fonte), self.bib, "green tea moderation", baixar_arquivo=lambda url: b"p")
+        fonte.respostas.append([candidato("cc0", url="https://upload.wikimedia.org/c.jpg", titulo="Green tea")])
+        cha = buscar_midia(self.roteador(fonte), self.bib, "green tea", minimo_relevancia=1,
+                           baixar_arquivo=lambda url: b"c")
+        self.assertEqual(self.bib.caminho(cha).read_bytes(), b"c")  # a policial não volta pelo acervo
+
+    def test_foto_sem_titulo_nao_usa_a_busca_como_titulo(self):  # verificador: Pixabay vem sem título
+        fonte = FonteFalsa("pixabay_midia", [[candidato("pixabay", url="https://cdn.pixabay.com/p.jpg", titulo=None,
+                                                        tags=["police", "moderation"])]])
+        buscar_midia(self.roteador(fonte), self.bib, "green tea moderation", baixar_arquivo=lambda url: b"p")
+        fonte.respostas.append([candidato("pixabay", url="https://cdn.pixabay.com/c.jpg", titulo=None,
+                                          tags=["green", "tea"])])
+        cha = buscar_midia(self.roteador(fonte), self.bib, "green tea", minimo_relevancia=1,
+                           baixar_arquivo=lambda url: b"c")
+        self.assertEqual((cha["camada"], self.bib.caminho(cha).read_bytes()), ("api", b"c"))
+
+    def test_relevancia_ignora_plural_e_acento(self):
+        from torralles_studio.midia import relevancia
+
+        self.assertEqual(relevancia({"titulo": "Green tea cups", "tags": ["Chá"]}, "green cup chá"), 3)
+        self.assertEqual(relevancia({"titulo": None, "tags": None}, "green tea"), 0)
+
     def test_download_recusado_tenta_o_proximo_candidato(self):
         fonte = FonteFalsa("openverse_midia", [[candidato("cc0", url="https://site-qualquer.exemplo/a.jpg"),
                                                  candidato("cc0", url="https://upload.wikimedia.org/b.jpg")]])

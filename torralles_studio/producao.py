@@ -123,16 +123,15 @@ def _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
     from .midia import SemMidia, buscar_midia, etiquetas_da_consulta
 
     palavras = [p for p in etiquetas_da_consulta(cena["prompt_imagem"]) if p not in _PALAVRAS_DE_ESTILO]
-    ultimo = None
-    for n in (5, 3, 2):  # bancos de fotos exigem todas as palavras: tenta com menos se não achar
-        consulta = " ".join(palavras[:n]) or cena["prompt_imagem"]
-        if consulta == ultimo:
-            continue
-        ultimo = consulta
+    consultas = list(dict.fromkeys(" ".join(palavras[:n]) or cena["prompt_imagem"] for n in (5, 3, 2)))
+    # bancos de fotos exigem todas as palavras: tenta com menos se não achar. Foto que não combina com a cena
+    # (título e etiquetas sem nenhuma palavra da busca) só é aceita na última tentativa, para o vídeo não parar.
+    for k, consulta in enumerate(consultas):
         avisar(f"  … buscando foto gratuita para '{consulta}'")
         try:
             ativo = buscar_midia(roteador, biblioteca, consulta, "imagem", perfil=perfil.id if perfil else None,
-                                 proporcao=proporcao, comercial=perfil.comercial if perfil else True)
+                                 proporcao=proporcao, comercial=perfil.comercial if perfil else True,
+                                 minimo_relevancia=0 if k == len(consultas) - 1 else 1)
             break
         except SemMidia as e:
             motivo = e
