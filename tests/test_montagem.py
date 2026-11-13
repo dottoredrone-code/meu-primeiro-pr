@@ -203,6 +203,31 @@ class TestMontagem(unittest.TestCase):
             self.assertTrue((self.d / "trabalho" / arq).is_file(), arq)
         self.assertEqual(r["legendas"][0]["inicio"], 0.2)  # começa junto com a fala
 
+    def test_pico_alto_depois_do_aac_abaixa_so_o_audio(self):  # verificador K21: −0,7 dBTP no MP4
+        from unittest import mock
+
+        from torralles_studio import montagem
+
+        real, chamadas = montagem.medir_volume, []
+
+        def medir(arquivo):
+            v = real(arquivo)
+            if str(arquivo).endswith(".mp4"):
+                chamadas.append(arquivo)
+                if len(chamadas) == 1:
+                    return {**v, "pico_dbtp": -0.6}  # simula a subida do pico na codificação AAC
+            return v
+
+        cenas = [{"video": self.clipe("a.mp4", 2.0), "voz": self.voz("v1.wav", 1.5), "narracao": "Uma cena."}]
+        with mock.patch.object(montagem, "medir_volume", side_effect=medir):
+            r = montar(cenas, self.d / "final.mp4", cfg=self.RAPIDO, pasta_trabalho=self.d / "t")
+        self.assertEqual(len(chamadas), 2)  # mediu, corrigiu e mediu de novo
+        v = verificar_montagem(r)
+        self.assertEqual(v["problemas"], [])
+        self.assertLessEqual(v["medidas"]["pico_dbtp"], -1)
+        self.assertEqual(v["medidas"]["resolucao"], "1080x1920")
+        self.assertFalse((self.d / "t" / "audio_final_pico.wav").exists())
+
     def test_verificacao_reprova_volume_e_resolucao(self):
         cenas = [{"video": self.clipe("a.mp4", 2), "voz": self.voz("v1.wav", 1.5), "narracao": "Teste."}]
         r = montar(cenas, self.d / "f.mp4", tamanho=(320, 568), cfg={**self.RAPIDO, "lufs": -24},

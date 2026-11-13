@@ -50,6 +50,7 @@ CHARS_LINHA = {"9:16": 28, "4:5": 32, "1:1": 32, "16:9": 42}  # menos que 42 no 
 AREA_SEGURA = {"9:16": (0.10, 0.20)}  # (cima, baixo) ocupados pela interface das redes; demais formatos: 5%
 _IMAGENS = {".png", ".jpg", ".jpeg", ".webp"}
 TOLERANCIA_SINCRONIA_S = 0.3
+PICO_MAXIMO_DBTP = -1.0  # eliminatório do pico verdadeiro no arquivo pronto
 EFEITO_LU_MINIMO = 14.0  # eliminatório dos efeitos sonoros (alvo 15 LU abaixo da voz, 1 LU de medida)
 VOZ_LUFS = -18.0  # nível comum das falas antes da mistura (o volume final vem depois)
 
@@ -679,6 +680,22 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
          "-c:v", "libx264", "-preset", c["preset"], "-crf", str(c["crf"]), "-r", str(c["fps"]),
          "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", str(saida)], cwd=pasta)
 
+    # 8. A codificação AAC pode subir o pico verdadeiro alguns décimos (visto: −0,7 dBTP com alvo −1,5): mede o
+    #    arquivo pronto e, se passou do eliminatório, refaz só o áudio mais baixo (o vídeo é copiado).
+    for _ in range(2):
+        pico = medir_volume(saida)["pico_dbtp"]
+        if pico is None or pico <= PICO_MAXIMO_DBTP:
+            break
+        corrigido = saida.with_name(saida.stem + "_pico" + saida.suffix)
+        _ff(["-i", str(saida), "-i", str(audio), "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+             "-af", f"volume={c['pico_dbtp'] - pico:.2f}dB", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+             "-movflags", "+faststart", str(corrigido)])
+        corrigido.replace(saida)
+        audio_corrigido = pasta / "audio_final_pico.wav"  # o áudio guardado acompanha o vídeo (CapCut)
+        _ff(["-i", str(audio), "-af", f"volume={c['pico_dbtp'] - pico:.2f}dB", "-c:a", "pcm_f32le",
+             str(audio_corrigido)])
+        audio_corrigido.replace(audio)
+
     return {
         "arquivo": str(saida), "proporcao": proporcao, "largura": largura, "altura": altura,
         "duracao_s": total, "tempos": tempos, "congelado_s": congelados,
@@ -733,7 +750,7 @@ def verificar_montagem(resultado, duracao_pedida=None, voz=None):
         medidas.update(lufs=vol["lufs"], pico_dbtp=vol["pico_dbtp"])
         if vol["lufs"] is None or abs(vol["lufs"] - PADROES["lufs"]) > 1.0:
             problemas.append(f"volume {vol['lufs']} LUFS (precisa −14 ±1)")
-        if vol["pico_dbtp"] is not None and vol["pico_dbtp"] > -1.0:
+        if vol["pico_dbtp"] is not None and vol["pico_dbtp"] > PICO_MAXIMO_DBTP:
             problemas.append(f"pico {vol['pico_dbtp']} dBTP (máx. −1)")
 
     legendas = [(l["inicio"], l["fim"], l["linhas"]) for l in resultado.get("legendas", [])]
