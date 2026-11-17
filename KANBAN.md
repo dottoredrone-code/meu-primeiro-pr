@@ -94,6 +94,15 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 |---|---|---|---|---|
 | K32 | Primeiro vídeo real ponta a ponta, **aprovado por você** | D19 | K22 · K09 | Você aprova o vídeo completo |
 
+### Camada 7 — Fila gratuita de imagem e vídeo (D24)
+| ID | Cartão | Spec | Depende de | Critérios de aceite |
+|---|---|---|---|---|
+| K34 | Cotas que duram entre execuções (banco) + licença por modalidade no perfil; comando `cotas` | [14](docs/sdd/14-fila-gratuita-midia.md) | — | Cota esgotada pula o serviço até renovar; não comercial nunca em perfil comercial |
+| K35 | Prompts por serviço (moldes em `config/prompts_midia.toml`) para imagem, editar, animar e vídeo; **checagem do prompt antes de gastar cota** e juiz de texto opcional; comando `prompt-midia` | [14](docs/sdd/14-fila-gratuita-midia.md) | K34 | Prompt diferente por molde, no limite de cada serviço, sem chave; prompt reprovado não gasta cota |
+| K36 | Novas APIs gratuitas (licença e cota conferidas nos termos, uma por uma), com checagens grátis, juízes de visão e loop de correção | [14](docs/sdd/14-fila-gratuita-midia.md) | K34 · K35 · K38 | Cada serviço com licença e data de conferência; mídia reprovada volta ao loop e depois passa ao próximo |
+| K37 | Skill `midia-navegador`: sites gratuitos no navegador do Claude, fallback quando acabam os créditos, `importar-midia` | [14](docs/sdd/14-fila-gratuita-midia.md) | K34 · K35 · K38 · **logins do Diego** | Vídeo real com cena feita num site, importada com licença e avaliada pelos juízes (ou "a revisar") |
+| K38 | Juiz de imagem e de cena animada (rubricas `[avaliacao.imagem]` e `[avaliacao.cena]` da spec 03, 1 juiz de família diferente de quem gerou, D21) | [14](docs/sdd/14-fila-gratuita-midia.md) · [03](docs/sdd/03-parametros-avaliacao.md) | K35 · **chave com visão** | Imagem com defeito conhecido recebe nota baixa com evidência |
+
 ## 🔁 Recorrentes
 | ID | Cartão | Frequência |
 |---|---|---|
