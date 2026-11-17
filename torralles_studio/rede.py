@@ -16,14 +16,37 @@ class ErroProvedor(Exception):
 
     status: código HTTP (None para falhas de rede).
     temporario: True quando repetir a chamada pode resolver.
+    retry_after: segundos pedidos pelo serviço no cabeçalho Retry-After (None se não veio); ajuda a
+    distinguir "excesso por minuto" de "cota do dia acabou" (K34).
     """
 
-    def __init__(self, mensagem, status=None, temporario=False):
+    def __init__(self, mensagem, status=None, temporario=False, retry_after=None):
         from .seguranca import mascarar
 
         super().__init__(mascarar(mensagem))
         self.status = status
         self.temporario = temporario
+        self.retry_after = retry_after
+
+
+def _retry_after(cabecalhos):
+    """Segundos do Retry-After (número ou data HTTP); None se faltar ou não der para ler."""
+    valor = (cabecalhos or {}).get("Retry-After") if cabecalhos is not None else None
+    if not valor:
+        return None
+    valor = str(valor).strip()
+    if valor.isdigit():
+        return int(valor)
+    try:
+        from email.utils import parsedate_to_datetime
+        from datetime import datetime, timezone
+
+        quando = parsedate_to_datetime(valor)
+        if quando.tzinfo is None:
+            quando = quando.replace(tzinfo=timezone.utc)
+        return max(0, int((quando - datetime.now(timezone.utc)).total_seconds()))
+    except (TypeError, ValueError, IndexError, OverflowError):
+        return None
 
 
 # Downloads de arquivos devolvidos pelos provedores: só destes domínios (D8).
@@ -116,6 +139,7 @@ def requisitar(url, *, metodo="GET", corpo=None, cabecalhos=None, timeout=120):
             f"HTTP {e.code}: {detalhe}",
             status=e.code,
             temporario=e.code in STATUS_TEMPORARIOS,
+            retry_after=_retry_after(e.headers),
         ) from e
     except (urllib.error.URLError, TimeoutError, socket.timeout) as e:
         raise ErroProvedor(f"falha de rede: {e}", temporario=True) from e

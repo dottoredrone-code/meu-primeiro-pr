@@ -146,5 +146,5 @@ def gerar_video(roteador, imagem, prompt, saida, duracao=5, proporcao=None, perf
     """proporcao explícita vence; sem ela, vale a do perfil (formato.proporcao). clima: efeitos do zoom local."""
     proporcao = proporcao or (perfil.formato.get("proporcao") if perfil else None)
     extra = {"clima": clima} if clima else {}
-    return roteador.executar("video", imagem=Path(imagem), prompt=prompt, saida=Path(saida), duracao=duracao,
+    return roteador.executar("animar", imagem=Path(imagem), prompt=prompt, saida=Path(saida), duracao=duracao,
                              proporcao=proporcao, **extra)

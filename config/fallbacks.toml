@@ -270,7 +270,8 @@ cadeia = ["nano_banana", "fal_flux", "openai_imagem", "pollinations"]
 # ElevenLabs no plano grátis não permite uso comercial (D2): só entra com plano pago (chave no .env).
 cadeia = ["elevenlabs", "openai_voz", "gemini_voz", "edge_tts"]
 
-[tarefas.video]
+[tarefas.animar]
+# Imagem → vídeo curto (antes "video"; o nome antigo continua valendo como apelido, spec 14).
 cadeia = ["fal_kling", "fal_wan", "ken_burns"]
 
 # ================================================================ montagem final (K22, spec 03 §3.6)

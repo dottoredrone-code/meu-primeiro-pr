@@ -131,7 +131,7 @@ class TestFuncoes(unittest.TestCase):
 class TestConfig(unittest.TestCase):
     def test_config_padrao_e_valida(self):
         rt = carregar_roteador(CONFIG_PADRAO)
-        for tarefa in ("ideias", "roteiro", "pesquisa", "busca", "imagem", "voz", "video"):
+        for tarefa in ("ideias", "roteiro", "pesquisa", "busca", "imagem", "voz", "animar"):
             self.assertIn(tarefa, rt.cadeias)
         self.assertEqual(rt.tipo_da_tarefa("video"), "video")
 

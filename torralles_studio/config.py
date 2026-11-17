@@ -2,6 +2,7 @@ import os
 import tomllib
 from pathlib import Path
 
+from .cotas import Cotas
 from .provedores import CLASSES
 from .rede import configurar_downloads
 from .roteador import Roteador
@@ -37,6 +38,29 @@ def montar_provedores(dados):
             raise ValueError(f"provedor '{nome}': classe desconhecida '{cfg.get('classe')}'")
         provedores[nome] = classe(nome, cfg)
     return provedores
+
+
+def validar_cotas_e_licencas(provedores):
+    """Erros de digitação em cota/licença viram erro na hora, não um provedor que nunca é pulado (K34, D24)."""
+    from .cotas import LICENCAS, validar_renova
+
+    for nome, prov in provedores.items():
+        licenca = prov.cfg.get("licenca")
+        if licenca is not None and licenca not in LICENCAS:
+            raise ValueError(f"provedor '{nome}': licenca {licenca!r} inválida (use {', '.join(LICENCAS)})")
+        cota = prov.cfg.get("cota")
+        if cota is None:
+            continue
+        if not isinstance(cota, dict):
+            raise ValueError(f"provedor '{nome}': 'cota' precisa ser uma tabela [provedores.{nome}.cota]")
+        erro = validar_renova(cota.get("renova"))
+        if erro:
+            raise ValueError(f"provedor '{nome}': {erro}")
+        limite = cota.get("limite")
+        if limite is not None and cota.get("renova") is None:
+            raise ValueError(f"provedor '{nome}': cota.limite precisa de cota.renova (senão o gasto nunca volta a zero)")
+        if limite is not None and (isinstance(limite, bool) or not isinstance(limite, (int, float)) or limite <= 0):
+            raise ValueError(f"provedor '{nome}': cota.limite precisa ser um número maior que zero")
 
 
 def validar_cadeias(provedores, cadeias):
@@ -119,6 +143,7 @@ def carregar_roteador(caminho=None, banco=None):
     provedores = montar_provedores(dados)
     cadeias = {tarefa: t["cadeia"] for tarefa, t in dados["tarefas"].items()}
     validar_cadeias(provedores, cadeias)
+    validar_cotas_e_licencas(provedores)
     seguranca = dados.get("seguranca", {})
     configurar_downloads(seguranca.get("dominios_download"), seguranca.get("tamanho_maximo_download_mb"))
     opcoes = dados.get("roteador", {})
@@ -129,4 +154,5 @@ def carregar_roteador(caminho=None, banco=None):
         espera_base=opcoes.get("espera_base", 1.0),
         orcamento=Orcamento(opcoes.get("teto_custo_usd")),
         cache=banco,
+        cotas=Cotas(banco) if banco is not None else None,
     )

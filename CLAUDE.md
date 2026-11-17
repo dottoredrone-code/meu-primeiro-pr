@@ -30,6 +30,7 @@ torralles_studio/
   roteiro.py      roteiro JSON com clima e sons por cena (esquema + régua); pesquisa.py fontes e citações
   percepcao.py    "assistir" um vídeo: quadros, cortes, som, transcrição
   seguranca.py    mascarar chaves, orçamento
+  cotas.py        cotas gratuitas que duram entre execuções e licença por modalidade (K34, D24)
   qualidade.py    avaliador 0–100 (juízes de outra família); fatos.py fatos travados
   loop.py         loop de correção; relatorio.py relatório de qualidade e custo
   producao.py     vídeo completo de um tema: pesquisa → roteiro → imagem, voz e cena → montagem (retoma sem pagar de novo)
@@ -68,6 +69,7 @@ python -m torralles_studio roteiro "tema" -q                    # com juiz e loo
 python -m torralles_studio produzir "tema" -d 30 --pesquisa      # vídeo completo (saidas/<tema>/video_final.mp4); --capcut, --sem-trilha
 python -m torralles_studio exportar-capcut saidas/<tema>         # pasta para editar no CapCut
 python -m torralles_studio importar-sons <pasta> --licenca pixabay --fonte Pixabay   # efeitos dos cortes no acervo
+python -m torralles_studio cotas                              # quanto falta de cada cota grátis; --esgotar/--liberar <serviço>
 python -m torralles_studio testar-voz                          # frase com lh, nh, rr em cada voz pronta (ouvir + erro de palavras)
 python -m torralles_studio servidor                           # HTTP local para o Ops (docs/servidor.md); 'mcp' para o Hermes
 python -m torralles_studio montar projeto.json -o final.mp4   # montagem final + régua (docs/montagem.md)

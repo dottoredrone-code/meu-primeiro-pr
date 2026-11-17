@@ -9,17 +9,27 @@ Regras:
   por um tempo, para as próximas chamadas nem tentarem nele.
 - Teto de custo (D20): provedor cuja estimativa não cabe no que resta do orçamento
   é pulado; os gratuitos continuam disponíveis. Mensagens passam por mascarar().
+- Cotas (K34): com `cotas` (banco), cada chamada gasta créditos da conta do provedor; conta esgotada
+  (limite do config, padrão de mensagem declarado ou Retry-After longo) é pulada até renovar, mesmo
+  numa nova execução. Acerto do cache não gasta cota.
+- Licença (D24): `a_conferir` nunca entra; nas modalidades de mídia, marca d'água e licença só não
+  comercial seguem a regra do perfil (licenca_por_modalidade + comercial).
 """
 
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
+import sqlite3
+
+from .cotas import bloqueio_de_licenca, conta_de, config_cota, cota_esgotada, creditos_de
 from .rede import ErroProvedor
 from .seguranca import Orcamento, mascarar
 
 DESCANSO_LIMITE = 60  # segundos após um 429
 DESCANSO_CHAVE = 3600  # segundos após 401/403
+# Nomes antigos de tarefa (spec 14): "video" (imagem → vídeo) passou a se chamar "animar".
+APELIDOS = {"video": "animar", "animar": "video"}
 
 
 @dataclass
@@ -46,8 +56,11 @@ class TodosFalharam(Exception):
 
 class Roteador:
     def __init__(self, provedores, cadeias, repeticoes=1, espera_base=1.0, dormir=time.sleep, relogio=time.monotonic,
-                 orcamento=None, cache=None):
+                 orcamento=None, cache=None, cotas=None):
         self.provedores = provedores
+        self.cotas = cotas  # Cotas (K34); None = sem cota que dura (como antes)
+        self.comercial = True  # perfil monetizado? (D22/D24; o perfil ajusta)
+        self.licenca_por_modalidade = {}  # regra por modalidade do perfil (D24)
         self.cache = cache  # ex.: Banco (K24); resultado repetido não é pago de novo
         self.orcamento = orcamento or Orcamento()
         self.cadeias = cadeias
@@ -58,8 +71,13 @@ class Roteador:
         self._descanso_ate = {}
         self.aviso = None  # função(texto) para mostrar o andamento (o CLI liga; testes e servidor não)
 
+    def _tarefa_real(self, tarefa):
+        if tarefa not in self.cadeias and APELIDOS.get(tarefa) in self.cadeias:
+            return APELIDOS[tarefa]
+        return tarefa
+
     def tipo_da_tarefa(self, tarefa):
-        return self.provedores[self.cadeias[tarefa][0]].tipo
+        return self.provedores[self.cadeias[self._tarefa_real(tarefa)][0]].tipo
 
     def executar(self, tarefa, *, validar=None, excluir=(), usar_cache=True, **kwargs):
         """Executa a tarefa no primeiro provedor que funcionar.
@@ -70,6 +88,7 @@ class Roteador:
         ser da mesma família de quem gerou a peça).
         usar_cache: False para pedir um resultado novo (ex.: refazer peça rejeitada, variações).
         """
+        tarefa = self._tarefa_real(tarefa)
         self._tarefa = tarefa
         if tarefa not in self.cadeias:
             raise KeyError(f"tarefa desconhecida: {tarefa}")
@@ -89,7 +108,8 @@ class Roteador:
                 tentativas.append(Tentativa(nome, "pulado", "excluído nesta chamada"))
                 continue
             chave = chaves[nome] if nome in chaves else self._chave_cache(nome, provedor, kwargs)
-            motivo = provedor.configurado() or self._em_descanso(nome)
+            motivo = (provedor.configurado() or self._bloqueio_de_licenca(provedor, tarefa)
+                      or self._em_descanso(nome) or self._sem_cota(nome, provedor, tarefa))
             if motivo:
                 tentativas.append(Tentativa(nome, "pulado", motivo))
                 continue
@@ -153,7 +173,10 @@ class Roteador:
         for n in range(self.repeticoes + 1):
             if n and not self.orcamento.cabe(custo):
                 raise ErroProvedor("teto de custo atingido antes de repetir")
+            if n and self._sem_cota(nome, provedor, self._tarefa):
+                raise ErroProvedor("cota acabou antes de repetir")
             self.orcamento.registrar(nome, custo)
+            self._gastar_cota(nome, provedor, self._tarefa)
             if self.aviso:
                 espera = getattr(provedor, "timeout", None)
                 self.aviso(f"… {getattr(self, '_tarefa', '')}: {nome}{' (repetindo)' if n else ''}"
@@ -161,6 +184,8 @@ class Roteador:
             try:
                 return provedor.executar(**kwargs)
             except ErroProvedor as e:
+                if self._esgotou(nome, provedor, e):
+                    raise
                 if e.status == 429:
                     self._descansar(nome, DESCANSO_LIMITE)
                     raise  # limite atingido: melhor ir logo para o próximo
@@ -170,6 +195,54 @@ class Roteador:
                 if not e.temporario or n == self.repeticoes:
                     raise
                 self._dormir(self.espera_base * 2**n)
+
+    # -- licença e cotas (K34) ---------------------------------------------------
+    def _bloqueio_de_licenca(self, provedor, tarefa):
+        return bloqueio_de_licenca(provedor, tarefa, comercial=self.comercial, regras=self.licenca_por_modalidade)
+
+    def _sem_cota(self, nome, provedor, tarefa):
+        if self.cotas is None:
+            return None
+        try:
+            return self.cotas.bloqueio(conta_de(nome, provedor), config_cota(provedor), creditos_de(provedor, tarefa))
+        except sqlite3.Error as e:  # banco com defeito nunca derruba a geração: segue sem cota, mas avisa
+            self._aviso_cota(nome, e)
+            return None
+
+    def _gastar_cota(self, nome, provedor, tarefa):
+        if self.cotas is None:
+            return
+        try:
+            self.cotas.gastar(conta_de(nome, provedor), config_cota(provedor), creditos_de(provedor, tarefa))
+        except sqlite3.Error as e:
+            self._aviso_cota(nome, e)
+
+    def _aviso_cota(self, nome, erro):
+        if self.aviso:
+            self.aviso(f"  ⚠ {nome}: não deu para ler ou gravar a cota no banco ({mascarar(str(erro))[:120]})")
+
+    def _esgotou(self, nome, provedor, erro):
+        """Se o erro diz que os créditos acabaram, marca a conta até renovar e devolve True."""
+        cota = config_cota(provedor)
+        if not cota_esgotada(erro, cota):
+            return False
+        segundos = None
+        if not cota.get("renova") and getattr(erro, "retry_after", None):
+            segundos = erro.retry_after
+        if self.cotas is None:  # sem banco: ao menos não tenta de novo nesta execução
+            self._descansar(nome, segundos or DESCANSO_CHAVE)
+            return True
+        try:
+            ate = self.cotas.esgotar(conta_de(nome, provedor), cota, mascarar(str(erro)), segundos)
+        except sqlite3.Error as e:
+            self._aviso_cota(nome, e)
+            self._descansar(nome, segundos or DESCANSO_CHAVE)
+            return True
+        if self.aviso:
+            from .cotas import hora_local
+
+            self.aviso(f"  ⏸ {nome}: cota acabou, volta {hora_local(ate)}")
+        return True
 
     def _descansar(self, nome, segundos):
         self._descanso_ate[nome] = self._relogio() + segundos
@@ -181,6 +254,7 @@ class Roteador:
     def status(self):
         """Mapa tarefa → [(provedor, motivo ou None se pronto)]."""
         return {
-            tarefa: [(n, self.provedores[n].configurado() or self._em_descanso(n)) for n in cadeia]
+            tarefa: [(n, self.provedores[n].configurado() or self._bloqueio_de_licenca(self.provedores[n], tarefa)
+                      or self._em_descanso(n) or self._sem_cota(n, self.provedores[n], tarefa)) for n in cadeia]
             for tarefa, cadeia in self.cadeias.items()
         }

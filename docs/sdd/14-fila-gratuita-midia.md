@@ -39,7 +39,10 @@ A modalidade é o **nome da tarefa** em `[tarefas.*]`. É assim que o roteador s
 4. Comando: `python -m torralles_studio prompt-midia "ideia" -m animar [-s servico] [-p perfil]` mostra o prompt
    pronto de cada serviço da fila, para copiar à mão em qualquer app.
 
-### B. Cotas que duram (`cotas` no banco, K34)
+### B. Cotas que duram (`cotas` no banco, K34 ✅ 17/11/2026)
+Config: `[provedores.X.cota]` com `conta`, `limite` (exige `renova`), `renova`, `padroes` e `creditos`
+(veja o cabeçalho de `torralles_studio/cotas.py`).
+
 - Nova migração em `MIGRACOES` cria a tabela `cotas`. A chave é **serviço + conta**, não a modalidade, porque os
   créditos são da conta. Campos: créditos gastos no período, limite em **créditos**, período e `renova_em`. Cada
   modalidade declara no config quantos créditos gasta (ex.: imagem 1, vídeo 10).

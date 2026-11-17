@@ -129,6 +129,56 @@ def comando_importar_sons(args):
     return 0
 
 
+def comando_cotas(args):
+    """Quanto falta de cada cota gratuita e quando renova (K34); --esgotar/--liberar marcam à mão."""
+    from .config import carregar_banco, carregar_roteador
+    from .cotas import Cotas, conta_de, config_cota, hora_local, licenca_do_provedor
+
+    with carregar_banco(args.config) as banco:
+        roteador = carregar_roteador(args.config, banco=banco)
+        cotas = roteador.cotas or Cotas(banco)
+        contas = {}
+        for nome, prov in roteador.provedores.items():
+            contas.setdefault(conta_de(nome, prov), []).append((nome, prov))
+        alvo = args.esgotar or args.liberar
+        if alvo:
+            achados = {c for c, provs in contas.items() if c == alvo or any(n == alvo for n, _ in provs)}
+            if not achados:
+                print(f"✗ serviço {alvo!r} não existe no config", file=sys.stderr)
+                return 1
+            conta = achados.pop()
+            cota = config_cota(contas[conta][0][1])
+            if args.esgotar:
+                ate = cotas.esgotar(conta, cota, args.motivo or "marcado à mão")
+                print(f"⏸ {conta}: esgotado até {hora_local(ate)}")
+            else:
+                cotas.liberar(conta)
+                print(f"✓ {conta}: cota liberada")
+            return 0
+        guardadas = cotas.listar()
+        linhas = 0
+        for conta, provs in sorted(contas.items()):
+            cota = config_cota(provs[0][1])
+            if not cota and conta not in guardadas:
+                continue
+            linhas += 1
+            estado = cotas.estado(conta, cota)
+            limite = cota.get("limite")
+            uso = f"{estado['usado']:g} de {limite:g} créditos" if limite else f"{estado['usado']:g} créditos usados"
+            if estado["esgotado_ate"]:
+                situacao = f"⏸ esgotado, volta {hora_local(estado['esgotado_ate'])}"
+            elif estado["renova_em"]:
+                situacao = f"renova {hora_local(estado['renova_em'])}"
+            else:
+                situacao = "sem período em uso"
+            licencas = sorted({licenca_do_provedor(p) for _, p in provs})
+            print(f"{conta}: {uso} · {situacao} · licença {', '.join(licencas)}"
+                  + (f" · {', '.join(n for n, _ in provs)}" if len(provs) > 1 or provs[0][0] != conta else ""))
+        if not linhas:
+            print("nenhum serviço com cota no config ainda (veja [provedores.X.cota] na spec 14)")
+    return 0
+
+
 def comando_produzir(args, roteador, perfil):
     from .config import carregar_biblioteca, carregar_config, carregar_loop
     from .montagem import ErroMontagem
@@ -625,6 +675,11 @@ def main(argv=None):
     s.add_argument("--sem-conferir-voz", action="store_true",
                    help="não transcreve a narração para conferir a pronúncia (mais rápido, sem custo de transcrição)")
 
+    s = sub.add_parser("cotas", help="quanto falta de cada cota gratuita e quando renova (K34)")
+    marca = s.add_mutually_exclusive_group()
+    marca.add_argument("--esgotar", metavar="SERVICO", help="marca o serviço como esgotado até a renovação")
+    marca.add_argument("--liberar", metavar="SERVICO", help="apaga o registro de cota do serviço")
+    s.add_argument("--motivo", help="texto guardado com o --esgotar")
     s = sub.add_parser("importar-sons", help="põe uma pasta de efeitos sonoros no acervo local, com a licença")
     s.add_argument("pasta", help="pasta com os arquivos de áudio (mp3, wav, ogg…)")
     s.add_argument("--licenca", required=True, help="licença de todos os arquivos (ex.: pixabay, cc0)")
@@ -702,6 +757,8 @@ def main(argv=None):
         return comando_servidor(args)
     if args.comando == "exportar-capcut":
         return comando_exportar_capcut(args)
+    if args.comando == "cotas":
+        return comando_cotas(args)
     if args.comando == "importar-sons":
         return comando_importar_sons(args)
     if args.comando == "montar":

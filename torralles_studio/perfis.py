@@ -18,6 +18,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .cotas import APELIDOS_MODALIDADE, MODALIDADES, REGRAS_LICENCA
 from .roteador import Roteador
 from .seguranca import Orcamento
 
@@ -52,6 +53,7 @@ class Perfil:
     provedores: dict = field(default_factory=dict)   # ajustes de config por provedor (ex.: voz)
     teto_custo_usd: float | None = None
     comercial: bool = True           # projeto monetizado? (D22: fontes "só não comercial" ficam de fora)
+    licenca_por_modalidade: dict = field(default_factory=dict)  # D24: "comercial" (padrão) ou "como_freesound"
 
     # -- prompt ---------------------------------------------------------------
     def contexto(self, etapa=None):
@@ -130,7 +132,10 @@ class Perfil:
         else:
             orcamento = base.orcamento
         novo = Roteador(provedores, base.cadeias, repeticoes=base.repeticoes, espera_base=base.espera_base,
-                        dormir=base._dormir, relogio=base._relogio, orcamento=orcamento, cache=base.cache)
+                        dormir=base._dormir, relogio=base._relogio, orcamento=orcamento, cache=base.cache,
+                        cotas=getattr(base, "cotas", None))
+        novo.comercial = self.comercial
+        novo.licenca_por_modalidade = dict(self.licenca_por_modalidade)
         novo._descanso_ate = base._descanso_ate  # descanso de provedor (429/401) vale para todos
         novo.aviso = base.aviso
         return novo
@@ -176,6 +181,14 @@ def _validar(dados, arquivo, pasta_raiz, provedores_conhecidos, teto_maximo=None
     comercial = dados.get("comercial", True)
     if not isinstance(comercial, bool):
         raise ErroPerfil(f"perfil {pid}: 'comercial' precisa ser true ou false")
+    licencas = dict(_tabela(dados.get("licenca_por_modalidade"), "licenca_por_modalidade", pid))
+    licencas = {APELIDOS_MODALIDADE.get(m, m): r for m, r in licencas.items()}  # "video" = "animar"
+    for modalidade, regra in licencas.items():
+        if modalidade not in MODALIDADES:
+            raise ErroPerfil(f"perfil {pid}: modalidade {modalidade!r} não existe (use {', '.join(MODALIDADES)})")
+        if regra not in REGRAS_LICENCA:
+            raise ErroPerfil(f"perfil {pid}: licenca_por_modalidade.{modalidade} = {regra!r} inválida "
+                             f"(use {' ou '.join(REGRAS_LICENCA)})")
     teto = dados.get("teto_custo_usd")
     if teto is not None and (isinstance(teto, bool) or not isinstance(teto, (int, float)) or teto < 0):
         raise ErroPerfil(f"perfil {pid}: teto_custo_usd inválido")
@@ -201,6 +214,7 @@ def _validar(dados, arquivo, pasta_raiz, provedores_conhecidos, teto_maximo=None
         idioma=_texto(dados.get("idioma"), "idioma", pid) or "pt-BR",
         estilo=estilo, formato=formato,
         kit_visual=kit, provedores=dict(provedores), teto_custo_usd=teto, comercial=comercial,
+        licenca_por_modalidade=licencas,
     )
     for chave in ("logo",):
         if perfil.kit_visual.get(chave):

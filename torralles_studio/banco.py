@@ -187,6 +187,11 @@ MIGRACOES = [
     [
         "ALTER TABLE pedidos ADD COLUMN dono TEXT",
     ],
+    # 9 — cotas gratuitas por conta, que duram entre execuções (K34, spec 14 §B); horários em UTC
+    [
+        "CREATE TABLE cotas (conta TEXT PRIMARY KEY, usado REAL NOT NULL DEFAULT 0, inicio TEXT, renova_em TEXT, "
+        "esgotado_ate TEXT, motivo TEXT, atualizado_em TEXT)",
+    ],
 ]
 # Cada migração é uma lista de comandos (sem partir por ";", que quebraria textos e gatilhos).
 
@@ -194,7 +199,7 @@ MIGRACOES = [
 _FORA_DA_CHAVE = {"saida"}
 # Campos do config do provedor que não mudam o resultado (o resto — voz, tamanho, base_url… — entra na chave).
 _CFG_FORA_DA_CHAVE = {"chave_env", "modelo_env", "timeout", "familia", "custo_usd", "custo_usd_por_segundo",
-                      "duracao_padrao_s", "cache", "classe"}
+                      "duracao_padrao_s", "cache", "classe", "cota", "licenca", "marca_dagua", "licenca_conferida"}
 _ARQUIVOS = {"imagem", "audio", "video"}
 _PRONTOS = ("aprovado", "revisar")
 
