@@ -303,6 +303,7 @@ def comando_produzir(args, roteador, perfil):
                              refazer_roteiro=args.refazer_roteiro, biblioteca=carregar_biblioteca(args.config),
                              trilha_auto=not args.sem_trilha, capcut=args.capcut, efeitos_auto=not args.sem_efeitos,
                              publicacao=not args.sem_post, juiz_imagem=not args.sem_juiz_imagem,
+                             video_banco=not args.sem_video_banco,
                              conferir_voz=None if args.sem_conferir_voz else conferir_voz)
     except KeyboardInterrupt:
         print(f"\n✗ interrompido. O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
@@ -777,6 +778,8 @@ def main(argv=None):
     s.add_argument("--trilha", help="arquivo de música (padrão: escolhida pelo clima do roteiro)")
     s.add_argument("--sem-trilha", action="store_true", help="vídeo só com a narração")
     s.add_argument("--sem-efeitos", action="store_true", help="sem os sons curtos nos cortes (acervo local)")
+    s.add_argument("--sem-video-banco", action="store_true",
+                   help="não usa clipes de banco grátis (Pexels/Pixabay) nas cenas (K40)")
     s.add_argument("--sem-juiz-imagem", action="store_true", help="não chama o juiz de visão nas imagens (K38)")
     s.add_argument("--sem-post", action="store_true", help="sem a capa (capa.jpg) e o texto para postar (post.txt)")
     s.add_argument("--bpm", type=float, help="batidas por minuto da trilha (opcional)")

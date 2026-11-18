@@ -149,10 +149,28 @@ CUSTO_CONFERENCIA_USD = 0.002  # estimativa por transcrição curta (revisar no 
 
 def _conferir(conferir_voz, roteador, arquivo, texto):
     """Confere a fala se houver conferência e o teto comportar a transcrição (que entra no orçamento, D20)."""
-    if not conferir_voz or not roteador.orcamento.cabe(CUSTO_CONFERENCIA_USD):
+    if not conferir_voz:
         return None
-    roteador.orcamento.registrar("conferencia_voz", CUSTO_CONFERENCIA_USD)
-    return conferir_voz(arquivo, texto)
+    from .percepcao import ordem_transcricao, whisper_disponivel
+
+    local = ordem_transcricao()[0] == "whisper" and whisper_disponivel()  # Whisper no PC: grátis (K39)
+    cabe_gemini = roteador.orcamento.cabe(CUSTO_CONFERENCIA_USD)
+    if not local and not cabe_gemini:
+        return None
+    if local and not cabe_gemini:  # sem folga no teto: só o Whisper local, nunca o Gemini (D20)
+        import os
+
+        antes = os.environ.pop("GEMINI_API_KEY", None)
+        try:
+            return conferir_voz(arquivo, texto)
+        finally:
+            if antes is not None:
+                os.environ["GEMINI_API_KEY"] = antes
+    r = conferir_voz(arquivo, texto)
+    motor = str((r or {}).get("motor") or "")
+    if (r is not None and not motor.startswith("faster-whisper")) or (r is None and not local):
+        roteador.orcamento.registrar("conferencia_voz", CUSTO_CONFERENCIA_USD)  # só a transcrição paga conta
+    return r
 
 
 def prompt_da_imagem(cena, proporcao):
@@ -184,6 +202,67 @@ def _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
     origem = biblioteca.caminho(ativo)
     _gerar(img, lambda saida: shutil.copyfile(origem, saida))
     return {c: ativo.get(c) for c in ("hash", "caminho", "licenca", "fonte", "autor", "link", "titulo", "camada")}
+
+
+def banco_de_video_pronto(roteador):
+    """Há fonte de vídeo de banco configurada (Pexels ou Pixabay com chave)?"""
+    cadeia = getattr(roteador, "cadeias", {}).get("midia_video") or []
+    return any(roteador.provedores[n].configurado() is None for n in cadeia if n in roteador.provedores)
+
+
+def _video_de_banco(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
+    """Clipe real de banco gratuito (Pexels/Pixabay, uso comercial) para a cena (K40). None se nada combinar.
+
+    Diferente da foto de reserva, aqui nunca entra clipe fora do tema: sem nenhuma palavra da cena no título ou
+    nas etiquetas, a cena segue para a imagem de IA (ou a foto). Um quadro do clipe vira a imagem da cena
+    (capa, juiz, CapCut).
+    """
+    from . import ff
+    from .midia import SemMidia, buscar_midia, etiquetas_da_consulta
+
+    palavras = [p for p in etiquetas_da_consulta(cena["prompt_imagem"]) if p not in _PALAVRAS_DE_ESTILO]
+    consultas = list(dict.fromkeys(" ".join(palavras[:n]) for n in (4, 2) if palavras[:n]))
+    for consulta in consultas:
+        avisar(f"  … buscando vídeo de banco para '{consulta}'")
+        try:
+            ativo = buscar_midia(roteador, biblioteca, consulta, "video", perfil=perfil.id if perfil else None,
+                                 proporcao=proporcao, comercial=perfil.comercial if perfil else True,
+                                 minimo_relevancia=1)
+            break
+        except SemMidia:
+            continue
+    else:
+        return None
+    origem = biblioteca.caminho(ativo)
+    _gerar(img, lambda saida: ff.ffmpeg(["-i", str(origem), "-vf", "thumbnail=30", "-frames:v", "1", str(saida)],
+                                         prazo=120, falha="não deu para tirar um quadro do vídeo de banco"))
+    # guarda o ativo (não o caminho do PC): na retomada o clipe é achado pela biblioteca
+    return {**{c: ativo.get(c) for c in ("hash", "caminho", "licenca", "fonte", "autor", "link", "titulo", "camada")},
+            "video_banco": True}
+
+
+def _clipe_guardado(foto, biblioteca):
+    """Caminho atual do clipe de banco da cena (pela biblioteca, não pelo caminho antigo) ou None se sumiu."""
+    if not foto or not foto.get("video_banco") or biblioteca is None:
+        return None
+    try:
+        caminho = Path(biblioteca.caminho(foto)) if foto.get("caminho") else Path(foto["video_banco"])
+    except (KeyError, TypeError, OSError):
+        return None
+    return caminho if caminho.is_file() else None
+
+
+def _cena_de_banco(origem, saida, duracao, proporcao):
+    """Clipe de banco no formato e na duração da cena: corta, enquadra e repete se for curto (sem o som dele)."""
+    from . import ff
+    from .provedores.video import TAMANHOS
+
+    largura, altura = TAMANHOS.get(proporcao) or (1080, 1920)
+    ff.ffmpeg(["-stream_loop", "-1", "-i", str(origem), "-t", f"{duracao:.2f}", "-vf",
+               f"scale={largura}:{altura}:force_original_aspect_ratio=increase,crop={largura}:{altura},"
+               "fps=30,setsar=1,format=yuv420p", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+               str(saida)], falha="não deu para preparar o vídeo de banco")
+    return saida
 
 
 def _imagem_com_juiz(roteador, loop, cena, img, i, pasta, perfil, proporcao, gerador, avisar):
@@ -229,7 +308,7 @@ def _imagem_com_juiz(roteador, loop, cena, img, i, pasta, perfil, proporcao, ger
 def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesquisar=False, trilha=None, bpm=None,
                    cfg_montagem=None, aviso=None, refazer_roteiro=False, biblioteca=None, trilha_auto=True,
                    capcut=False, fatos=None, proporcao=None, conferir_voz=None, perfis_referencia=None,
-                   efeitos_auto=True, publicacao=True, juiz_imagem=True):
+                   efeitos_auto=True, publicacao=True, juiz_imagem=True, video_banco=True):
     """Produz o vídeo e devolve o relatório (também salvo em pasta/relatorio.json).
 
     perfis_referencia: arquivo das faixas por categoria (K13; padrão config/perfis_referencia.toml). Vídeo fora
@@ -305,34 +384,47 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
     fotos = _ler_json(pasta / "fotos.json") or {}  # cena → foto gratuita usada (fonte, autor, licença)
     so_fotos = False  # depois que a IA de imagem falha numa cena, as próximas vão direto para a foto
     folga = c["folga_inicio_s"] + c["folga_fim_s"] + c["transicao_s"] + 0.5  # + pausa extra que a montagem dá
+    usar_banco = bool(video_banco and biblioteca is not None and banco_de_video_pronto(roteador))
     for i, cena in enumerate(roteiro["cenas"], 1):
         img, voz, video = pasta / f"cena_{i:02d}.png", pasta / f"voz_{i:02d}.mp3", pasta / f"cena_{i:02d}.mp4"
         try:
             if _pronto(img):
                 foto = fotos.get(str(i))
-                etapa(f"cena {i}: imagem", f"foto gratuita ({foto['fonte']})" if foto else None, reaproveitado=True,
+                tipo = "vídeo de banco" if (foto or {}).get("video_banco") else "foto gratuita"
+                etapa(f"cena {i}: imagem", f"{tipo} ({foto['fonte']})" if foto else None, reaproveitado=True,
                       **({"licenca": foto["licenca"]} if foto else {}))
             else:
                 avisar(f"== cena {i}/{total}: imagem")
-                try:
-                    if so_fotos and biblioteca is not None:
-                        raise ErroProducao("IA de imagem já falhou nesta rodada")
-                    r = _gerar(img, lambda saida: funcoes.gerar_imagem(
-                        roteador, prompt_da_imagem(cena, proporcao), saida, perfil=perfil, proporcao=proporcao,
-                        cena=cena))
-                    fotos.pop(str(i), None)
-                    nota = None
-                    if juiz_imagem:
-                        nota = _imagem_com_juiz(roteador, loop, cena, img, i, pasta, perfil, proporcao, r.provedor,
-                                                avisar)
-                    etapa(f"cena {i}: imagem", r.provedor, **(nota or {}))
-                except (TodosFalharam, ErroProducao):
-                    if biblioteca is None:
-                        raise
-                    so_fotos = True
-                    fotos[str(i)] = _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar)
-                    etapa(f"cena {i}: imagem", f"foto gratuita ({fotos[str(i)]['fonte']})",
-                          licenca=fotos[str(i)]["licenca"])
+                banco = None
+                if usar_banco:  # K40: movimento real de banco grátis antes da imagem de IA
+                    try:
+                        banco = _video_de_banco(roteador, biblioteca, cena, img, proporcao, perfil, avisar)
+                    except (ErroProvedor, ErroProducao, OSError) as e:
+                        avisar(f"  ⚠ vídeo de banco indisponível ({e}); seguindo com imagem")
+                if banco:
+                    fotos[str(i)] = banco
+                    (pasta / "fotos.json").write_text(json.dumps(fotos, ensure_ascii=False, indent=2), encoding="utf-8")
+                    etapa(f"cena {i}: imagem", f"vídeo de banco ({banco['fonte']})", licenca=banco["licenca"])
+                if not banco:  # sem vídeo de banco: imagem de IA, com a foto gratuita de reserva
+                    try:
+                        if so_fotos and biblioteca is not None:
+                            raise ErroProducao("IA de imagem já falhou nesta rodada")
+                        r = _gerar(img, lambda saida: funcoes.gerar_imagem(
+                            roteador, prompt_da_imagem(cena, proporcao), saida, perfil=perfil, proporcao=proporcao,
+                            cena=cena))
+                        fotos.pop(str(i), None)
+                        nota = None
+                        if juiz_imagem:
+                            nota = _imagem_com_juiz(roteador, loop, cena, img, i, pasta, perfil, proporcao, r.provedor,
+                                                    avisar)
+                        etapa(f"cena {i}: imagem", r.provedor, **(nota or {}))
+                    except (TodosFalharam, ErroProducao):
+                        if biblioteca is None:
+                            raise
+                        so_fotos = True
+                        fotos[str(i)] = _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar)
+                        etapa(f"cena {i}: imagem", f"foto gratuita ({fotos[str(i)]['fonte']})",
+                              licenca=fotos[str(i)]["licenca"])
                 (pasta / "fotos.json").write_text(json.dumps(fotos, ensure_ascii=False, indent=2), encoding="utf-8")
             if _pronto(voz) and _tem_fala(voz):
                 etapa(f"cena {i}: voz", reaproveitado=True)
@@ -366,10 +458,22 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
             else:
                 avisar(f"== cena {i}/{total}: movimento")
                 dur = round((fim - ini) + folga + (1.5 if i == total else 0), 2)  # a última segura mais no fim
-                r = _gerar(video, lambda saida: funcoes.gerar_video(
-                    roteador, img, cena.get("prompt_movimento", ""), saida, duracao=dur, proporcao=proporcao,
-                    clima=cena.get("clima"), cena=cena))
-                etapa(f"cena {i}: vídeo", r.provedor)
+                clipe = _clipe_guardado(fotos.get(str(i)), biblioteca) if usar_banco else None
+                feito = False
+                if clipe:
+                    try:
+                        _gerar(video, lambda saida: _cena_de_banco(clipe, saida, dur, proporcao))
+                        etapa(f"cena {i}: vídeo", f"vídeo de banco ({fotos[str(i)]['fonte']})")
+                        feito = True
+                    except (ErroProvedor, ErroProducao, OSError) as e:
+                        avisar(f"  ⚠ não deu para usar o vídeo de banco ({e}); usando o movimento da imagem")
+                elif usar_banco and (fotos.get(str(i)) or {}).get("video_banco"):
+                    avisar(f"  ⚠ o vídeo de banco da cena {i} não está mais na biblioteca; usando o movimento da imagem")
+                if not feito:
+                    r = _gerar(video, lambda saida: funcoes.gerar_video(
+                        roteador, img, cena.get("prompt_movimento", ""), saida, duracao=dur, proporcao=proporcao,
+                        clima=cena.get("clima"), cena=cena))
+                    etapa(f"cena {i}: vídeo", r.provedor)
         except TodosFalharam as e:
             raise ErroProducao(f"cena {i}: {e}") from None
         cenas.append({"video": str(video), "voz": str(voz), "narracao": cena["narracao"], "fala": fala,

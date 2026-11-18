@@ -126,6 +126,7 @@ class TestAuditoriaPronuncia(unittest.TestCase):
 
         erro = io.StringIO()
         with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "chave-falsa"}), \
+                mock.patch.object(percepcao, "whisper_disponivel", return_value=False), \
                 mock.patch.object(pronuncia, "_transcrever_fala_gemini", gemini_quebrado), \
                 mock.patch.object(percepcao, "transcrever", whisper_ou_nada), contextlib.redirect_stderr(erro):
             r = pronuncia.transcrever_fala("x.mp3")
@@ -138,6 +139,7 @@ class TestAuditoriaPronuncia(unittest.TestCase):
         from torralles_studio import percepcao, pronuncia
 
         with mock.patch.dict("os.environ", {"GEMINI_API_KEY": ""}), \
+                mock.patch.object(percepcao, "whisper_disponivel", return_value=False), \
                 mock.patch.object(percepcao, "transcrever",
                                   lambda v, p, usar_gemini=True: {"texto": None, "motivo": f"gemini={usar_gemini}"}):
             self.assertEqual(pronuncia.transcrever_fala("x.mp3")["motivo"], "gemini=True")

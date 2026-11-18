@@ -24,6 +24,18 @@ def _orientacao(proporcao):
     return {"9:16": "portrait", "16:9": "landscape", "1:1": "square", "4:5": "portrait"}.get(proporcao or "")
 
 
+def _titulo_do_link(link):
+    """'https://www.pexels.com/video/woman-drinking-green-tea-123/' → 'woman drinking green tea' (o vídeo do
+    Pexels não traz título nem etiquetas na API; o link traz a descrição)."""
+    import re
+
+    partes = [p for p in urllib.parse.urlparse(str(link or "")).path.split("/") if p]
+    if not partes:
+        return None
+    nome = re.sub(r"-\d+$", "", partes[-1])
+    return nome.replace("-", " ").strip() or None
+
+
 class PexelsMidia(Provedor):
     tipo = "midia"
 
@@ -52,7 +64,8 @@ class PexelsMidia(Provedor):
                     continue
                 a = arquivos[0]
                 candidatos.append({"url": a["link"], "licenca": "pexels", "autor": (v.get("user") or {}).get("name"),
-                                   "link": v.get("url"), "titulo": None, "fonte": "Pexels", "tipo": "video",
+                                   "link": v.get("url"), "titulo": _titulo_do_link(v.get("url")),
+                                   "fonte": "Pexels", "tipo": "video",
                                    "largura": a.get("width"), "altura": a.get("height"),
                                    "duracao": v.get("duration"), "tags": []})
         return _exigir(candidatos)

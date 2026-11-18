@@ -132,13 +132,24 @@ def _transcrever_fala_gemini(arquivo):
 
 
 def transcrever_fala(arquivo):
-    """{"texto", "motor"}: Gemini com pedido de só o texto falado; senão Whisper local.
+    """{"texto", "motor"}: Whisper local primeiro (K39, grátis), depois o Gemini com pedido de só o texto falado.
 
-    Se o Gemini falhar, avisa o motivo (sem chaves) e vai direto ao Whisper: não chama o Gemini de novo pela
-    percepção. Sem nenhum motor, devolve {"texto": None, "motivo"} com o motivo de cada um.
+    A ordem segue ordem_transcricao() (TRANSCRICAO_ORDEM). Cada motor é tentado uma vez só: se falhar, avisa o
+    motivo (sem chaves) e passa ao próximo. Sem nenhum motor, devolve {"texto": None, "motivo"}.
     """
-    from .percepcao import transcrever
+    from .percepcao import ordem_transcricao, transcrever, transcrever_whisper, whisper_disponivel
 
+    whisper_tentado = False
+    if ordem_transcricao()[0] == "whisper" and whisper_disponivel():  # K39: grátis e no PC, antes do Gemini
+        whisper_tentado = True
+        try:
+            texto = " ".join(s["texto"] for s in transcrever_whisper(arquivo))
+            return {"texto": texto, "motor": "faster-whisper:fala"}
+        except Exception as e:  # não engole: avisa e tenta o Gemini
+            from .seguranca import mascarar
+
+            print(f"⚠ transcrição local (Whisper) falhou ({mascarar(str(e))[:200]}); tentando o Gemini",
+                  file=sys.stderr)
     motivo_gemini = None
     if os.environ.get("GEMINI_API_KEY"):
         try:
@@ -149,6 +160,11 @@ def transcrever_fala(arquivo):
             motivo_gemini = mascarar(f"gemini: {type(e).__name__}: {e}")
             print(f"⚠ transcrição da fala pelo Gemini falhou ({motivo_gemini}); tentando o Whisper local",
                   file=sys.stderr)
+    if whisper_tentado and (motivo_gemini or not os.environ.get("GEMINI_API_KEY")):
+        motivos = [m for m in (motivo_gemini, "whisper: falhou (veja o aviso acima)") if m]
+        if not os.environ.get("GEMINI_API_KEY"):
+            motivos.append("gemini: falta GEMINI_API_KEY")
+        return {"texto": None, "motivo": "; ".join(motivos)}
     with tempfile.TemporaryDirectory() as pasta:
         r = transcrever(Path(arquivo), Path(pasta), usar_gemini=motivo_gemini is None)
     if motivo_gemini and not r.get("texto"):
@@ -162,7 +178,8 @@ def conferir_voz(arquivo, texto, transcrever=None):
     if not t or not t.get("texto"):
         return None
     # a transcrição própria já vem sem sons; cortar "Sons:" só na da percepção (a narração pode ter essa palavra)
-    falado = limpar_transcricao(t["texto"], cortar_sons=not str(t.get("motor", "")).startswith("gemini:fala"))
+    motor = str(t.get("motor", ""))
+    falado = limpar_transcricao(t["texto"], cortar_sons=not motor.endswith(":fala") and ":fala:" not in motor)
     ref, hip = palavras(texto), palavras(falado)
     if not hip:  # nada sobrou para comparar: não conta como erro (não paga outra voz)
         return None

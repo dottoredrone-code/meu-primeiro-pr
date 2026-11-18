@@ -21,6 +21,8 @@
 | K36 | Cloudflare Workers AI (FLUX schnell, 10.000 neurons/dia, uso comercial) na cadeia `imagem`; termos de 17 serviços conferidos; Pollinations fora (marca d'água vista na imagem real, termos não abriram) — falta a chave grátis do Diego | [14](docs/sdd/14-fila-gratuita-midia.md) · D24 |
 | K37 | Sites grátis no navegador do Claude: skill `midia-navegador`, `pedidos-navegador`, `importar-midia` (tipo pelos bytes, tamanho antes de abrir, só a pasta do pedido, licença do config), fila `[sites.*]` com 9 sites (hoje entra só o Adobe Firefly) — teste real pendente (logins do Diego) | [14](docs/sdd/14-fila-gratuita-midia.md) · D24 |
 | K38 | Juiz de visão nas imagens (`[avaliacao.imagem]`, cadeia `juiz_imagem`, família diferente de quem gerou); reprovada, refaz uma vez com a correção e fica a melhor; sem juiz, fica "revisar" — teste real pendente (chave com visão) | [03](docs/sdd/03-parametros-avaliacao.md) · [14](docs/sdd/14-fila-gratuita-midia.md) |
+| K39 | Transcrição grátis no PC (faster-whisper, modelo small) antes do Gemini: conferência da narração, percepção e tempo de cada palavra; conferência local não entra no orçamento; áudio lido pelo FFmpeg do Studio (D25) | D25 |
+| K40 | Vídeo de banco grátis (Pexels/Pixabay, uso comercial) nas cenas antes da imagem de IA: só clipe que combina com a cena, cortado no formato e na duração da fala, com licença e crédito; liga sozinho quando houver a chave — falta `PEXELS_API_KEY`/`PIXABAY_API_KEY` do Diego | D25 · [11](docs/sdd/11-banco-midia-gratuita.md) |
 | — | Capa com título (`capa.jpg`) e texto para postar (`post.txt`: título, descrição, hashtags, créditos), ideia tirada dos concorrentes | — |
 | — | Auditoria geral de 17/11 (5 agentes) corrigida: config lido em UTF-8 (acentos chegavam errados aos juízes), FFmpeg sempre com prazo e UTF-8 (`ff.py`), servidor aprova/cancela e recusa JSON malicioso, um processo por pasta de pedido, juiz com evidência no feedback e temperatura, fatos com "N por cento", retomada refaz vídeo velho e não aceita voz muda, perfil não afrouxa licença | — |
 | K00b | Percepção níveis 1 e 2: quadros, cortes, som, transcrição com fallback | [10](docs/sdd/10-percepcao.md) |
@@ -146,6 +148,7 @@ graph LR
 | Teste real com `GEMINI_API_KEY` no PC (`.env`; os segredos da nuvem não servem ao Gemini) | K06, K12, K21 (ouvir trilhas) |
 | Suas indicações de canais para as categorias C, D e F (`config/referencias.toml`) | K12–K14 nessas categorias (a A já pode seguir) |
 | Chaves de produção (fal.ai, ElevenLabs, DeepSeek, Tavily) | K16–K19 com provedores reais |
+| Chaves grátis do Pexels e da Pixabay (`PEXELS_API_KEY`, `PIXABAY_API_KEY`) | K40: vídeo de banco nas cenas (e fotos melhores que as do Openverse) |
 | Chave grátis da Cloudflare (`CLOUDFLARE_ACCOUNT_ID` e `CLOUDFLARE_API_TOKEN` no `.env`) | K36: imagem grátis com uso comercial (a Pollinations saiu por marca d'água) |
 | Chave com visão (`ANTHROPIC_API_KEY` + `CLAUDE_MODEL`, ou OpenAI, ou o Gemini pago) | K38: nota do juiz nas imagens (sem ela, as imagens ficam "revisar") |
 | Seus logins nos sites (Adobe Firefly primeiro) e leitura dos termos dos sites `a_conferir` | K37: teste real com a skill `midia-navegador` |

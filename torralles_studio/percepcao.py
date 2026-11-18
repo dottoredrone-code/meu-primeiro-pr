@@ -149,29 +149,45 @@ def _folha_contato(video, saida, duracao, colunas=6):
     return str(saida)
 
 
+def ordem_transcricao():
+    """Motores na ordem de uso (K39): Whisper local primeiro (grátis, sem internet), Gemini depois.
+    TRANSCRICAO_ORDEM="gemini,whisper" no .env inverte (o Gemini também lista os sons)."""
+    ordem = [m.strip().lower() for m in os.environ.get("TRANSCRICAO_ORDEM", "whisper,gemini").split(",")]
+    return [m for m in ordem if m in ("whisper", "gemini")] or ["whisper", "gemini"]
+
+
+def whisper_disponivel():
+    try:
+        import faster_whisper  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def transcrever(video, pasta, usar_gemini=True):
-    """Tenta Gemini e depois Whisper local. Devolve {"texto", "motor"} ou {"texto": None, "motivo"}.
+    """Whisper local e Gemini, na ordem de ordem_transcricao(). Devolve {"texto", "motor"} ou {"texto": None, "motivo"}.
 
     usar_gemini=False pula o Gemini (quem chama já tentou e ele falhou: não paga a mesma chamada duas vezes).
     """
     motivos = []
-    if not usar_gemini:
-        pass
-    elif os.environ.get("GEMINI_API_KEY"):
-        try:
-            return _transcrever_gemini(video, pasta)
-        except Exception as e:  # cai para o próximo motor
-            motivos.append(mascarar(f"gemini: {e}"))
-    else:
-        motivos.append("gemini: falta GEMINI_API_KEY")
-    try:
-        from faster_whisper import WhisperModel  # noqa: F401
-
-        return _transcrever_whisper(video)
-    except ImportError:
-        motivos.append("whisper: instale faster-whisper")
-    except Exception as e:
-        motivos.append(f"whisper: {e}")
+    for motor in ordem_transcricao():
+        if motor == "whisper":
+            if not whisper_disponivel():
+                motivos.append("whisper: instale com 'pip install faster-whisper'")
+                continue
+            try:
+                return _transcrever_whisper(video)
+            except Exception as e:  # modelo não baixou, áudio estranho...: tenta o próximo motor
+                motivos.append(mascarar(f"whisper: {type(e).__name__}: {e}"))
+        elif not usar_gemini:
+            continue
+        elif os.environ.get("GEMINI_API_KEY"):
+            try:
+                return _transcrever_gemini(video, pasta)
+            except Exception as e:  # cai para o próximo motor
+                motivos.append(mascarar(f"gemini: {e}"))
+        else:
+            motivos.append("gemini: falta GEMINI_API_KEY")
     return {"texto": None, "motivo": "; ".join(motivos)}
 
 
@@ -193,13 +209,59 @@ def _transcrever_gemini(video, pasta):
     return {"texto": texto, "motor": f"gemini:{modelo}"}
 
 
-def _transcrever_whisper(video):
+WHISPER_MODELO_PADRAO = "small"  # ~460 MB, baixado uma vez; "base" é mais rápido e erra mais em português
+_MODELOS_WHISPER = {}
+
+
+def modelo_whisper():
+    """Modelo carregado uma vez por execução (carregar leva segundos; transcrever cada cena é rápido)."""
     from faster_whisper import WhisperModel
 
-    modelo = WhisperModel(os.environ.get("WHISPER_MODELO", "small"), compute_type="int8")
-    segmentos, _ = modelo.transcribe(str(video), language="pt")
-    linhas = [f"[{int(s.start // 60):02d}:{s.start % 60:04.1f}] {s.text.strip()}" for s in segmentos]
-    return {"texto": "\n".join(linhas), "motor": "faster-whisper"}
+    nome = os.environ.get("WHISPER_MODELO", WHISPER_MODELO_PADRAO)
+    if nome not in _MODELOS_WHISPER:
+        try:
+            _MODELOS_WHISPER[nome] = WhisperModel(nome, device="cpu", compute_type="int8")
+        except Exception as e:  # modelo não baixou (sem internet, disco): lembra e não tenta de novo nesta execução
+            _MODELOS_WHISPER[nome] = e
+    modelo = _MODELOS_WHISPER[nome]
+    if isinstance(modelo, Exception):
+        raise ErroProvedor(f"o modelo '{nome}' do Whisper não carregou: {mascarar(str(modelo))[:200]}")
+    return modelo, nome
+
+
+def _audio_16k(arquivo):
+    """Áudio mono 16 kHz em float32 lido pelo FFmpeg do Studio (o leitor de áudio do faster-whisper, PyAV, muda
+    de versão e quebra; o FFmpeg com prazo e UTF-8 é o mesmo do resto do Studio)."""
+    import numpy
+
+    proc = ff.rodar(["ffmpeg", "-nostdin", "-v", "error", "-i", str(arquivo), "-vn", "-ac", "1", "-ar", "16000",
+                     "-f", "f32le", "-"], binario=True)
+    if proc.returncode != 0 or not proc.stdout:
+        erro = (proc.stderr or b"").decode("utf-8", "replace").strip()[-300:]
+        raise ErroProvedor(f"não deu para ler o áudio para o Whisper: {erro or 'arquivo sem áudio'}")
+    return numpy.frombuffer(proc.stdout, dtype=numpy.float32)
+
+
+def transcrever_whisper(arquivo, palavras=False):
+    """Segmentos do Whisper local em português: [{"inicio", "fim", "texto", "palavras": [(p, ini, fim)]}]."""
+    modelo, _ = modelo_whisper()
+    segmentos, _ = modelo.transcribe(_audio_16k(arquivo), language="pt", vad_filter=True, word_timestamps=palavras,
+                                     condition_on_previous_text=False)
+    saida = []
+    for s in segmentos:
+        item = {"inicio": round(float(s.start), 2), "fim": round(float(s.end), 2), "texto": s.text.strip()}
+        if palavras:
+            item["palavras"] = [(w.word.strip(), round(float(w.start), 2), round(float(w.end), 2))
+                                for w in (s.words or []) if w.word.strip()]
+        saida.append(item)
+    return saida
+
+
+def _transcrever_whisper(video):
+    _, nome = modelo_whisper()
+    segmentos = transcrever_whisper(video)
+    linhas = [f"[{int(s['inicio'] // 60):02d}:{s['inicio'] % 60:04.1f}] {s['texto']}" for s in segmentos]
+    return {"texto": "\n".join(linhas), "motor": f"faster-whisper:{nome}"}
 
 
 def analisar_video(video, pasta_saida, transcrever_audio=True):

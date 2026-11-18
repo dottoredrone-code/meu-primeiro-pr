@@ -41,7 +41,14 @@ class TestPercepcao(unittest.TestCase):
         json.loads((self.dir / "saida" / "percepcao.json").read_text())
 
     def test_sem_motor_de_transcricao_explica_o_motivo(self):
-        rel = analisar_video(self.video, self.dir / "saida")
+        from unittest import mock
+
+        from torralles_studio import percepcao
+
+        # sem motor nenhum (o teste não baixa o modelo do Whisper nem chama o Gemini)
+        with mock.patch.object(percepcao, "whisper_disponivel", return_value=False), \
+                mock.patch.dict("os.environ", {"GEMINI_API_KEY": ""}):
+            rel = analisar_video(self.video, self.dir / "saida")
         transcricao = rel["transcricao"]
         if transcricao["texto"] is None:
             self.assertIn("motivo", transcricao)

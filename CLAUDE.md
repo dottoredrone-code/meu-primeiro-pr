@@ -71,7 +71,7 @@ python -m torralles_studio perfil-novo meu-canal "Meu canal"   # cria perfil de 
 python -m torralles_studio cerebro --desde 2026-10-01          # aprendizados para colar no CEREBRO_MESTRE.md
 python -m torralles_studio roteiro "tema" -p meu-canal          # gera com o perfil do projeto
 python -m torralles_studio roteiro "tema" -q                    # com juiz e loop de correção (também em pesquisa)
-python -m torralles_studio produzir "tema" -d 30 --pesquisa      # vídeo completo + capa.jpg + post.txt; --capcut, --sem-trilha, --sem-post, --sem-juiz-imagem
+python -m torralles_studio produzir "tema" -d 30 --pesquisa      # vídeo completo + capa.jpg + post.txt; --capcut, --sem-trilha, --sem-post, --sem-juiz-imagem, --sem-video-banco
 python -m torralles_studio exportar-capcut saidas/<tema>         # pasta para editar no CapCut
 python -m torralles_studio importar-sons <pasta> --licenca pixabay --fonte Pixabay   # efeitos dos cortes no acervo
 python -m torralles_studio cotas                              # quanto falta de cada cota grátis; --esgotar/--liberar <serviço>
@@ -86,6 +86,9 @@ python -m torralles_studio --config outro.toml status   # config alternativo (ou
 - O `.env` é lido da **raiz do repositório** e nunca sobrescreve variáveis já definidas.
 - Teste real com chaves (no PC do Diego): `docs/teste-real.md`.
 - **FFmpeg** é necessário para `percepcao`, o vídeo `ken_burns` e alguns testes (pulados se faltar).
+- **Transcrição local (opcional):** `pip install faster-whisper` (D25). Sem ele, a transcrição usa o Gemini. Com ele, o `assistir`
+  não lista os sons (só o Gemini lista); `TRANSCRICAO_ORDEM=gemini,whisper` volta a ordem antiga. Teste real
+  do Whisper: `TESTES_WHISPER=1 python -m unittest tests.test_whisper_local`.
 
 ## Git
 - Branch de trabalho: `claude/multi-model-integration-app-g1697x`.
