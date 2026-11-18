@@ -1,6 +1,6 @@
 # Kanban — Torralles Studio
 
-> Atualizado em 24/10/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
+> Atualizado em 17/11/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
 > Fluxo de cada cartão: **Backlog → Especificado → Em andamento → Em verificação → Pronto**.
 
 ## Regras do quadro
@@ -17,6 +17,12 @@
 |---|---|---|
 | K00a | Roteador com fallback por função, provedores e CLI (protótipo) | — |
 | K34 | Cotas gratuitas que duram entre execuções (tabela `cotas`, UTC no banco, Brasília na tela; cota esgotada só por padrão declarado ou Retry-After > 1 h), licença por modalidade no perfil (D24), tarefa `video` renomeada para `animar` (apelido mantido) e comando `cotas`; verificado por agente e corrigido | [14](docs/sdd/14-fila-gratuita-midia.md) · D24 |
+| K35 | Prompts por serviço (`prompts_midia.py`, moldes em `config/prompts_midia.toml`): cada serviço recebe o prompt no formato dele; checagem por regra antes de gastar cota (texto pedido na imagem, nomes que o perfil evita, campos, limite, movimento); Ken Burns nunca barrado; comando `prompt-midia` | [14](docs/sdd/14-fila-gratuita-midia.md) |
+| K36 | Cloudflare Workers AI (FLUX schnell, 10.000 neurons/dia, uso comercial) na cadeia `imagem`; termos de 17 serviços conferidos; Pollinations fora (marca d'água vista na imagem real, termos não abriram) — falta a chave grátis do Diego | [14](docs/sdd/14-fila-gratuita-midia.md) · D24 |
+| K37 | Sites grátis no navegador do Claude: skill `midia-navegador`, `pedidos-navegador`, `importar-midia` (tipo pelos bytes, tamanho antes de abrir, só a pasta do pedido, licença do config), fila `[sites.*]` com 9 sites (hoje entra só o Adobe Firefly) — teste real pendente (logins do Diego) | [14](docs/sdd/14-fila-gratuita-midia.md) · D24 |
+| K38 | Juiz de visão nas imagens (`[avaliacao.imagem]`, cadeia `juiz_imagem`, família diferente de quem gerou); reprovada, refaz uma vez com a correção e fica a melhor; sem juiz, fica "revisar" — teste real pendente (chave com visão) | [03](docs/sdd/03-parametros-avaliacao.md) · [14](docs/sdd/14-fila-gratuita-midia.md) |
+| — | Capa com título (`capa.jpg`) e texto para postar (`post.txt`: título, descrição, hashtags, créditos), ideia tirada dos concorrentes | — |
+| — | Auditoria geral de 17/11 (5 agentes) corrigida: config lido em UTF-8 (acentos chegavam errados aos juízes), FFmpeg sempre com prazo e UTF-8 (`ff.py`), servidor aprova/cancela e recusa JSON malicioso, um processo por pasta de pedido, juiz com evidência no feedback e temperatura, fatos com "N por cento", retomada refaz vídeo velho e não aceita voz muda, perfil não afrouxa licença | — |
 | K00b | Percepção níveis 1 e 2: quadros, cortes, som, transcrição com fallback | [10](docs/sdd/10-percepcao.md) |
 | K06 | Juiz que assiste o vídeo inteiro (Gemini, vídeo + áudio, também por link do YouTube) — teste real no PC em 18/10: nota 90/100 no vídeo de demonstração | [10](docs/sdd/10-percepcao.md) |
 | K21 | Trilha pelo clima do roteiro (`trilha.py`): música instrumental com licença comercial, BPM e energia medidos com FFmpeg, voz eliminatória, crédito; trilha ruim nunca derruba o vídeo; efeitos curtos nos cortes pelo clima, do acervo local (`efeitos.py`, `importar-sons`), 15 LU abaixo da voz — teste real no PC pendente (Jamendo) | [12](docs/sdd/12-pesquisa-qualidade-concorrentes.md) · D19 |
@@ -96,12 +102,9 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 | K32 | Primeiro vídeo real ponta a ponta, **aprovado por você** | D19 | K22 · K09 | Você aprova o vídeo completo |
 
 ### Camada 7 — Fila gratuita de imagem e vídeo (D24)
-| ID | Cartão | Spec | Depende de | Critérios de aceite |
-|---|---|---|---|---|
-| K35 | Prompts por serviço (moldes em `config/prompts_midia.toml`) para imagem, editar, animar e vídeo; **checagem do prompt antes de gastar cota** e juiz de texto opcional; comando `prompt-midia` | [14](docs/sdd/14-fila-gratuita-midia.md) | ✅ K34 | Prompt diferente por molde, no limite de cada serviço, sem chave; prompt reprovado não gasta cota |
-| K36 | Novas APIs gratuitas (licença e cota conferidas nos termos, uma por uma), com checagens grátis, juízes de visão e loop de correção | [14](docs/sdd/14-fila-gratuita-midia.md) | K34 · K35 · K38 | Cada serviço com licença e data de conferência; mídia reprovada volta ao loop e depois passa ao próximo |
-| K37 | Skill `midia-navegador`: sites gratuitos no navegador do Claude, fallback quando acabam os créditos, `importar-midia` | [14](docs/sdd/14-fila-gratuita-midia.md) | K34 · K35 · K38 · **logins do Diego** | Vídeo real com cena feita num site, importada com licença e avaliada pelos juízes (ou "a revisar") |
-| K38 | Juiz de imagem e de cena animada (rubricas `[avaliacao.imagem]` e `[avaliacao.cena]` da spec 03, 1 juiz de família diferente de quem gerou, D21) | [14](docs/sdd/14-fila-gratuita-midia.md) · [03](docs/sdd/03-parametros-avaliacao.md) | K35 · **chave com visão** | Imagem com defeito conhecido recebe nota baixa com evidência |
+✅ K34–K38 prontos em 17/11/2026 (verificados por agentes independentes). Testes reais dependem do Diego (veja
+"Bloqueios atuais").
+
 
 ## 🔁 Recorrentes
 | ID | Cartão | Frequência |
@@ -143,3 +146,6 @@ graph LR
 | Teste real com `GEMINI_API_KEY` no PC (`.env`; os segredos da nuvem não servem ao Gemini) | K06, K12, K21 (ouvir trilhas) |
 | Suas indicações de canais para as categorias C, D e F (`config/referencias.toml`) | K12–K14 nessas categorias (a A já pode seguir) |
 | Chaves de produção (fal.ai, ElevenLabs, DeepSeek, Tavily) | K16–K19 com provedores reais |
+| Chave grátis da Cloudflare (`CLOUDFLARE_ACCOUNT_ID` e `CLOUDFLARE_API_TOKEN` no `.env`) | K36: imagem grátis com uso comercial (a Pollinations saiu por marca d'água) |
+| Chave com visão (`ANTHROPIC_API_KEY` + `CLAUDE_MODEL`, ou OpenAI, ou o Gemini pago) | K38: nota do juiz nas imagens (sem ela, as imagens ficam "revisar") |
+| Seus logins nos sites (Adobe Firefly primeiro) e leitura dos termos dos sites `a_conferir` | K37: teste real com a skill `midia-navegador` |

@@ -31,6 +31,10 @@ torralles_studio/
   percepcao.py    "assistir" um vídeo: quadros, cortes, som, transcrição
   seguranca.py    mascarar chaves, orçamento
   cotas.py        cotas gratuitas que duram entre execuções e licença por modalidade (K34, D24)
+  prompts_midia.py prompt de cada serviço (moldes em config/prompts_midia.toml) e checagem antes da cota (K35)
+  navegador.py    pedidos para sites grátis no navegador do Claude e importação segura (K37)
+  publicacao.py   capa com título (capa.jpg) e texto para postar (post.txt)
+  ff.py           FFmpeg/ffprobe com prazo e UTF-8 (todas as chamadas passam por aqui)
   qualidade.py    avaliador 0–100 (juízes de outra família); fatos.py fatos travados
   loop.py         loop de correção; relatorio.py relatório de qualidade e custo
   producao.py     vídeo completo de um tema: pesquisa → roteiro → imagem, voz e cena → montagem (retoma sem pagar de novo)
@@ -48,6 +52,7 @@ torralles_studio/
   config.py       carrega config/fallbacks.toml e o .env
 config/fallbacks.toml   cadeias, modelos, custos, segurança
 .claude/skills/capcut-navegador/  o Claude monta e finaliza no CapCut web pelo navegador do Claude (K33)
+.claude/skills/midia-navegador/   o Claude gera cenas em sites grátis, com fallback quando os créditos acabam (K37)
 docs/sdd/               specs (SDD) e decisões
 exemplos/               vídeos de teste da percepção
 ```
@@ -66,10 +71,13 @@ python -m torralles_studio perfil-novo meu-canal "Meu canal"   # cria perfil de 
 python -m torralles_studio cerebro --desde 2026-10-01          # aprendizados para colar no CEREBRO_MESTRE.md
 python -m torralles_studio roteiro "tema" -p meu-canal          # gera com o perfil do projeto
 python -m torralles_studio roteiro "tema" -q                    # com juiz e loop de correção (também em pesquisa)
-python -m torralles_studio produzir "tema" -d 30 --pesquisa      # vídeo completo (saidas/<tema>/video_final.mp4); --capcut, --sem-trilha
+python -m torralles_studio produzir "tema" -d 30 --pesquisa      # vídeo completo + capa.jpg + post.txt; --capcut, --sem-trilha, --sem-post, --sem-juiz-imagem
 python -m torralles_studio exportar-capcut saidas/<tema>         # pasta para editar no CapCut
 python -m torralles_studio importar-sons <pasta> --licenca pixabay --fonte Pixabay   # efeitos dos cortes no acervo
 python -m torralles_studio cotas                              # quanto falta de cada cota grátis; --esgotar/--liberar <serviço>
+python -m torralles_studio prompt-midia "ideia" -m animar       # prompt pronto de cada serviço, já conferido (sem chave)
+python -m torralles_studio pedidos-navegador saidas/<tema> -m imagem   # K37: pedidos para a skill midia-navegador
+python -m torralles_studio importar-midia saidas/<tema> --site adobe_firefly   # confere e registra o que veio dos sites
 python -m torralles_studio testar-voz                          # frase com lh, nh, rr em cada voz pronta (ouvir + erro de palavras)
 python -m torralles_studio servidor                           # HTTP local para o Ops (docs/servidor.md); 'mcp' para o Hermes
 python -m torralles_studio montar projeto.json -o final.mp4   # montagem final + régua (docs/montagem.md)

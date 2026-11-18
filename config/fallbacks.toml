@@ -57,6 +57,7 @@ chave_env = "DEEPSEEK_API_KEY"
 timeout = 300
 
 [provedores.claude]
+visao = true  # aceita imagem: entra na cadeia juiz_imagem (K38)
 familia = "anthropic"  # juiz nunca é da mesma família de quem gerou
 custo_usd = 0.02  # KR1 24/10/2026: Sonnet 5.5 US$ 2/10 por 1M (~5k + 1k); Haiku 5.5 sai ~0,001
 classe = "anthropic"
@@ -64,6 +65,7 @@ modelo_env = "CLAUDE_MODEL"   # defina o modelo no .env
 chave_env = "ANTHROPIC_API_KEY"
 
 [provedores.gemini_flash]
+visao = true  # aceita imagem: entra na cadeia juiz_imagem (K38)
 familia = "google"  # juiz nunca é da mesma família de quem gerou
 custo_usd = 0.015  # KR1 24/10/2026: 3.6 Flash US$ 1,50/7,50 por 1M (3.8 Flash citado a 0,75/3,75: testar)
 classe = "gemini_texto"
@@ -71,6 +73,7 @@ modelo = "gemini-3.6-flash"  # estável; "gemini-2.5-flash" desligado em 16/10/2
 chave_env = "GEMINI_API_KEY"
 
 [provedores.openai_mini]
+visao = true  # aceita imagem: entra na cadeia juiz_imagem (K38)
 familia = "openai"  # juiz nunca é da mesma família de quem gerou
 custo_usd = 0.009  # KR1 24/10/2026: gpt-5.4-mini US$ 0,75/4,50 por 1M (página oficial)
 classe = "openai_compat"
@@ -128,9 +131,35 @@ modelo = "gpt-image-2"  # "gpt-image-1" desliga em 23/10/2026
 chave_env = "OPENAI_API_KEY"
 timeout = 300
 
+[provedores.cloudflare_flux]
+# Workers AI (K36): 10.000 neurons grátis por dia, zera 00:00 UTC; ~57 neurons por imagem 1024² com 4 passos
+# (estimativa a partir da tabela oficial). FLUX.1 schnell é Apache-2.0: uso comercial; os termos da BFL proíbem
+# apresentar a imagem como foto real ou feita por pessoa. Termos lidos em 17/11/2026.
+classe = "cloudflare_imagem"
+modelo = "@cf/black-forest-labs/flux-1-schnell"
+chave_env = "CLOUDFLARE_API_TOKEN"
+conta_env = "CLOUDFLARE_ACCOUNT_ID"
+passos = 4
+licenca = "comercial"
+familia = "black-forest-labs"
+termos = "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+licenca_conferida = "2026-11-17"
+timeout = 120
+[provedores.cloudflare_flux.cota]
+limite = 10000
+renova = "00:00 UTC"
+creditos = { imagem = 57 }
+padroes = ["daily free allocation", "neurons"]  # mensagem exata não documentada: conferir no primeiro esgotamento
+
 [provedores.pollinations]
 # Gratuito e sem chave; qualidade e disponibilidade variam.
+# 17/11/2026: sem conta, a imagem sai com a marca "pollinations.ai" no canto (mesmo com nologo) e os termos não
+# abriram (página só com JavaScript). Pela D24 fica fora da fila até alguém ler os termos (anote licenca e
+# licenca_conferida) e testar o "nologo" com conta própria. A Cloudflare (grátis, comercial) entra no lugar.
 classe = "pollinations"
+licenca = "a_conferir"
+marca_dagua = true
+familia = "black-forest-labs"
 timeout = 180
 
 # ---------------------------------------------------------------- voz
@@ -169,6 +198,7 @@ custo_usd_por_segundo = 0.14  # KR1 24/10/2026: Kling v3 no fal US$ 0,112–0,14
 classe = "fal_video"
 modelo = "fal-ai/kling-video/v3/standard/image-to-video"
 campo_imagem = "start_image_url"  # o Kling v3 usa este nome de parâmetro
+duracoes = [5, 10]  # segundos aceitos (inteiros); a cena pega a menor que cobre a fala e a montagem corta o resto
 chave_env = "FAL_KEY"
 timeout = 900
 
@@ -178,11 +208,13 @@ classe = "fal_video"
 modelo = "fal-ai/wan-25-preview/image-to-video"
 chave_env = "FAL_KEY"
 enviar_duracao = false
+duracao_padrao_s = 5  # sem a duração no pedido, o Wan gera (e cobra) o clipe padrão de 5 s: é o mínimo no orçamento
 timeout = 900
 
 [provedores.ken_burns]
 # Zoom local com FFmpeg: gratuito, garante que sempre sai um vídeo.
 classe = "ken_burns"
+prompt_por_molde = false  # o zoom local lê só o movimento do roteiro; nunca é barrado pela checagem de prompt (K35)
 zoom = 0.35  # força do movimento: 0.22 = discreto, 0.35 = padrão, 0.5 = forte (máx. 0.8)
 
 # ---------------------------------------------------------------- juiz de vídeo (assiste com som)
@@ -239,6 +271,10 @@ cadeia = ["deepseek_reasoner", "deepseek_chat", "gemini_flash", "claude", "openr
 # Juízes de texto (roteiro, pesquisa). Imagem e vídeo usam juízes com visão (K06, K17).
 cadeia = ["claude", "gemini_flash", "openai_mini", "deepseek_chat", "openrouter_gratis", "ollama_local"]
 
+[tarefas.juiz_imagem]
+# Juízes que olham a imagem (K38, spec 03 §3.3): modelos com visao = true. Nunca da família de quem gerou.
+cadeia = ["claude", "gemini_flash", "openai_mini"]
+
 [tarefas.juiz_video]
 # Juízes que assistem o vídeo inteiro com som (spec 10, nível 4). Hoje só o Gemini faz isso pela API.
 cadeia = ["gemini_video"]
@@ -257,6 +293,10 @@ cadeia = ["openverse_midia"]
 # efeitos sonoros (trilhas: K21). Freesound só em projetos não comerciais (D22); nos demais é pulado.
 cadeia = ["freesound_midia", "openverse_midia"]
 
+[tarefas.post]
+# Texto para postar (título, descrição, hashtags): grátis primeiro, depois o mais barato.
+cadeia = ["openrouter_gratis", "ollama_local", "deepseek_chat", "gemini_flash", "openai_mini"]
+
 [tarefas.revisao]
 cadeia = ["claude", "deepseek_reasoner", "gemini_flash", "openai_mini"]
 
@@ -264,7 +304,7 @@ cadeia = ["claude", "deepseek_reasoner", "gemini_flash", "openai_mini"]
 cadeia = ["tavily", "brave"]
 
 [tarefas.imagem]
-cadeia = ["nano_banana", "fal_flux", "openai_imagem", "pollinations"]
+cadeia = ["nano_banana", "fal_flux", "openai_imagem", "cloudflare_flux", "pollinations"]
 
 [tarefas.voz]
 # ElevenLabs no plano grátis não permite uso comercial (D2): só entra com plano pago (chave no .env).
@@ -304,6 +344,8 @@ num_juizes = 1
 divergencia_maxima = 20
 
 [avaliacao.roteiro.criterios]
+# Pesos somam 100 (o código avisa se não somarem). Âncoras opcionais por critério aparecem no prompt do juiz:
+# gancho = { peso = 25, piso = 60, descricao = "...", ancoras = { 40 = "abre com contexto genérico", 80 = "abre com fato concreto e surpreendente" } }
 gancho    = { peso = 25, piso = 60, descricao = "Os 3 primeiros segundos prendem a atenção com pergunta concreta, fato surpreendente, promessa ou ação, sem enrolar" }
 precisao  = { peso = 20, piso = 70, descricao = "Nenhuma contradição com a pesquisa, o briefing ou os fatos travados; nada inventado" }
 aderencia = { peso = 15, descricao = "Fala do tema pedido, sem fugir do assunto" }
@@ -329,6 +371,31 @@ cobertura  = { peso = 20, descricao = "Os pontos principais do tema aparecem" }
 atualidade = { peso = 20, descricao = "Usa as fontes mais recentes quando o tema muda rápido; avisa se a informação pode estar velha" }
 clareza    = { peso = 20, descricao = "Tópicos curtos e objetivos, fáceis de transformar em roteiro" }
 
+[avaliacao.imagem]
+# Spec 03 §3.3 (K38): juiz de visão olha a imagem da cena (e a anterior, para consistência). 1 juiz (D21).
+nota_minima = 70
+num_juizes = 1
+divergencia_maxima = 20
+
+[avaliacao.imagem.criterios]
+aderencia    = { peso = 30, descricao = "A imagem mostra o que a cena pede: elementos, ação e cenário do pedido", ancoras = { 40 = "assunto diferente do pedido", 80 = "todos os elementos pedidos, claros" } }
+artefatos    = { peso = 25, piso = 60, descricao = "Sem defeitos visíveis de IA: mãos, rostos e corpos certos, objetos sem derreter ou fundir" }
+consistencia = { peso = 20, descricao = "Mesmo estilo, paleta e personagens da imagem anterior (se houver); sem anterior, estilo coerente com o pedido" }
+composicao   = { peso = 15, descricao = "Assunto principal claro e centralizado, foco certo, espaço livre no terço de baixo para a legenda" }
+texto        = { peso = 10, piso = 50, descricao = "Sem letras embaralhadas, marcas d'água, logotipos ou marcas reais visíveis" }
+
+[avaliacao.cena]
+# Spec 03 §3.5 (K38): cena animada avaliada por 4 quadros (0%, 33%, 66%, 100%) junto da imagem de origem.
+nota_minima = 60
+num_juizes = 1
+divergencia_maxima = 20
+
+[avaliacao.cena.criterios]
+artefatos  = { peso = 30, piso = 50, descricao = "Sem rosto ou corpo deformando, objetos derretendo ou tremulação entre os quadros" }
+fidelidade = { peso = 25, descricao = "O primeiro quadro é a mesma cena e os mesmos personagens da imagem de origem" }
+coerencia  = { peso = 25, descricao = "Os quadros contam uma ação contínua, sem saltos estranhos" }
+movimento  = { peso = 20, descricao = "O movimento de câmera ou da cena é o que foi pedido" }
+
 [avaliacao.video_final]
 # Spec 03, 3.6 (critérios dos juízes) + o que só quem ouve consegue avaliar. Os eliminatórios técnicos
 # (ffprobe, LUFS, legendas) ficam na montagem (K22). Por enquanto 1 juiz: só o Gemini assiste com som.
@@ -342,3 +409,115 @@ fluidez   = { peso = 20, descricao = "Transições e cortes no ritmo certo, sem 
 coesao    = { peso = 20, descricao = "Parece um vídeo só: estilo visual, cores e personagens consistentes entre as cenas" }
 audio     = { peso = 20, piso = 60, descricao = "Voz sempre clara; música abaixo da voz; efeitos sonoros no momento certo e sem exagero" }
 sincronia = { peso = 10, descricao = "Narração, legendas e imagens combinam no tempo (o que se fala aparece na tela)" }
+
+# ---------------------------------------------------------------- sites grátis no navegador do Claude (K37, D24)
+# A skill .claude/skills/midia-navegador opera estes sites; o Studio só grava os pedidos e importa o resultado.
+# Termos lidos nos sites oficiais em 17/11/2026 (agente de pesquisa). Regras (D24): só entra licenca = "comercial"
+# sem marca d'água (perfil comercial); "nao_comercial" só em perfil comercial = false com a regra como_freesound;
+# "a_conferir" nunca entra. Ao conferir um termo, anote licenca, licenca_conferida e termos.
+
+[sites.adobe_firefly]
+nome = "Adobe Firefly"
+endereco = "https://firefly.adobe.com"
+modalidades = ["imagem"]
+licenca = "comercial"      # só os modelos Firefly (os de parceiros dentro do Firefly ficam de fora)
+marca_dagua = false        # Content Credentials vão no metadado, não na imagem
+familia = "adobe"
+molde = "padrao"
+termos = "https://www.adobe.com/legal/licenses-terms/adobe-gen-ai-user-guidelines.html"
+licenca_conferida = "2026-11-17"
+[sites.adobe_firefly.cota]
+renova = "24h corridas"    # "gerações diárias limitadas", número não publicado: só o aviso do site esgota
+padroes = ["generative credits", "créditos generativos", "out of credits"]
+
+[sites.ideogram]
+nome = "Ideogram"
+endereco = "https://ideogram.ai"
+modalidades = ["imagem"]
+licenca = "comercial"      # §2.1 dos termos permite uso comercial
+marca_dagua = true         # não confirmado no plano grátis: fica fora até alguém conferir
+familia = "ideogram"
+molde = "padrao"
+termos = "https://ideogram.ai/legal/tos"
+licenca_conferida = "2026-11-17"
+
+[sites.google_flow]
+nome = "Google Flow"
+endereco = "https://labs.google/fx/tools/flow"
+modalidades = ["imagem", "animar", "video_texto"]
+licenca = "a_conferir"     # termos gerais do Google; uso comercial do plano grátis não confirmado
+marca_dagua = true         # SynthID (marca d'água invisível); visível a conferir
+familia = "google"
+molde = "video"
+termos = "https://support.google.com/labs/answer/16526234"
+licenca_conferida = "2026-11-17"
+[sites.google_flow.cota]
+limite = 50
+renova = "24h corridas"
+creditos = { imagem = 1, animar = 10, video_texto = 10 }
+padroes = ["credits", "créditos"]
+
+[sites.kling]
+nome = "Kling AI"
+endereco = "https://kling.ai"
+modalidades = ["imagem", "animar", "video_texto"]
+licenca = "a_conferir"     # uso comercial só para membros pagos
+marca_dagua = true         # não membro precisa manter a marca do Kling (art. 7.2)
+familia = "kuaishou"
+molde = "video"
+termos = "https://kling.ai/docs/payment-policy"
+licenca_conferida = "2026-11-17"
+
+[sites.hailuo]
+nome = "Hailuo AI"
+endereco = "https://hailuoai.video"
+modalidades = ["animar", "video_texto"]
+licenca = "a_conferir"     # comercial só no plano pago (seção 8)
+marca_dagua = true
+familia = "minimax"
+molde = "video"
+termos = "https://hailuoai.video/doc/payment-policy.html"
+licenca_conferida = "2026-11-17"
+
+[sites.pixverse]
+nome = "PixVerse"
+endereco = "https://pixverse.ai"
+modalidades = ["animar", "video_texto"]
+licenca = "nao_comercial"  # "limited to non-commercial purposes"
+marca_dagua = true         # não confirmado
+familia = "pixverse"
+molde = "video"
+termos = "https://pixverse.ai/terms-of-service"
+licenca_conferida = "2026-11-17"
+
+[sites.vidu]
+nome = "Vidu"
+endereco = "https://www.vidu.com"
+modalidades = ["animar", "video_texto"]
+licenca = "nao_comercial"  # "personal, non-commercial"
+marca_dagua = true
+familia = "shengshu"
+molde = "video"
+termos = "https://www.vidu.com/terms"
+licenca_conferida = "2026-11-17"
+
+[sites.luma]
+nome = "Luma Dream Machine"
+endereco = "https://lumalabs.ai/dream-machine"
+modalidades = ["imagem", "animar", "video_texto"]
+licenca = "nao_comercial"  # comercial só com assinatura ativa (§4.9)
+marca_dagua = true
+familia = "luma"
+molde = "video"
+termos = "https://lumalabs.ai/legal/tos"
+licenca_conferida = "2026-11-17"
+
+[sites.meta_ai]
+nome = "Meta AI"
+endereco = "https://www.meta.ai"
+modalidades = ["imagem", "animar"]
+licenca = "a_conferir"     # os termos não falam das saídas
+marca_dagua = true         # não confirmado
+familia = "meta"
+termos = "https://www.facebook.com/legal/ai-terms"
+licenca_conferida = "2026-11-17"

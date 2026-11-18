@@ -235,3 +235,91 @@ class TestJsonDoJuiz(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             extrair_json('{"a": 1,, }')
+
+
+class TestAuditoriaJuiz(unittest.TestCase):
+    def test_evidencia_vai_para_avaliacao_e_volta_no_feedback(self):  # item 5
+        r = avaliador(Juiz("a", [resposta(50, 65)])).avaliar("roteiro", "t")
+        self.assertEqual(r.evidencias, {"gancho": ["abre com fato"], "clareza": ["frases curtas"]})
+        self.assertIn("evidencias", r.como_dict())
+        texto = r.feedback(avaliador(Juiz("x", [])).rubricas["roteiro"])
+        self.assertIn("[gancho 50, abaixo do piso 60] motivo: abre com fato", texto)
+        self.assertIn("[clareza 65, abaixo do mínimo 70] motivo: frases curtas", texto)
+
+    def test_notas_na_escala_0_a_10_sao_recusadas(self):  # item 7
+        ruim = Juiz("a", [resposta(8, 7)])
+        r = avaliador(ruim, Juiz("b", [resposta(80, 70)])).avaliar("roteiro", "t")
+        self.assertEqual(r.juizes, ["b"])
+        with self.assertRaisesRegex(ValueError, "0–10"):
+            Avaliador._validar_juiz(resposta(10, 0), avaliador(Juiz("x", [])).rubricas["roteiro"])
+
+    def test_prompt_com_nota_de_exemplo_analise_e_ancoras(self):  # item 11
+        cfg = {"roteiro": {"nota_minima": 70, "criterios": {
+            "gancho": {"peso": 60, "descricao": "gancho", "ancoras": {"80": "fato concreto", "40": "contexto genérico"}},
+            "clareza": {"peso": 40, "descricao": "clareza"}}}}
+        juiz = Juiz("a", [json.dumps({"analise": "curta", "criterios": {
+            "gancho": {"evidencia": "e", "nota": 80}, "clareza": {"evidencia": "e", "nota": 70}}})])
+        rt = Roteador({"a": juiz}, {"juiz": ["a"]}, dormir=lambda s: None)
+        r = Avaliador(rt, cfg).avaliar("roteiro", "t")
+        self.assertEqual(r.nota, 76.0)  # 'analise' é aceita
+        prompt, sistema = juiz.prompts[0]
+        self.assertIn('"nota": <0-100>', prompt)
+        self.assertNotIn('"nota": 0', prompt)
+        self.assertLess(prompt.index('"analise"'), prompt.index('"criterios"'))
+        self.assertIn("(referências: 40 = contexto genérico; 80 = fato concreto)", prompt)
+        self.assertIn("mais longo", sistema)
+
+    def test_pesos_validados(self):  # item 14
+        import warnings
+
+        from torralles_studio.qualidade import Rubrica
+
+        with self.assertRaises(ValueError):
+            Rubrica.do_config("x", {"criterios": {"a": {"peso": 0}, "b": {"peso": 0}}})
+        with self.assertRaises(ValueError):
+            Rubrica.do_config("x", {"criterios": {"a": {"peso": "dez"}}})
+        with warnings.catch_warnings(record=True) as avisos:
+            warnings.simplefilter("always")
+            Rubrica.do_config("x", {"criterios": {"a": {"peso": 30}, "b": {"peso": 30}}})
+            Rubrica.do_config("x", {"criterios": {"a": {"peso": 60}, "b": {"peso": 40}}})
+        self.assertEqual(len(avisos), 1)
+        self.assertIn("somam 60", str(avisos[0].message))
+
+
+class TestAuditoriaTemperatura(unittest.TestCase):  # item 6
+    def corpo(self, classe, cfg):
+        from unittest import mock
+
+        from torralles_studio.provedores import texto
+
+        enviados = []
+        respostas = {texto.AnthropicTexto: {"stop_reason": "end_turn", "content": [{"type": "text", "text": "ok"}]},
+                     texto.GeminiTexto: {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]},
+                     texto.OpenAICompatTexto: {"choices": [{"message": {"content": "ok"}}]}}
+
+        def falso(url, corpo, cab, timeout):
+            enviados.append(corpo)
+            return respostas[classe]
+
+        prov = classe("p", {"modelo": "m", "base_url": "http://localhost:1", **cfg})
+        with mock.patch.object(texto, "post_json", falso):
+            prov.executar("oi")
+        return enviados[0]
+
+    def test_temperatura_so_quando_configurada(self):
+        from torralles_studio.provedores import texto
+
+        self.assertEqual(self.corpo(texto.OpenAICompatTexto, {"temperatura": 0.2})["temperature"], 0.2)
+        self.assertEqual(self.corpo(texto.AnthropicTexto, {"temperatura": 0.2})["temperature"], 0.2)
+        self.assertEqual(self.corpo(texto.GeminiTexto, {"temperatura": 0})["generationConfig"], {"temperature": 0})
+        for classe in (texto.OpenAICompatTexto, texto.AnthropicTexto, texto.GeminiTexto):
+            corpo = self.corpo(classe, {})
+            self.assertNotIn("temperature", corpo)
+            self.assertNotIn("generationConfig", corpo)
+
+    def test_temperatura_invalida(self):
+        from torralles_studio.provedores import texto
+        from torralles_studio.rede import ErroProvedor
+
+        with self.assertRaises(ErroProvedor):
+            self.corpo(texto.OpenAICompatTexto, {"temperatura": "baixa"})

@@ -1,7 +1,7 @@
 from .busca import BraveBusca, TavilyBusca
 from .juiz_video import GeminiVideoJuiz
 from .midia import FreesoundMidia, OpenverseMidia, PexelsMidia, PixabayMidia
-from .imagem import FalImagem, GeminiImagem, OpenAIImagem, PollinationsImagem
+from .imagem import CloudflareImagem, FalImagem, GeminiImagem, OpenAIImagem, PollinationsImagem
 from .texto import AnthropicTexto, GeminiTexto, OpenAICompatTexto
 from .video import FalVideo, KenBurnsVideo
 from .voz import EdgeVoz, ElevenLabsVoz, GeminiVoz, OpenAIVoz
@@ -17,6 +17,7 @@ CLASSES = {
     "openai_imagem": OpenAIImagem,
     "fal_imagem": FalImagem,
     "pollinations": PollinationsImagem,
+    "cloudflare_imagem": CloudflareImagem,
     "elevenlabs": ElevenLabsVoz,
     "openai_voz": OpenAIVoz,
     "edge_tts": EdgeVoz,

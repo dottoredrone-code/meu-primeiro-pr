@@ -177,6 +177,23 @@ class TestOrcamento(unittest.TestCase):
         self.assertAlmostEqual(Orcamento.estimar(kling, {}), 0.5)
         self.assertAlmostEqual(Orcamento.estimar(kling, {"duracao": "abc"}), 0.5)
 
+    def test_wan_sem_duracao_no_pedido_cobra_o_clipe_padrao(self):  # auditoria item 6
+        import tomllib
+        from pathlib import Path
+
+        from torralles_studio.seguranca import Orcamento
+
+        toml = Path(__file__).resolve().parent.parent / "config" / "fallbacks.toml"
+        cfg = tomllib.loads(toml.read_text(encoding="utf-8"))["provedores"]["fal_wan"]
+        self.assertFalse(cfg["enviar_duracao"])
+        wan = self._provedor("fal_wan", cfg)
+        por_s = cfg["custo_usd_por_segundo"]
+        self.assertAlmostEqual(Orcamento.estimar(wan, {"duracao": 3}), 5 * por_s)  # gera 5 s, cobra 5 s
+        self.assertAlmostEqual(Orcamento.estimar(wan, {"duracao": 8}), 8 * por_s)  # nunca abaixo do pedido
+        self.assertAlmostEqual(Orcamento.estimar(wan, {}), 5 * por_s)
+        kling = self._provedor("kling", {"custo_usd_por_segundo": 0.1})  # recebe a duração: cobra a pedida
+        self.assertAlmostEqual(Orcamento.estimar(kling, {"duracao": 3}), 0.3)
+
     def test_reiniciar_zera_o_gasto(self):
         from torralles_studio.seguranca import Orcamento
 

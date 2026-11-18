@@ -16,7 +16,7 @@ def carregar_env(caminho=RAIZ / ".env"):
     """Lê um arquivo .env simples (CHAVE=valor) sem sobrescrever variáveis já definidas."""
     if not caminho.exists():
         return
-    for linha in caminho.read_text().splitlines():
+    for linha in caminho.read_text(encoding="utf-8-sig").splitlines():
         linha = linha.strip()
         if not linha or linha.startswith("#") or "=" not in linha:
             continue
@@ -35,32 +35,32 @@ def montar_provedores(dados):
     for nome, cfg in dados["provedores"].items():
         classe = CLASSES.get(cfg.get("classe"))
         if classe is None:
-            raise ValueError(f"provedor '{nome}': classe desconhecida '{cfg.get('classe')}'")
+            raise ValueError(f"{rotulo} '{nome}': classe desconhecida '{cfg.get('classe')}'")
         provedores[nome] = classe(nome, cfg)
     return provedores
 
 
-def validar_cotas_e_licencas(provedores):
+def validar_cotas_e_licencas(provedores, rotulo="provedor"):
     """Erros de digitação em cota/licença viram erro na hora, não um provedor que nunca é pulado (K34, D24)."""
     from .cotas import LICENCAS, validar_renova
 
     for nome, prov in provedores.items():
         licenca = prov.cfg.get("licenca")
         if licenca is not None and licenca not in LICENCAS:
-            raise ValueError(f"provedor '{nome}': licenca {licenca!r} inválida (use {', '.join(LICENCAS)})")
+            raise ValueError(f"{rotulo} '{nome}': licenca {licenca!r} inválida (use {', '.join(LICENCAS)})")
         cota = prov.cfg.get("cota")
         if cota is None:
             continue
         if not isinstance(cota, dict):
-            raise ValueError(f"provedor '{nome}': 'cota' precisa ser uma tabela [provedores.{nome}.cota]")
+            raise ValueError(f"{rotulo} '{nome}': 'cota' precisa ser uma tabela [provedores.{nome}.cota]")
         erro = validar_renova(cota.get("renova"))
         if erro:
-            raise ValueError(f"provedor '{nome}': {erro}")
+            raise ValueError(f"{rotulo} '{nome}': {erro}")
         limite = cota.get("limite")
         if limite is not None and cota.get("renova") is None:
-            raise ValueError(f"provedor '{nome}': cota.limite precisa de cota.renova (senão o gasto nunca volta a zero)")
+            raise ValueError(f"{rotulo} '{nome}': cota.limite precisa de cota.renova (senão o gasto nunca volta a zero)")
         if limite is not None and (isinstance(limite, bool) or not isinstance(limite, (int, float)) or limite <= 0):
-            raise ValueError(f"provedor '{nome}': cota.limite precisa ser um número maior que zero")
+            raise ValueError(f"{rotulo} '{nome}': cota.limite precisa ser um número maior que zero")
 
 
 def validar_cadeias(provedores, cadeias):
@@ -79,7 +79,7 @@ def validar_cadeias(provedores, cadeias):
 def carregar_config(caminho=None):
     carregar_env()
     caminho = Path(caminho or os.environ.get("TORRALLES_CONFIG") or os.environ.get("ESTUDIO_CONFIG") or CONFIG_PADRAO)
-    return tomllib.loads(caminho.read_text())
+    return tomllib.loads(caminho.read_text(encoding="utf-8-sig"))
 
 
 def carregar_avaliador(roteador=None, caminho=None):
@@ -144,6 +144,21 @@ def carregar_roteador(caminho=None, banco=None):
     cadeias = {tarefa: t["cadeia"] for tarefa, t in dados["tarefas"].items()}
     validar_cadeias(provedores, cadeias)
     validar_cotas_e_licencas(provedores)
+    from .navegador import sites_do_config
+
+    sites = sites_do_config(dados)
+    validar_cotas_e_licencas(sites, "site")
+    from .cotas import MODALIDADES
+    from .prompts_midia import carregar_moldes
+
+    moldes = carregar_moldes().get("moldes", {})
+    for nome, site in sites.items():
+        erradas = [m for m in site.cfg.get("modalidades") or [] if m not in MODALIDADES]
+        if erradas:
+            raise ValueError(f"site '{nome}': modalidade desconhecida {erradas} (use {', '.join(MODALIDADES)})")
+        molde = site.cfg.get("molde")
+        if molde and molde not in moldes:
+            raise ValueError(f"site '{nome}': molde {molde!r} não existe em config/prompts_midia.toml")
     seguranca = dados.get("seguranca", {})
     configurar_downloads(seguranca.get("dominios_download"), seguranca.get("tamanho_maximo_download_mb"))
     opcoes = dados.get("roteador", {})

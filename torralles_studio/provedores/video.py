@@ -1,9 +1,9 @@
 import re
 import shutil
-import subprocess
 import unicodedata
 from pathlib import Path
 
+from .. import ff
 from ..rede import ErroProvedor, baixar, post_json
 from .base import Provedor, data_uri, salvar
 
@@ -29,9 +29,21 @@ class FalVideo(Provedor):
         # A proporção vem da imagem de entrada (gerada já no formato do perfil). Cada modelo nomeia o campo da imagem de um jeito (Kling v3: start_image_url; Wan: image_url).
         corpo = {"prompt": prompt, self.cfg.get("campo_imagem", "image_url"): data_uri(imagem)}
         if self.cfg.get("enviar_duracao", True):
-            corpo["duration"] = str(duracao)
+            corpo["duration"] = str(duracao_aceita(duracao, self.cfg.get("duracoes")))
         r = post_json(f"https://fal.run/{self.modelo}", corpo, {"Authorization": f"Key {self.chave}"}, self.timeout)
         return salvar(saida, baixar(r["video"]["url"], timeout=self.timeout))
+
+
+def duracao_aceita(duracao, aceitas=None):
+    """Duração inteira que o modelo aceita: a menor da lista que cobre a fala (ou a maior), ou o inteiro acima.
+    O Kling recusa "4.37"; a montagem corta o que sobrar."""
+    import math
+
+    pedida = max(1, math.ceil(float(duracao) - 1e-9))
+    if aceitas:
+        opcoes = sorted(int(a) for a in aceitas)
+        return next((a for a in opcoes if a >= pedida), opcoes[-1])
+    return pedida
 
 
 class KenBurnsVideo(Provedor):
@@ -69,7 +81,7 @@ class KenBurnsVideo(Provedor):
         saida.parent.mkdir(parents=True, exist_ok=True)
         cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(imagem), "-vf", filtro,
                "-frames:v", str(quadros), "-c:v", "libx264", "-pix_fmt", "yuv420p", str(saida)]
-        proc = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL, text=True)
+        proc = ff.rodar(cmd)
         if proc.returncode != 0:
             raise ErroProvedor(f"ffmpeg falhou: {proc.stderr.strip()[:300]}")
         return saida
@@ -91,18 +103,22 @@ _DESTINO = {"direita": "direita", "esquerda": "esquerda", "cima": "subir", "baix
 ZOOM_PADRAO = 0.35  # quanto a câmera aproxima na cena (0.35 = 35%); o Diego pediu mais movimento que 0.22
 
 
+def tipo_de_movimento(prompt):
+    """aproximar, afastar, direita, esquerda, subir ou descer (português ou inglês); padrão: aproximar."""
+    t = "".join(c for c in unicodedata.normalize("NFD", str(prompt or "").lower()) if unicodedata.category(c) != "Mn")
+    destino = re.search(r"\b(?:para|pra|to)(?: a| o| the)? (direita|esquerda|cima|baixo|right|left)\b", t)
+    if destino:
+        return _DESTINO[destino.group(1)]
+    return next((nome for nome, padrao in _MOVIMENTOS if re.search(padrao, t)), "aproximar")
+
+
 def movimento(prompt, ultimo, zoom=ZOOM_PADRAO):
     """Expressões (z, x, y) do zoompan para o movimento pedido; `on` vai de 0 a `ultimo`.
 
     zoom: amplitude do aproximar/afastar; nos pans, a imagem fica ampliada o bastante para a câmera
     percorrer cerca de 20% da largura (com zoom 0.35)."""
     zoom = min(max(zoom, 0.05), 0.8)
-    t = "".join(c for c in unicodedata.normalize("NFD", str(prompt or "").lower()) if unicodedata.category(c) != "Mn")
-    destino = re.search(r"\b(?:para|pra|to)(?: a| o| the)? (direita|esquerda|cima|baixo|right|left)\b", t)
-    if destino:
-        tipo = _DESTINO[destino.group(1)]
-    else:
-        tipo = next((nome for nome, padrao in _MOVIMENTOS if re.search(padrao, t)), "aproximar")
+    tipo = tipo_de_movimento(prompt)
     q = f"(on/{max(1, ultimo)})"  # progresso 0 → 1
     p = f"({q}*{q}*(3-2*{q}))"  # com aceleração suave: começa e termina devagar (como câmera de verdade)
     cx, cy = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"

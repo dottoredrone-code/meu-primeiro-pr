@@ -1,7 +1,28 @@
 import os
 
 from ..rede import ErroProvedor, post_json
-from .base import Provedor
+from .base import Provedor, data_uri
+
+
+def _sem_visao(provedor, imagens):
+    if imagens and not provedor.cfg.get("visao"):
+        raise ErroProvedor("este modelo não está marcado com visao = true no config")
+
+
+def _base64(caminho):
+    uri = data_uri(caminho)
+    mime, dados = uri[5:].split(";base64,", 1)
+    return mime, dados
+
+
+def _temperatura(cfg):
+    """Campo opcional `temperatura` do provedor (ex.: juízes com 0.2); None = padrão da API."""
+    t = cfg.get("temperatura")
+    if t is None:
+        return None
+    if isinstance(t, bool) or not isinstance(t, (int, float)) or not 0 <= t <= 2:
+        raise ErroProvedor(f"temperatura inválida no config: {t!r} (use um número de 0 a 2)")
+    return t
 
 
 def _exigir_texto(texto):
@@ -26,13 +47,21 @@ class OpenAICompatTexto(Provedor):
             return f"falta {env}"
         return super().configurado()
 
-    def executar(self, prompt, sistema=None):
+    def executar(self, prompt, sistema=None, imagens=None):
+        _sem_visao(self, imagens)
         mensagens = [{"role": "system", "content": sistema}] if sistema else []
-        mensagens.append({"role": "user", "content": prompt})
+        if imagens:
+            conteudo = [{"type": "image_url", "image_url": {"url": data_uri(i)}} for i in imagens]
+            mensagens.append({"role": "user", "content": [*conteudo, {"type": "text", "text": prompt}]})
+        else:
+            mensagens.append({"role": "user", "content": prompt})
         cab = {"Authorization": f"Bearer {self.chave}"} if self.chave else {}
+        corpo = {"model": self.modelo, "messages": mensagens}
+        if (temp := _temperatura(self.cfg)) is not None:
+            corpo["temperature"] = temp
         r = post_json(
             f"{self.base_url}/chat/completions",
-            {"model": self.modelo, "messages": mensagens},
+            corpo,
             cab,
             self.timeout,
         )
@@ -42,15 +71,25 @@ class OpenAICompatTexto(Provedor):
 class AnthropicTexto(Provedor):
     tipo = "texto"
 
-    def executar(self, prompt, sistema=None):
+    def executar(self, prompt, sistema=None, imagens=None):
+        _sem_visao(self, imagens)
+        conteudo = prompt
+        if imagens:
+            blocos = []
+            for i in imagens:
+                mime, dados = _base64(i)
+                blocos.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": dados}})
+            conteudo = [*blocos, {"type": "text", "text": prompt}]
         # Modelos atuais pensam antes de responder e o raciocínio conta no max_tokens: folga para não cortar o JSON.
         corpo = {
             "model": self.modelo,
             "max_tokens": self.cfg.get("max_tokens", 16000),
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": conteudo}],
         }
         if sistema:
             corpo["system"] = sistema
+        if (temp := _temperatura(self.cfg)) is not None:  # a API da Anthropic aceita de 0 a 1
+            corpo["temperature"] = min(temp, 1)
         if self.cfg.get("esforco"):  # low | medium | high (opcional; menos esforço = mais barato e rápido)
             corpo["output_config"] = {"effort": self.cfg["esforco"]}
         r = post_json(
@@ -70,10 +109,17 @@ class AnthropicTexto(Provedor):
 class GeminiTexto(Provedor):
     tipo = "texto"
 
-    def executar(self, prompt, sistema=None):
-        corpo = {"contents": [{"parts": [{"text": prompt}]}]}
+    def executar(self, prompt, sistema=None, imagens=None):
+        _sem_visao(self, imagens)
+        partes = []
+        for i in imagens or []:
+            mime, dados = _base64(i)
+            partes.append({"inline_data": {"mime_type": mime, "data": dados}})
+        corpo = {"contents": [{"parts": [*partes, {"text": prompt}]}]}
         if sistema:
             corpo["systemInstruction"] = {"parts": [{"text": sistema}]}
+        if (temp := _temperatura(self.cfg)) is not None:
+            corpo["generationConfig"] = {"temperature": temp}
         r = post_json(
             f"https://generativelanguage.googleapis.com/v1beta/models/{self.modelo}:generateContent",
             corpo,

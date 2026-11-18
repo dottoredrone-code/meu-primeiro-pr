@@ -35,7 +35,7 @@ APELIDOS = {"video": "animar", "animar": "video"}
 @dataclass
 class Tentativa:
     provedor: str
-    status: str  # "ok", "pulado" ou "falhou"
+    status: str  # "ok", "cache", "pulado" ou "falhou"
     detalhe: str = ""
 
 
@@ -61,6 +61,7 @@ class Roteador:
         self.cotas = cotas  # Cotas (K34); None = sem cota que dura (como antes)
         self.comercial = True  # perfil monetizado? (D22/D24; o perfil ajusta)
         self.licenca_por_modalidade = {}  # regra por modalidade do perfil (D24)
+        self.perfil = None  # Perfil dono deste roteador (checagem de prompt usa os nomes a evitar dele)
         self.cache = cache  # ex.: Banco (K24); resultado repetido não é pago de novo
         self.orcamento = orcamento or Orcamento()
         self.cadeias = cadeias
@@ -113,13 +114,19 @@ class Roteador:
             if motivo:
                 tentativas.append(Tentativa(nome, "pulado", motivo))
                 continue
-            custo = self.orcamento.estimar(provedor, kwargs)
+            try:
+                kw = self._preparar_prompt(nome, provedor, kwargs)
+            except ValueError as e:  # prompt reprovado na checagem: não chega ao serviço nem gasta cota (K35)
+                tentativas.append(Tentativa(nome, "pulado", mascarar(str(e))))
+                self._avisar_falha(tentativas[-1])
+                continue
+            custo = self.orcamento.estimar(provedor, kw)
             if not self.orcamento.cabe(custo):
                 tentativas.append(Tentativa(nome, "pulado", f"teto de custo: precisa US$ {custo:.3f}, "
                                                              f"restam US$ {self.orcamento.restante:.3f}"))
                 continue
             try:
-                bruto = self._chamar(nome, provedor, kwargs, custo)
+                bruto = self._chamar(nome, provedor, kw, custo)
                 valor = validar(bruto) if validar else bruto
             except (ErroProvedor, ValueError) as e:
                 tentativas.append(Tentativa(nome, "falhou", mascarar(str(e))))
@@ -153,7 +160,11 @@ class Roteador:
             if guardado is None:
                 return None
             return (validar(guardado) if validar else guardado,)
-        except Exception:  # cache com defeito ou resposta antiga inválida: segue para o provedor
+        except ValueError:  # resposta antiga que não passa mais na validação: segue para o provedor
+            return None
+        except Exception as e:  # cache com defeito (banco travado, arquivo preso): segue, mas avisa
+            if self.aviso:
+                self.aviso(f"  ⚠ cache indisponível: {mascarar(str(e))[:120]}")
             return None
 
     def _guardar_cache(self, chave, nome, provedor, valor):
@@ -161,8 +172,9 @@ class Roteador:
             return
         try:
             self.cache.cache_guardar(chave, nome, provedor.modelo, valor)
-        except Exception:  # falha no cache nunca derruba a geração
-            pass
+        except Exception as e:  # falha no cache nunca derruba a geração, mas avisa
+            if self.aviso:
+                self.aviso(f"  ⚠ não deu para guardar no cache: {mascarar(str(e))[:120]}")
 
     def _avisar_falha(self, tentativa):
         if self.aviso:  # mostra a falha mesmo quando o próximo provedor resolve (senão o motivo some)
@@ -195,6 +207,22 @@ class Roteador:
                 if not e.temporario or n == self.repeticoes:
                     raise
                 self._dormir(self.espera_base * 2**n)
+
+    # -- prompt por serviço (K35) -------------------------------------------------
+    def _preparar_prompt(self, nome, provedor, kwargs):
+        """Com `neutro` (prompt neutro da cena), escreve o prompt no molde deste provedor e confere por regra."""
+        if "neutro" not in kwargs:
+            return kwargs
+        from .prompts_midia import preparar
+
+        kw = {k: v for k, v in kwargs.items() if k != "neutro"}
+        if provedor.cfg.get("prompt_por_molde") is False:  # local (Ken Burns): usa o pedido original e nunca é barrado
+            return kw
+        pronto = preparar(nome, kwargs["neutro"], perfil=self.perfil)
+        kw["prompt"] = pronto["prompt"]
+        if pronto.get("negativo") and provedor.cfg.get("aceita_negativo"):
+            kw["negativo"] = pronto["negativo"]
+        return kw
 
     # -- licença e cotas (K34) ---------------------------------------------------
     def _bloqueio_de_licenca(self, provedor, tarefa):

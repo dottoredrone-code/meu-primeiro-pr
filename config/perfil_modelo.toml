@@ -31,6 +31,8 @@ paleta = []                  # ex.: ["#1E3A5F", "#F2C14E"]
 fontes = []
 logo = ""                    # caminho dentro de dados/perfis/<id>/
 referencias = []             # imagens de referência (personagem, estilo) dentro de dados/perfis/<id>/
+evitar = []                  # o que a imagem nunca deve ter, em inglês (ex.: ["people", "cars"]); soma ao padrão
+evitar_nomes = []            # pessoas reais, marcas e obras que o prompt não pode citar (checagem antes da cota, K35)
 
 # Ajustes de provedor só deste perfil (ex.: voz). Não aceita chaves, base_url, classe, modelo, custo nem timeout
 # (modelo e custo são regra do produto: teto D20 e revisão mensal KR1).

@@ -130,11 +130,17 @@ def pesquisar(roteador, tema, max_resultados=5):
     )
 
 
-def gerar_imagem(roteador, prompt, saida, perfil=None, proporcao=None):
-    if perfil and perfil.visual():
-        prompt = f"{prompt}. {perfil.visual()}"
+def gerar_imagem(roteador, prompt, saida, perfil=None, proporcao=None, cena=None):
+    """Com `cena` (do roteiro), cada serviço recebe o prompt no molde dele, já conferido (K35)."""
     proporcao = proporcao or (perfil.formato.get("proporcao") if perfil else None)
     extra = {"proporcao": proporcao} if proporcao else {}
+    if cena is not None:
+        from .prompts_midia import neutro_da_cena
+
+        neutro = neutro_da_cena(cena, "imagem", perfil=perfil, proporcao=proporcao)
+        return roteador.executar("imagem", neutro=neutro, prompt=prompt, saida=Path(saida), **extra)
+    if perfil and perfil.visual():
+        prompt = f"{prompt}. {perfil.visual()}"
     return roteador.executar("imagem", prompt=prompt, saida=Path(saida), **extra)
 
 
@@ -142,9 +148,14 @@ def gerar_voz(roteador, texto, saida):
     return roteador.executar("voz", texto=texto, saida=Path(saida))
 
 
-def gerar_video(roteador, imagem, prompt, saida, duracao=5, proporcao=None, perfil=None, clima=None):
-    """proporcao explícita vence; sem ela, vale a do perfil (formato.proporcao). clima: efeitos do zoom local."""
+def gerar_video(roteador, imagem, prompt, saida, duracao=5, proporcao=None, perfil=None, clima=None, cena=None):
+    """proporcao explícita vence; sem ela, vale a do perfil (formato.proporcao). clima: efeitos do zoom local.
+    cena: com ela, cada serviço recebe o prompt de movimento no molde dele, já conferido (K35)."""
     proporcao = proporcao or (perfil.formato.get("proporcao") if perfil else None)
     extra = {"clima": clima} if clima else {}
+    if cena is not None:
+        from .prompts_midia import neutro_da_cena
+
+        extra["neutro"] = neutro_da_cena(cena, "animar", perfil=perfil, proporcao=proporcao)
     return roteador.executar("animar", imagem=Path(imagem), prompt=prompt, saida=Path(saida), duracao=duracao,
                              proporcao=proporcao, **extra)

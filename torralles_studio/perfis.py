@@ -28,7 +28,10 @@ PROPORCOES = {"9:16", "16:9", "1:1", "4:5"}
 # O perfil ajusta estilo do provedor (voz, tamanho…), nunca o que é regra do produto:
 # chaves e endereços (segurança), modelo e custo (teto D20 e modelos como dados, KR1), família (juízes).
 CAMPOS_PROIBIDOS = {"classe", "base_url", "familia", "modelo", "custo_usd", "custo_usd_por_segundo", "timeout",
-                    "cache", "duracao_padrao_s"}
+                    "cache", "duracao_padrao_s",
+                    # licença, marca d'água e cota são regra do produto (D2, D22, D24): o perfil não afrouxa
+                    "somente_nao_comercial", "licenca", "marca_dagua", "cota", "licenca_conferida", "termos",
+                    "prompt_por_molde"}
 
 
 class ErroPerfil(ValueError):
@@ -136,6 +139,7 @@ class Perfil:
                         cotas=getattr(base, "cotas", None))
         novo.comercial = self.comercial
         novo.licenca_por_modalidade = dict(self.licenca_por_modalidade)
+        novo.perfil = self
         novo._descanso_ate = base._descanso_ate  # descanso de provedor (429/401) vale para todos
         novo.aviso = base.aviso
         return novo
@@ -206,7 +210,7 @@ def _validar(dados, arquivo, pasta_raiz, provedores_conhecidos, teto_maximo=None
     estilo["palavras_evitar"] = _lista_de_textos(estilo.get("palavras_evitar"), "estilo.palavras_evitar", pid)
     kit = dict(_tabela(dados.get("kit_visual"), "kit_visual", pid))
     kit["logo"] = _texto(kit.get("logo"), "kit_visual.logo", pid)
-    for campo in ("paleta", "fontes", "referencias"):
+    for campo in ("paleta", "fontes", "referencias", "evitar", "evitar_nomes"):
         kit[campo] = _lista_de_textos(kit.get(campo), f"kit_visual.{campo}", pid)
     perfil = Perfil(
         id=pid, nome=str(dados["nome"]).strip(), pasta=pasta_raiz / pid, categoria=cat,

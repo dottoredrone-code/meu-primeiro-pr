@@ -3,6 +3,7 @@
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from . import funcoes
 from .config import carregar_roteador
@@ -179,6 +180,113 @@ def comando_cotas(args):
     return 0
 
 
+def comando_prompt_midia(args):
+    """Prompt pronto de cada serviço da fila para uma ideia (K35): funciona sem chave nenhuma."""
+    from .config import carregar_config
+    from .prompts_midia import PromptReprovado, neutro_da_cena, preparar
+
+    perfil = None
+    if args.perfil:
+        from .config import carregar_perfis
+
+        perfil = carregar_perfis(args.config).obter(args.perfil)
+    cena = {"prompt_imagem": args.ideia, "prompt_movimento": args.movimento or "", "clima": args.clima,
+            "instrucao": args.instrucao, "texto_na_imagem": args.com_texto}
+    neutro = neutro_da_cena(cena, args.modalidade, perfil=perfil, proporcao=args.proporcao)
+    dados = carregar_config(args.config)
+    tarefa = args.modalidade
+    servicos = [args.servico] if args.servico else list(dados.get("tarefas", {}).get(tarefa, {}).get("cadeia", []))
+    servicos += [] if args.servico else list((dados.get("sites") or {}))
+    if not servicos:
+        servicos = ["padrao"]
+    falhas = 0
+    for servico in servicos:
+        try:
+            pronto = preparar(servico, neutro, perfil=perfil)
+        except PromptReprovado as e:
+            falhas += 1
+            print(f"✗ {servico}: {e}")
+            continue
+        print(f"== {servico} (molde {pronto['molde']}, {len(pronto['prompt'])} caracteres)")
+        print(pronto["prompt"])
+        if pronto.get("negativo"):
+            print(f"   negativo: {pronto['negativo']}")
+        if pronto.get("cortados"):
+            print(f"   (saiu para caber no limite: {', '.join(pronto['cortados'])})")
+    return 1 if falhas == len(servicos) else 0
+
+
+def _navegador(args, banco):
+    from .config import carregar_config, carregar_roteador
+    from .navegador import Navegador, sites_do_config
+
+    dados = carregar_config(args.config)
+    roteador = carregar_roteador(args.config, banco=banco)
+    tamanho = dados.get("seguranca", {}).get("tamanho_maximo_download_mb", 300)
+    return Navegador(banco, sites_do_config(dados), cotas=roteador.cotas, tamanho_maximo_mb=tamanho)
+
+
+def _perfil_de(args):
+    if not getattr(args, "perfil", None):
+        return None
+    from .config import carregar_perfis
+
+    return carregar_perfis(args.config).obter(args.perfil)
+
+
+def comando_pedidos_navegador(args):
+    """Grava saidas/<tema>/navegador/pedidos.json para a skill midia-navegador (K37)."""
+    import json as _json
+
+    from .config import carregar_banco
+    from .navegador import ErroNavegador
+
+    pasta = Path(args.pasta)
+    roteiro = pasta / "roteiro.json"
+    if not roteiro.is_file():
+        print(f"✗ não achei {roteiro}: rode o produzir do tema antes", file=sys.stderr)
+        return 1
+    cenas = _json.loads(roteiro.read_text(encoding="utf-8")).get("cenas", [])
+    escolhidas = set(args.cenas or [])
+    lista = [{**c, "indice": i} for i, c in enumerate(cenas, 1) if not escolhidas or i in escolhidas]
+    for c in lista:  # no animar, a entrada é a imagem que o próprio Studio fez para a cena
+        imagem = pasta / f"cena_{c['indice']:02d}.png"
+        if args.modalidade in ("animar", "editar_imagem") and imagem.is_file():
+            c["entrada"] = str(imagem)
+    with carregar_banco(args.config) as banco:
+        try:
+            dados = _navegador(args, banco).criar_pedidos(pasta, lista, args.modalidade, perfil=_perfil_de(args))
+        except ErroNavegador as e:
+            print(f"✗ {e}", file=sys.stderr)
+            return 1
+    for item in dados["fila"]:
+        print(f"{'✓' if not item['fora'] else '·'} {item['site']}" + (f": {item['fora']}" if item["fora"] else ""))
+    print(f"{len(dados['pedidos'])} pedidos em {pasta / 'navegador' / 'pedidos.json'}")
+    if not dados["sites"]:
+        print("⚠ nenhum site disponível agora: veja os motivos acima", file=sys.stderr)
+        return 1
+    return 0
+
+
+def comando_importar_midia(args):
+    """Confere e registra o que a skill baixou dos sites (K37)."""
+    from .config import carregar_banco, carregar_biblioteca
+    from .navegador import ErroNavegador
+
+    with carregar_banco(args.config) as banco:
+        try:
+            importados, problemas = _navegador(args, banco).importar(
+                args.pasta, carregar_biblioteca(args.config, banco=banco), site=args.site, perfil=_perfil_de(args))
+        except ErroNavegador as e:
+            print(f"✗ {e}", file=sys.stderr)
+            return 1
+    for p in problemas:
+        print(f"  ⚠ {p}", file=sys.stderr)
+    for i in importados:
+        print(f"✓ {i['id']}: {i['site']} · {i['tipo']} {i['largura']}x{i['altura']} · licença {i['licenca']}")
+    return 0 if importados or not problemas else 1
+
+
 def comando_produzir(args, roteador, perfil):
     from .config import carregar_biblioteca, carregar_config, carregar_loop
     from .montagem import ErroMontagem
@@ -194,6 +302,7 @@ def comando_produzir(args, roteador, perfil):
                              aviso=lambda t: print(t, file=sys.stderr, flush=True),
                              refazer_roteiro=args.refazer_roteiro, biblioteca=carregar_biblioteca(args.config),
                              trilha_auto=not args.sem_trilha, capcut=args.capcut, efeitos_auto=not args.sem_efeitos,
+                             publicacao=not args.sem_post, juiz_imagem=not args.sem_juiz_imagem,
                              conferir_voz=None if args.sem_conferir_voz else conferir_voz)
     except KeyboardInterrupt:
         print(f"\n✗ interrompido. O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
@@ -668,6 +777,8 @@ def main(argv=None):
     s.add_argument("--trilha", help="arquivo de música (padrão: escolhida pelo clima do roteiro)")
     s.add_argument("--sem-trilha", action="store_true", help="vídeo só com a narração")
     s.add_argument("--sem-efeitos", action="store_true", help="sem os sons curtos nos cortes (acervo local)")
+    s.add_argument("--sem-juiz-imagem", action="store_true", help="não chama o juiz de visão nas imagens (K38)")
+    s.add_argument("--sem-post", action="store_true", help="sem a capa (capa.jpg) e o texto para postar (post.txt)")
     s.add_argument("--bpm", type=float, help="batidas por minuto da trilha (opcional)")
     s.add_argument("-o", "--pasta", help="pasta do vídeo (padrão: saidas/<tema>)")
     s.add_argument("--refazer-roteiro", action="store_true", help="faz um roteiro novo (e cenas novas) mesmo se já houver")
@@ -675,6 +786,26 @@ def main(argv=None):
     s.add_argument("--sem-conferir-voz", action="store_true",
                    help="não transcreve a narração para conferir a pronúncia (mais rápido, sem custo de transcrição)")
 
+    s = sub.add_parser("prompt-midia", help="prompt pronto de cada serviço para uma ideia, já conferido (K35)")
+    s.add_argument("ideia", help="descrição da imagem, em inglês de preferência")
+    s.add_argument("-m", "--modalidade", default="imagem",
+                   choices=["imagem", "editar_imagem", "animar", "video_texto", "editar_video"])
+    s.add_argument("-s", "--servico", help="só este serviço (provedor, site ou molde)")
+    s.add_argument("-p", "--perfil")
+    s.add_argument("--movimento", help="movimento de câmera (animar/video_texto), ex.: 'pan to the right'")
+    s.add_argument("--clima", help="clima da cena (calmo, curioso, inspirador, epico, alegre, reflexivo, tenso)")
+    s.add_argument("--instrucao", help="o que mudar (editar_imagem/editar_video)")
+    s.add_argument("--proporcao", choices=["9:16", "16:9", "1:1", "4:5"])
+    s.add_argument("--com-texto", action="store_true", help="a imagem pode ter texto escrito")
+    s = sub.add_parser("pedidos-navegador", help="pedidos para os sites grátis no navegador do Claude (K37)")
+    s.add_argument("pasta", help="saidas/<tema> (precisa do roteiro.json)")
+    s.add_argument("-m", "--modalidade", default="imagem", choices=["imagem", "editar_imagem", "animar", "video_texto"])
+    s.add_argument("-c", "--cenas", type=int, nargs="*", help="só estas cenas (1, 2...)")
+    s.add_argument("-p", "--perfil")
+    s = sub.add_parser("importar-midia", help="confere e registra o que veio dos sites (K37)")
+    s.add_argument("pasta", help="saidas/<tema>")
+    s.add_argument("--site", help="de qual site vieram os arquivos (a licença vem do config dele)")
+    s.add_argument("-p", "--perfil")
     s = sub.add_parser("cotas", help="quanto falta de cada cota gratuita e quando renova (K34)")
     marca = s.add_mutually_exclusive_group()
     marca.add_argument("--esgotar", metavar="SERVICO", help="marca o serviço como esgotado até a renovação")
@@ -759,6 +890,12 @@ def main(argv=None):
         return comando_exportar_capcut(args)
     if args.comando == "cotas":
         return comando_cotas(args)
+    if args.comando == "prompt-midia":
+        return comando_prompt_midia(args)
+    if args.comando == "pedidos-navegador":
+        return comando_pedidos_navegador(args)
+    if args.comando == "importar-midia":
+        return comando_importar_midia(args)
     if args.comando == "importar-sons":
         return comando_importar_sons(args)
     if args.comando == "montar":

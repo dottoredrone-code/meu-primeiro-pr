@@ -192,6 +192,15 @@ MIGRACOES = [
         "CREATE TABLE cotas (conta TEXT PRIMARY KEY, usado REAL NOT NULL DEFAULT 0, inicio TEXT, renova_em TEXT, "
         "esgotado_ate TEXT, motivo TEXT, atualizado_em TEXT)",
     ],
+    # 10 — pedidos para sites gratuitos operados no navegador do Claude (K37, spec 14 §E): sobrevivem entre sessões
+    [
+        "CREATE TABLE pedidos_navegador (id TEXT NOT NULL, pasta TEXT NOT NULL, cena INTEGER NOT NULL, "
+        "modalidade TEXT NOT NULL, estado TEXT NOT NULL, tentativas INTEGER NOT NULL DEFAULT 1, prompts_json TEXT, "
+        "entrada TEXT, motivo TEXT, site TEXT, licenca TEXT, prompt TEXT, arquivo TEXT, arquivo_hash TEXT, nota REAL, "
+        "criado_em TEXT NOT NULL, "
+        "atualizado_em TEXT NOT NULL, PRIMARY KEY (id, pasta))",
+        "CREATE INDEX idx_pedidos_navegador_estado ON pedidos_navegador(pasta, estado)",
+    ],
 ]
 # Cada migração é uma lista de comandos (sem partir por ";", que quebraria textos e gatilhos).
 
@@ -199,7 +208,9 @@ MIGRACOES = [
 _FORA_DA_CHAVE = {"saida"}
 # Campos do config do provedor que não mudam o resultado (o resto — voz, tamanho, base_url… — entra na chave).
 _CFG_FORA_DA_CHAVE = {"chave_env", "modelo_env", "timeout", "familia", "custo_usd", "custo_usd_por_segundo",
-                      "duracao_padrao_s", "cache", "classe", "cota", "licenca", "marca_dagua", "licenca_conferida"}
+                      "duracao_padrao_s", "cache", "classe", "cota", "licenca", "marca_dagua", "licenca_conferida",
+                      "aceita_negativo", "prompt_por_molde",
+                      "termos", "conta_env", "nome"}
 _ARQUIVOS = {"imagem", "audio", "video"}
 _PRONTOS = ("aprovado", "revisar")
 
@@ -278,7 +289,7 @@ class Banco:
             Path(self.caminho).parent.mkdir(parents=True, exist_ok=True)
         self.pasta_cache = Path(pasta_cache) if pasta_cache else (
             Path(self.caminho).parent / "cache" if self.caminho != ":memory:" else None)
-        self.con = sqlite3.connect(self.caminho)
+        self.con = sqlite3.connect(self.caminho, timeout=30)  # vários processos na fila: espera em vez de falhar
         self.con.row_factory = sqlite3.Row
         self.con.execute("PRAGMA foreign_keys = ON")
         if self.caminho != ":memory:":

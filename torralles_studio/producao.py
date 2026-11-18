@@ -54,6 +54,23 @@ def _pronto(arquivo):
         return False
 
 
+def _tem_fala(voz):
+    """A narração tem fala de verdade (não é só silêncio)."""
+    try:
+        ini, fim, _ = trecho_falado(voz)
+    except (ErroMontagem, ErroProvedor):
+        return False
+    return fim > ini
+
+
+def _mais_novo(a, b):
+    """`a` foi gravado depois de `b` (ex.: imagem refeita depois do vídeo da cena)."""
+    try:
+        return Path(a).stat().st_mtime > Path(b).stat().st_mtime + 1e-3
+    except OSError:
+        return False
+
+
 _MIDIA_DA_CENA = re.compile(r"(cena_\d{2}(\.parte)?\.(png|mp4)|voz_\d{2}(\.parte)?\.mp3)")
 
 
@@ -62,6 +79,32 @@ def _apagar(arquivo):
         Path(arquivo).unlink(missing_ok=True)
     except OSError:  # no Windows, um ffmpeg interrompido pode ainda segurar o arquivo: fica para a próxima
         pass
+
+
+def _para_juiz(imagem, pasta):
+    """Cópia JPEG de até 1024 px para o juiz (menos tokens, mesmo conteúdo)."""
+    from . import ff
+
+    destino = Path(pasta) / f"{Path(imagem).stem}_juiz.jpg"
+    ff.ffmpeg(["-i", str(imagem), "-vf", "scale='min(1024,iw)':-2", "-frames:v", "1", "-q:v", "3", str(destino)],
+              prazo=120, falha="não deu para preparar a imagem para o juiz")
+    return destino
+
+
+def julgar_imagem(avaliador, cena, img, *, anterior=None, gerador=None):
+    """Nota do juiz de visão para a imagem da cena (K38, spec 03 §3.3). None se não há avaliador com a rubrica."""
+    if avaliador is None or "imagem" not in getattr(avaliador, "rubricas", {}):
+        return None
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as pasta:
+        imagens = [_para_juiz(img, pasta)]
+        if anterior is not None and Path(anterior).is_file():
+            imagens.append(_para_juiz(anterior, pasta))
+        pedido = f"Pedido da cena (o que a imagem deve mostrar): {cena.get('prompt_imagem', '')}"
+        if len(imagens) > 1:
+            pedido += "\nA segunda imagem é a da cena anterior: use só para julgar a consistência."
+        return avaliador.avaliar("imagem", pedido, gerador=gerador, imagens=imagens)
 
 
 def _gerar(destino, fazer):
@@ -114,7 +157,8 @@ def _conferir(conferir_voz, roteador, arquivo, texto):
 
 def prompt_da_imagem(cena, proporcao):
     formato = {"9:16": "vertical 9:16", "16:9": "horizontal 16:9", "1:1": "quadrada 1:1", "4:5": "vertical 4:5"}
-    return (f"{cena['prompt_imagem']}. Composição {formato.get(proporcao, proporcao)}, assunto principal no centro, "
+    correcao = f" Fix: {cena['correcao']}." if cena.get("correcao") else ""
+    return (f"{cena['prompt_imagem']}.{correcao} Composição {formato.get(proporcao, proporcao)}, assunto principal no centro, "
             "sem nenhum texto, letra ou logotipo na imagem.")
 
 
@@ -142,10 +186,50 @@ def _foto_gratuita(roteador, biblioteca, cena, img, proporcao, perfil, avisar):
     return {c: ativo.get(c) for c in ("hash", "caminho", "licenca", "fonte", "autor", "link", "titulo", "camada")}
 
 
+def _imagem_com_juiz(roteador, loop, cena, img, i, pasta, perfil, proporcao, gerador, avisar):
+    """Juiz de visão na imagem da cena; reprovada, refaz uma vez com o feedback no prompt e fica a melhor.
+
+    Devolve os campos para o relatório (nota, juiz, revisar) ou None quando não há juiz configurado.
+    """
+    avaliador = getattr(loop, "avaliador", None)
+    anterior = pasta / f"cena_{i - 1:02d}.png" if i > 1 else None
+    try:
+        av = julgar_imagem(avaliador, cena, img, anterior=anterior, gerador=gerador)
+    except (ErroProvedor, OSError) as e:
+        avisar(f"  ⚠ juiz da imagem indisponível ({e})")
+        return {"juiz_imagem": "revisar"}
+    if av is None:
+        return None
+    if av.sem_juiz:
+        return {"juiz_imagem": "revisar"}
+    campos = {"nota_imagem": av.nota, "juiz_imagem": ",".join(av.juizes)}
+    if av.aprovado:
+        return campos
+    avisar(f"  ⚠ imagem da cena {i} reprovada pelo juiz ({av.nota}); refazendo uma vez com a correção")
+    feedback = "; ".join((av.correcoes or [])[:2] + (av.problemas or [])[:2])[:300]
+    nova = {**cena, "correcao": feedback} if feedback else dict(cena)
+    reserva = img.with_name(f"{img.stem}_antes{img.suffix}")
+    os.replace(img, reserva)
+    try:
+        r2 = _gerar(img, lambda saida: funcoes.gerar_imagem(
+            roteador, prompt_da_imagem(nova, proporcao), saida, perfil=perfil, proporcao=proporcao, cena=nova))
+        av2 = julgar_imagem(avaliador, cena, img, anterior=anterior, gerador=r2.provedor)
+    except (TodosFalharam, ErroProducao, ErroProvedor, OSError) as e:
+        avisar(f"  ⚠ não deu para refazer ({e}); fica a primeira")
+        os.replace(reserva, img)
+        return {**campos, "revisar": True}
+    if av2 is None or av2.sem_juiz or (av2.nota or 0) < (av.nota or 0):
+        os.replace(reserva, img)  # a primeira era melhor (ou não deu para julgar a nova)
+        return {**campos, "revisar": True}
+    _apagar(reserva)
+    return {"nota_imagem": av2.nota, "juiz_imagem": ",".join(av2.juizes), "provedor_refeito": r2.provedor,
+            **({} if av2.aprovado else {"revisar": True})}
+
+
 def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesquisar=False, trilha=None, bpm=None,
                    cfg_montagem=None, aviso=None, refazer_roteiro=False, biblioteca=None, trilha_auto=True,
                    capcut=False, fatos=None, proporcao=None, conferir_voz=None, perfis_referencia=None,
-                   efeitos_auto=True):
+                   efeitos_auto=True, publicacao=True, juiz_imagem=True):
     """Produz o vídeo e devolve o relatório (também salvo em pasta/relatorio.json).
 
     perfis_referencia: arquivo das faixas por categoria (K13; padrão config/perfis_referencia.toml). Vídeo fora
@@ -234,9 +318,14 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
                     if so_fotos and biblioteca is not None:
                         raise ErroProducao("IA de imagem já falhou nesta rodada")
                     r = _gerar(img, lambda saida: funcoes.gerar_imagem(
-                        roteador, prompt_da_imagem(cena, proporcao), saida, perfil=perfil, proporcao=proporcao))
+                        roteador, prompt_da_imagem(cena, proporcao), saida, perfil=perfil, proporcao=proporcao,
+                        cena=cena))
                     fotos.pop(str(i), None)
-                    etapa(f"cena {i}: imagem", r.provedor)
+                    nota = None
+                    if juiz_imagem:
+                        nota = _imagem_com_juiz(roteador, loop, cena, img, i, pasta, perfil, proporcao, r.provedor,
+                                                avisar)
+                    etapa(f"cena {i}: imagem", r.provedor, **(nota or {}))
                 except (TodosFalharam, ErroProducao):
                     if biblioteca is None:
                         raise
@@ -245,7 +334,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
                     etapa(f"cena {i}: imagem", f"foto gratuita ({fotos[str(i)]['fonte']})",
                           licenca=fotos[str(i)]["licenca"])
                 (pasta / "fotos.json").write_text(json.dumps(fotos, ensure_ascii=False, indent=2), encoding="utf-8")
-            if _pronto(voz):
+            if _pronto(voz) and _tem_fala(voz):
                 etapa(f"cena {i}: voz", reaproveitado=True)
             else:
                 avisar(f"== cena {i}/{total}: narração")
@@ -270,19 +359,20 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
                         _apagar(outra)
                 etapa(f"cena {i}: voz", r.provedor,
                       **({"erro_palavras": conferencia["wer"]} if conferencia else {}))
-            ini, fim, _ = trecho_falado(voz)
-            if _pronto(video):
+            fala = trecho_falado(voz)  # medida uma vez: a montagem reaproveita (não mede a voz de novo)
+            ini, fim, _ = fala
+            if _pronto(video) and not _mais_novo(img, video) and not _mais_novo(voz, video):
                 etapa(f"cena {i}: vídeo", reaproveitado=True)
             else:
                 avisar(f"== cena {i}/{total}: movimento")
                 dur = round((fim - ini) + folga + (1.5 if i == total else 0), 2)  # a última segura mais no fim
                 r = _gerar(video, lambda saida: funcoes.gerar_video(
                     roteador, img, cena.get("prompt_movimento", ""), saida, duracao=dur, proporcao=proporcao,
-                    clima=cena.get("clima")))
+                    clima=cena.get("clima"), cena=cena))
                 etapa(f"cena {i}: vídeo", r.provedor)
         except TodosFalharam as e:
             raise ErroProducao(f"cena {i}: {e}") from None
-        cenas.append({"video": str(video), "voz": str(voz), "narracao": cena["narracao"],
+        cenas.append({"video": str(video), "voz": str(voz), "narracao": cena["narracao"], "fala": fala,
                       "texto_tela": cena.get("texto_tela"), "duracao": cena.get("duracao"), "clima": cena.get("clima")})
 
     # 4. Trilha pelo clima do roteiro (K21): reaproveita a escolhida antes; sem trilha, o vídeo sai só com voz
@@ -342,17 +432,18 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
     except (ErroMontagem, ErroProvedor) as e:
         if not musica and not sons:
             raise
-        avisar(f"  ⚠ a trilha ou os efeitos atrapalharam a montagem ({e}); montando só com a narração")
+        avisar(f"  ⚠ a montagem falhou com trilha/efeitos ({e}); tentando só com a narração")
+        for cena in cenas:
+            cena.pop("efeito", None)
+        # Se falhar de novo, o problema não era a trilha nem os efeitos: o erro sobe e a trilha escolhida fica
+        resultado = montar(cenas, final, proporcao=proporcao, cfg=cfg_montagem, pasta_trabalho=pasta / "montagem",
+                           duracao_alvo=duracao)
         if musica:
             _apagar(pasta / "trilha.json")
             etapas.append({"etapa": "trilha", "provedor": None, "reaproveitado": False, "aviso": str(e)})
         if sons:
             etapas.append({"etapa": "efeitos", "provedor": None, "reaproveitado": False, "aviso": str(e)})
         musica, sons = None, []
-        for cena in cenas:
-            cena.pop("efeito", None)
-        resultado = montar(cenas, final, proporcao=proporcao, cfg=cfg_montagem, pasta_trabalho=pasta / "montagem",
-                           duracao_alvo=duracao)
     conferencia = verificar_montagem(resultado, duracao_pedida=duracao)
     relatorio = {
         "tema": tema, "video": str(final), "proporcao": proporcao, "duracao_s": resultado["duracao_s"],
@@ -381,6 +472,31 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
         (pasta / "creditos.txt").write_text(creditos or "Nenhuma mídia exige crédito.\n", encoding="utf-8")
     elif not terceiros:
         _apagar(pasta / "creditos.txt")  # sem mídia de terceiros: crédito antigo não pode ir para a descrição
+    if publicacao:  # capa e texto para postar (não bloqueiam: o vídeo já está pronto)
+        from .provedores.video import TAMANHOS
+        from .publicacao import escrever_post, gerar_capa, gerar_texto
+
+        avisar("== capa e texto para postar")
+        largura, altura = TAMANHOS.get(proporcao) or (1080, 1920)
+        try:
+            relatorio["capa"] = str(gerar_capa(pasta / "cena_01.png", roteiro.get("titulo") or tema,
+                                               pasta / "capa.jpg", largura=largura, altura=altura))
+        except (ErroProvedor, OSError) as e:
+            relatorio["capa_erro"] = str(e)
+            avisar(f"  ⚠ não deu para gerar a capa ({e})")
+        guardado = _ler_json(pasta / "post.json")
+        roteiro_arq = pasta / "roteiro.json"
+        if (isinstance(guardado, dict) and guardado.get("titulo") and (pasta / "post.txt").is_file()
+                and not _mais_novo(roteiro_arq, pasta / "post.json")):  # roteiro igual: reaproveita sem pagar
+            post = {**guardado, "creditos": relatorio.get("creditos") or ""}
+        else:
+            post = gerar_texto(roteador, roteiro, tema, creditos=relatorio.get("creditos"), perfil=perfil)
+        try:
+            relatorio["post"] = str(escrever_post(post, pasta))
+        except OSError as e:
+            relatorio["post_erro"] = str(e)
+            avisar(f"  ⚠ não deu para gravar o post.txt ({e})")
+        relatorio["custo_usd"] = round(roteador.orcamento.gasto_usd - gasto_inicial, 4)  # inclui o texto do post
     # dados da montagem: permitem exportar para o CapCut depois sem refazer nada
     (pasta / "montagem.json").write_text(json.dumps(resultado, ensure_ascii=False, indent=2, default=str),
                                          encoding="utf-8")

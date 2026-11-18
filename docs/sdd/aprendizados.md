@@ -204,3 +204,20 @@
 - **Relatório que vai para o Git:** sem caminho do PC, sem quebra de tabela por `|` ou nova linha.
 - **Exceção a uma regra do projeto tem de aparecer no resultado** (mesmo juiz para todos ≠ juiz de outra família, D15).
 - 3 rodadas de verificação (1 alto + 4 médios na 1ª; 1 médio na 2ª; corrigidos).
+
+## Camada 7 — Fila gratuita, qualidade das mídias e auditoria: K34–K38 (13–17/11/2026)
+- **Grátis não muda a régua:** o prompt é conferido antes de gastar cota, a imagem passa pelo juiz de visão e
+  a mídia reprovada volta com o feedback; sem juiz, a peça fica "revisar" (nunca aprovada em silêncio).
+- **Olhar o arquivo real antes de confiar no serviço:** a Pollinations pôs a marca "pollinations.ai" mesmo com
+  `nologo`; só apareceu ao abrir a capa. Pela D24 ela saiu da fila.
+- **Cota esgotada ≠ excesso por minuto:** "limit" aparece nos dois; só padrão declarado ou Retry-After longo
+  esgota. Horário de renovação em UTC no banco, Brasília na tela; gasto somado de forma atômica.
+- **Termos de uso mudam o produto:** dos 17 serviços conferidos, só a Cloudflare (API) e o Adobe Firefly (site)
+  liberam uso comercial no grátis sem marca d'água; os outros ficam `a_conferir`, `nao_comercial` ou com marca.
+- **Windows esconde erro de codificação:** o config era lido em cp1252 e os acentos chegavam errados aos juízes;
+  FFmpeg sem `encoding` quebrava com caminho acentuado. Todo arquivo de texto em UTF-8 e todo FFmpeg com prazo.
+- **Retomada precisa conferir datas:** vídeo da cena feito com a imagem antiga era reaproveitado; voz muda passava
+  como pronta. Arquivo derivado mais velho que a origem é refeito.
+- **Sessão que cai no meio de uma gravação pode deixar arquivo corrompido** (um teste virou bytes nulos): conferir
+  os arquivos alterados depois de uma queda, antes de rodar os testes.
+- 5 auditorias + 4 verificações independentes; tudo o que foi apontado foi corrigido ou ficou registrado.

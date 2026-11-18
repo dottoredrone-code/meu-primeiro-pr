@@ -1,4 +1,5 @@
 import base64
+import os
 import urllib.parse
 
 from ..rede import ErroProvedor, baixar, post_json
@@ -57,6 +58,38 @@ class FalImagem(Provedor):
             self.timeout,
         )
         return salvar(saida, baixar(r["images"][0]["url"], timeout=self.timeout))
+
+
+class CloudflareImagem(Provedor):
+    """Workers AI da Cloudflare (FLUX.1 schnell): cota grátis diária de neurons, uso comercial (K36).
+
+    Precisa de duas variáveis no .env: a conta (conta_env) e o token (chave_env). A resposta traz a imagem em
+    base64 no próprio JSON, então não há download de outro domínio.
+    """
+
+    tipo = "imagem"
+
+    def configurado(self):
+        motivo = super().configurado()
+        conta = self.cfg.get("conta_env")
+        if not motivo and conta and not os.environ.get(conta):
+            motivo = f"falta {conta}"
+        return motivo
+
+    def executar(self, prompt, saida, proporcao=None):
+        conta = os.environ.get(self.cfg.get("conta_env", ""), "")
+        url = f"https://api.cloudflare.com/client/v4/accounts/{urllib.parse.quote(conta)}/ai/run/{self.modelo}"
+        r = post_json(url, {"prompt": prompt[:2048], "steps": int(self.cfg.get("passos", 4))},
+                      {"Authorization": f"Bearer {self.chave}"}, self.timeout)
+        imagem = (r.get("result") or {}).get("image") if isinstance(r, dict) else None
+        if not imagem:
+            erros = "; ".join(str(e.get("message", e)) for e in (r.get("errors") or [])) if isinstance(r, dict) else ""
+            raise ErroProvedor(f"Cloudflare não devolveu imagem{': ' + erros if erros else ''}")
+        try:
+            dados = base64.b64decode(imagem, validate=True)
+        except (ValueError, TypeError):
+            raise ErroProvedor("Cloudflare devolveu uma imagem em base64 inválido") from None
+        return salvar(saida, dados)
 
 
 class PollinationsImagem(Provedor):

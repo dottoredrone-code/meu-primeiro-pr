@@ -102,7 +102,7 @@ Config: `[provedores.X.cota]` com `conta`, `limite` (exige `renova`), `renova`, 
      Claude, cola o prompt, espera, baixa o resultado e passa para o próximo pedido.
   3. Quando o site avisa que os créditos acabaram, o Claude marca o site como esgotado até a renovação
      (`cotas --esgotar site`) e segue no próximo site da fila.
-  4. `importar-midia saidas/<tema>/navegador` confere cada arquivo (é imagem ou vídeo de verdade, pelo `ffprobe`;
+  4. `importar-midia saidas/<tema> --site <site>` confere cada arquivo (é imagem ou vídeo de verdade, pelo `ffprobe`;
      tamanho máximo do `[seguranca]`) e registra na biblioteca com serviço e licença. Depois o `produzir` retoma
      (sem pagar de novo) usando essas mídias.
 - Regras (as mesmas da D23):
@@ -110,7 +110,7 @@ Config: `[provedores.X.cota]` com `conta`, `limite` (exige `renova`), `renova`, 
   - o Claude não cria conta, não paga, não resolve CAPTCHA e não envia mídia de terceiros;
   - um CAPTCHA ou pedido de pagamento para o pedido e passa para o próximo site.
 - **Pedidos que esperam o navegador.** O loop de hoje espera a resposta na hora; o site não. Por isso:
-  - cada pedido fica no banco com estado `pendente → importado → avaliado → aprovado | refazer`, e as tentativas por
+  - cada pedido fica no banco com estado `pendente → importado → aprovado | refazer | revisar`, e as tentativas por
     serviço continuam contando de uma sessão para outra;
   - a peça ganha o status `aguardando_navegador`;
   - quando o `produzir` retoma, ele avalia o que foi importado, decide entre aprovar ou refazer (com o prompt

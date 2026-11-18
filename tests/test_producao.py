@@ -104,7 +104,7 @@ class TestProduzirVideo(unittest.TestCase):
             self.assertEqual(rel["medidas"]["resolucao"], "1080x1920")
             self.assertEqual(self.voz.chamadas, 2)
             self.assertEqual([p["proporcao"] for p in self.img.pedidos], ["9:16", "9:16"])
-            self.assertIn("sem nenhum texto", self.img.pedidos[0]["prompt"])
+            self.assertIn("Avoid: text", self.img.pedidos[0]["prompt"])  # K35: prompt no molde do serviço
             roteiro = next(e for e in rel["etapas"] if e["etapa"] == "roteiro")
             self.assertEqual((roteiro["provedor"], roteiro["nota"]), ("redator", 85))
             self.assertGreater(rel["custo_usd"], 0)
@@ -141,7 +141,8 @@ class TestProduzirVideo(unittest.TestCase):
             rt2, loop2 = self.montar(roteiros=[])
             rel = produzir_video(rt2, loop2, "chá verde", pasta, duracao=8, cfg_montagem={"preset": "ultrafast"})
             refeitas = sorted(e["etapa"] for e in rel["etapas"] if not e["reaproveitado"])
-            self.assertEqual(refeitas, ["cena 1: imagem", "cena 1: voz", "cena 2: vídeo"])
+            # imagem e voz da cena 1 refeitas: o vídeo dela (feito com as antigas) também é refeito
+            self.assertEqual(refeitas, ["cena 1: imagem", "cena 1: voz", "cena 1: vídeo", "cena 2: vídeo"])
             self.assertFalse(list(pasta.glob("*.parte.*")))  # nada provisório sobrando
 
     def test_roteiro_de_outro_tema_ou_duracao_nao_e_reaproveitado(self):

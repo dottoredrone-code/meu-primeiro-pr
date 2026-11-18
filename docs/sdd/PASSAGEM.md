@@ -1,4 +1,4 @@
-# Passagem de bastão — Torralles Studio (atualizada em 28/10/2026)
+# Passagem de bastão — Torralles Studio (atualizada em 17/11/2026)
 
 Leia este arquivo antes de continuar. O trabalho vinha numa sessão na nuvem e continua numa sessão local no PC
 do Diego (`C:\Users\Oem\meu-primeiro-pr`, branch **`claude/multi-model-integration-app-g1697x`**).
@@ -18,7 +18,20 @@ Leia também `CLAUDE.md`, `KANBAN.md`, `docs/sdd/decisoes.md` e o fim de `docs/s
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` e
   `Claude-Session: https://claude.ai/code/session_01NAT84JQjJ937ynY1rQbLgm`.
 
-## Onde paramos
+## Onde paramos (17/11/2026)
+- **Feito e verificado:** K21 (trilha e efeitos nos cortes), K22/K32 (pico, fotos que combinam com a cena), K34
+  (cotas grátis que duram), K35 (prompt por serviço com checagem antes da cota), K36 (Cloudflare FLUX grátis com
+  uso comercial; Pollinations fora por marca d'água), K37 (sites grátis pelo navegador do Claude, skill
+  `midia-navegador`), K38 (juiz de visão nas imagens), capa e `post.txt`, e a auditoria geral de 17/11.
+- **Vídeo do chá verde:** a cena 2 é uma foto fora do tema (de antes da correção K32) e as imagens da Pollinations
+  têm a marca dela. Refazer as imagens depois que a chave da Cloudflare estiver no `.env`.
+- **Depende do Diego:** chave grátis da Cloudflare; chave com visão para o juiz de imagem; pagar o saldo do Gemini;
+  logins nos sites (Adobe Firefly primeiro); conferir os termos da Pollinations e dos sites `a_conferir`; ouvir e
+  aprovar o vídeo (K32); decidir a licença do edge-tts (painel de ferramentas, item 5).
+- **Painel de ferramentas (13/11):** sem decisões ainda (faster-whisper, legenda no tempo real, vídeo de banco,
+  HyperFrames, edge-tts, Kokoro, OpenCLIP). Implementar só o que o Diego aprovar.
+
+## Antes (28/10/2026)
 - **K32 (primeiro vídeo real)** rodou no PC em 21/10 com `produzir`. Diego: "não ficou tão ruim, faltam
   animações e efeitos". Já feito depois: legenda palavra por palavra, título animado, transição pelo clima,
   movimento grátis com aceleração suave e efeitos por clima, foto gratuita licenciada quando a IA de imagem falha.
