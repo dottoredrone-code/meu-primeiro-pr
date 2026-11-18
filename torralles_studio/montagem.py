@@ -14,14 +14,15 @@ Etapas:
 Usa só FFmpeg. A pasta de trabalho guarda clipes, áudios e legendas (.ass e .srt) para a exportação (K23).
 """
 
+import hashlib
 import json
 import math
 import re
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 
+from . import ff
 from .provedores.video import tamanho_do_formato
 from .rede import ErroProvedor
 
@@ -61,32 +62,27 @@ class ErroMontagem(Exception):
 
 # ---------------------------------------------------------------- FFmpeg
 
-FFMPEG_PRAZO_S = 900  # nenhuma etapa da montagem leva tanto: passou disso, o FFmpeg travou
+FFMPEG_PRAZO_S = ff.PRAZO_S  # nenhuma etapa da montagem leva tanto: passou disso, o FFmpeg travou
 
 
 def _ff(args, cwd=None):
-    try:
-        proc = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-nostdin", *args], capture_output=True,
-                              stdin=subprocess.DEVNULL, text=True, cwd=cwd, timeout=FFMPEG_PRAZO_S)
-    except subprocess.TimeoutExpired:
-        raise ErroProvedor(f"ffmpeg travou (mais de {FFMPEG_PRAZO_S // 60} min) e foi interrompido") from None
-    if proc.returncode != 0:
-        raise ErroProvedor(f"ffmpeg falhou: {proc.stderr.strip()[-400:]}")
-    return proc.stderr
+    return ff.ffmpeg(args, prazo=FFMPEG_PRAZO_S, cwd=cwd)
 
 
 def duracao(arquivo):
-    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(arquivo)],
-                       capture_output=True, stdin=subprocess.DEVNULL, text=True)
+    saida = ff.ffprobe(["-show_entries", "format=duration", "-of", "csv=p=0", str(arquivo)])
     try:
-        return float(r.stdout.strip())
+        return float(saida.strip())
     except ValueError:
         raise ErroMontagem(f"não consegui ler a duração de {Path(arquivo).name}") from None
 
 
 def medir_volume(arquivo):
     """{"lufs", "pico_dbtp"} pelo ebur128 (pico verdadeiro). None quando não há som medível."""
-    log = _ff(["-i", str(arquivo), "-vn", "-af", "ebur128=peak=true", "-f", "null", "-"])
+    return _ler_ebur128(_ff(["-i", str(arquivo), "-vn", "-af", "ebur128=peak=true", "-f", "null", "-"]))
+
+
+def _ler_ebur128(log):
     resumo = log[log.rfind("Summary:"):]
     lufs = re.search(r"I:\s*(-?[\d.]+|-inf) LUFS", resumo)
     pico = re.search(r"Peak:\s*(-?[\d.]+|-inf) dBFS", resumo)
@@ -116,15 +112,18 @@ def pausas(arquivo, ruido_db=-35, minimo_s=0.15):
 
 def limiar_silencio(arquivo):
     """Limiar de silêncio relativo ao pico (voz baixa não vira "sem fala"): −35 dB ou 25 dB abaixo do pico."""
-    log = _ff(["-i", str(arquivo), "-vn", "-af", "volumedetect", "-f", "null", "-"])
+    return _limiar_do_log(_ff(["-i", str(arquivo), "-vn", "-af", "volumedetect", "-f", "null", "-"]))
+
+
+def _limiar_do_log(log):
     m = re.search(r"max_volume:\s*(-?[\d.]+) dB", log)
     return max(-60.0, min(-35.0, float(m.group(1)) - 25)) if m else -35.0  # abaixo de −60 dB é silêncio
 
 
-def trecho_falado(arquivo):
-    """(início, fim, pausas internas) da fala dentro do arquivo de voz."""
+def trecho_falado(arquivo, limiar=None):
+    """(início, fim, pausas internas) da fala dentro do arquivo de voz. limiar: já medido (opcional)."""
     total = duracao(arquivo)
-    silencios = pausas(arquivo, limiar_silencio(arquivo))
+    silencios = pausas(arquivo, limiar_silencio(arquivo) if limiar is None else limiar)
     ini, fim, internas = 0.0, total, []
     for a, b in silencios:
         if a <= 0.05:
@@ -452,7 +451,17 @@ def _loudnorm(origem, destino, c):
     m = json.loads(log[log.rfind("{"):log.rfind("}") + 1])
     medido = (f"measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}:"
               f"measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true")
-    _ff(["-i", str(origem), "-af", f"loudnorm={alvo}:{medido},aresample=48000", "-c:a", "pcm_f32le", str(destino)])
+    log = _ff(["-i", str(origem), "-af", f"loudnorm={alvo}:{medido}:print_format=json,aresample=48000",
+               "-c:a", "pcm_f32le", str(destino)])
+    # Ganho que a normalização deu (a exportação usa nas faixas soltas): saída − entrada pelo mesmo medidor.
+    ganho_total = None
+    try:
+        m2 = json.loads(log[log.rfind("{"):log.rfind("}") + 1])
+        ganho_total = float(m2["output_i"]) - float(m2["input_i"])
+        if not math.isfinite(ganho_total):
+            ganho_total = None
+    except (ValueError, KeyError, TypeError):
+        pass
     # O loudnorm mede diferente do ebur128 em áudio com muitas pausas: corrige o resto se o pico permitir.
     v = medir_volume(destino)
     if v["lufs"] is not None and abs(v["lufs"] - c["lufs"]) > 0.3:
@@ -461,6 +470,9 @@ def _loudnorm(origem, destino, c):
             ajustado = destino.with_name(destino.stem + "_ajuste.wav")
             _ff(["-i", str(destino), "-af", f"volume={ganho:.2f}dB", "-c:a", "pcm_f32le", str(ajustado)])
             ajustado.replace(destino)
+            if ganho_total is not None:
+                ganho_total += round(ganho, 2)
+    return ganho_total
 
 
 def montar(cenas, saida, *, proporcao="9:16", trilha=None, bpm=None, primeira_batida_s=0.0, cfg=None,
@@ -469,7 +481,9 @@ def montar(cenas, saida, *, proporcao="9:16", trilha=None, bpm=None, primeira_ba
 
     cenas: [{"video": arquivo (vídeo ou imagem), "voz": arquivo ou None, "narracao": texto da legenda,
              "texto_tela": texto curto no alto (opcional), "duracao": segundos do roteiro (opcional),
-             "efeito": som curto que toca no corte que abre a cena (opcional; 15 LU abaixo da voz)}]
+             "efeito": som curto que toca no corte que abre a cena (opcional; 15 LU abaixo da voz),
+             "fala": (início, fim[, pausas internas]) já medidos com trecho_falado (opcional; não mede de novo),
+             "voz_lufs": nível da voz já medido com medir_volume (opcional)}]
     trilha: arquivo de música (opcional; repete se for curta). bpm: batidas por minuto da trilha (opcional).
     tamanho: (largura, altura) para forçar outro tamanho (testes); o padrão vem da proporção.
     duracao_alvo: duração pedida; se a fala ficar curta, a última cena segura até 1,5 s a mais e as outras
@@ -521,9 +535,10 @@ def completar_duracao(tempos, duracao_alvo, extra_final_s=1.5, extra_cena_s=0.3)
 
 def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primeira_batida_s, c, duracao_alvo):
     # 1. Fala útil de cada cena e tempos
-    falas = []
+    falas, niveis = [], []
     for i, cena in enumerate(cenas, 1):
-        fala = trecho_falado(cena["voz"]) if cena.get("voz") else None
+        fala, nivel = _medir_voz(cena) if cena.get("voz") else (None, None)
+        niveis.append(nivel)
         if fala and fala[1] <= fala[0]:
             if cena.get("narracao"):
                 raise ErroMontagem(f"cena {i}: não encontrei fala no arquivo de voz (está mudo?)")
@@ -562,14 +577,13 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
     # 4. Voz: cada fala na sua posição
     voz = pasta / "voz.wav"
     entradas, filtros, rotulos = [], [], []
-    for i, (cena, tp, fala) in enumerate(zip(cenas, tempos, falas)):
+    for i, (cena, tp, fala, nivel) in enumerate(zip(cenas, tempos, falas, niveis)):
         if not fala:
             continue
         atraso = round((tp["inicio"] + tp["fala_em"]) * 1000)
         n = len(entradas) // 4
         entradas += ["-ss", f"{fala[0]:.3f}", "-i", str(cena["voz"])]  # pula o silêncio do começo da voz
         # Iguala o nível das falas (provedores de voz diferentes saem com volumes diferentes).
-        nivel = medir_volume(cena["voz"])["lufs"]
         ganho = 0.0 if nivel is None else max(-20.0, min(30.0, VOZ_LUFS - nivel))
         filtros.append(f"[{n}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={ganho:.2f}dB,"
                        f"adelay={atraso}:all=1[v{n}]")
@@ -603,7 +617,8 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
         _ff([*entradas, "-filter_complex", ";".join(filtros), "-map", "[ef]", "-c:a", "pcm_f32le", str(efeitos_wav)])
         nivel_ef = _nivel_curto(efeitos_wav)
         # a faixa inteira mede até ~1 LU acima de cada som: se passou do alvo, abaixa a faixa (nunca sobe)
-        if nivel_ef is not None and medida_voz["lufs"] is not None                 and medida_voz["lufs"] - nivel_ef < c["efeito_lu_abaixo"]:
+        if (nivel_ef is not None and medida_voz["lufs"] is not None
+                and medida_voz["lufs"] - nivel_ef < c["efeito_lu_abaixo"]):
             ajuste = medida_voz["lufs"] - nivel_ef - c["efeito_lu_abaixo"] - 0.5
             ajustada = pasta / "efeitos_ajustados.wav"
             _ff(["-i", str(efeitos_wav), "-af", f"volume={ajuste:.2f}dB", "-c:a", "pcm_f32le", str(ajustada)])
@@ -656,8 +671,9 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
     audio = pasta / "audio_final.wav"
     if medida_voz["lufs"] is None and not trilha and not info_efeitos:
         shutil.copyfile(mistura, audio)  # vídeo sem som algum: nada a normalizar
+        ganho_final = 0.0
     else:
-        _loudnorm(mistura, audio, c)
+        ganho_final = _loudnorm(mistura, audio, c)
 
     # 7. Imagem + transições + legendas + áudio
     entradas = []
@@ -682,9 +698,12 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
 
     # 8. A codificação AAC pode subir o pico verdadeiro alguns décimos (visto: −0,7 dBTP com alvo −1,5): mede o
     #    arquivo pronto e, se passou do eliminatório, refaz só o áudio mais baixo (o vídeo é copiado).
+    volume_final = None  # medida do arquivo pronto, guardada para a verificação não medir de novo
     for _ in range(2):
-        pico = medir_volume(saida)["pico_dbtp"]
+        vol = medir_volume(saida)
+        pico = vol["pico_dbtp"]
         if pico is None or pico <= PICO_MAXIMO_DBTP:
+            volume_final = {**vol, **_assinatura(saida)}
             break
         corrigido = saida.with_name(saida.stem + "_pico" + saida.suffix)
         _ff(["-i", str(saida), "-i", str(audio), "-map", "0:v", "-map", "1:a", "-c:v", "copy",
@@ -695,7 +714,14 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
         _ff(["-i", str(audio), "-af", f"volume={c['pico_dbtp'] - pico:.2f}dB", "-c:a", "pcm_f32le",
              str(audio_corrigido)])
         audio_corrigido.replace(audio)
+        if ganho_final is not None:
+            ganho_final += round(c["pico_dbtp"] - pico, 2)
 
+    sinc = None
+    if legendas:
+        desvios, problemas_sinc = sincronia(legendas, voz)
+        sinc = {"desvios": desvios, "problemas": problemas_sinc,
+                "medida_de": {"legendas": _hash_legendas(legendas), **_assinatura(voz)}}
     return {
         "arquivo": str(saida), "proporcao": proporcao, "largura": largura, "altura": altura,
         "duracao_s": total, "tempos": tempos, "congelado_s": congelados,
@@ -703,19 +729,58 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
         "legendas": [{"inicio": a, "fim": b, "linhas": linhas} for a, b, linhas in legendas],
         "textos_tela": [{"inicio": a, "fim": b, "linhas": linhas} for a, b, linhas in textos_tela],
         "estilo_legenda": estilo, "voz": medida_voz, "trilha": info_trilha, "efeitos": info_efeitos,
-        "sincronia": dict(zip(("desvios", "problemas"), sincronia(legendas, voz))) if legendas else None,
+        "sincronia": sinc, "volume_final": volume_final,
+        "ganho_db": None if ganho_final is None else round(ganho_final, 2),  # da normalização final (exportação)
         "pasta_trabalho": str(pasta), "fps": c["fps"],
     }
+
+
+def _medir_voz(cena):
+    """(fala, lufs) da voz da cena; usa o que o chamador já mediu (cena["fala"], cena["voz_lufs"]).
+
+    Sem nada medido: uma passada lê o pico (limiar do silêncio) e o nível juntos; outra acha as pausas.
+    """
+    arquivo, fala, nivel = cena["voz"], cena.get("fala"), cena.get("voz_lufs")
+    if nivel is None or fala is None:
+        log = _ff(["-i", str(arquivo), "-vn", "-af", "volumedetect,ebur128=peak=true", "-f", "null", "-"])
+        if nivel is None:
+            nivel = _ler_ebur128(log)["lufs"]
+        if fala is None:
+            fala = trecho_falado(arquivo, _limiar_do_log(log))
+    fala = tuple(fala)
+    if len(fala) < 3:  # sem as pausas internas: as legendas trocam pela estimativa proporcional
+        fala = (float(fala[0]), float(fala[1]), [])
+    return fala, (None if nivel is None else float(nivel))
+
+
+def _assinatura(arquivo):
+    """Caminho, tamanho e data do arquivo: se mudar, a medida guardada não vale mais."""
+    p = Path(arquivo)
+    try:
+        st = p.stat()
+    except OSError:
+        return {"caminho": str(p), "bytes": None, "mtime_ns": None}
+    return {"caminho": str(p.resolve()), "bytes": st.st_size, "mtime_ns": st.st_mtime_ns}
+
+
+def _mesma_assinatura(guardada, arquivo):
+    atual = _assinatura(arquivo)
+    return (isinstance(guardada, dict) and atual["bytes"] is not None
+            and all(guardada.get(k) == atual[k] for k in atual))
+
+
+def _hash_legendas(legendas):
+    normal = [[round(float(a), 3), round(float(b), 3), [str(x) for x in linhas]] for a, b, linhas in legendas]
+    return hashlib.sha1(json.dumps(normal, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------- verificação (eliminatórios da spec 03 §3.6)
 
 def _sondar(arquivo):
-    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
-                        "stream=codec_type,codec_name,pix_fmt,width,height", "-of", "json", str(arquivo)],
-                       capture_output=True, stdin=subprocess.DEVNULL, text=True)
+    saida = ff.ffprobe(["-show_entries", "stream=codec_type,codec_name,pix_fmt,width,height", "-of", "json",
+                        str(arquivo)])
     try:
-        return json.loads(r.stdout).get("streams", [])
+        return json.loads(saida).get("streams", [])
     except json.JSONDecodeError:
         return []
 
@@ -746,7 +811,8 @@ def verificar_montagem(resultado, duracao_pedida=None, voz=None):
     if duracao_pedida and abs(dur - duracao_pedida) > 0.1 * duracao_pedida:
         problemas.append(f"duração {dur:.1f} s fora de ±10% do pedido ({duracao_pedida} s)")
     if audio:
-        vol = medir_volume(arquivo)
+        guardado = resultado.get("volume_final")  # medido na montagem: arquivo igual dispensa medir de novo
+        vol = guardado if _mesma_assinatura(guardado, arquivo) else medir_volume(arquivo)
         medidas.update(lufs=vol["lufs"], pico_dbtp=vol["pico_dbtp"])
         if vol["lufs"] is None or abs(vol["lufs"] - PADROES["lufs"]) > 1.0:
             problemas.append(f"volume {vol['lufs']} LUFS (precisa −14 ±1)")
@@ -784,7 +850,12 @@ def verificar_montagem(resultado, duracao_pedida=None, voz=None):
 
     voz = Path(voz) if voz else Path(resultado.get("pasta_trabalho", "")) / "voz.wav"
     if legendas:
-        if voz.is_file():  # mede de novo (as legendas podem ter mudado depois da montagem)
+        guardada = resultado.get("sincronia") or {}
+        medida_de = guardada.get("medida_de") or {}
+        if (voz.is_file() and medida_de.get("legendas") == _hash_legendas(legendas)
+                and _mesma_assinatura(medida_de, voz)):  # mesmas legendas e mesma voz: vale a medida da montagem
+            desvios, problemas_sinc = guardada["desvios"], guardada["problemas"]
+        elif voz.is_file():  # mede de novo (as legendas ou a voz mudaram depois da montagem)
             desvios, problemas_sinc = sincronia(legendas, voz)
         elif resultado.get("sincronia"):
             desvios, problemas_sinc = resultado["sincronia"]["desvios"], resultado["sincronia"]["problemas"]

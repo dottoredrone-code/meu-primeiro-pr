@@ -1,7 +1,13 @@
-"""Fatos travados (D15): preço, links, percentuais e nomes do briefing não podem ser alterados nem inventados.
+"""Fatos travados (D15): preço, links e percentuais do briefing não podem ser alterados nem inventados.
 
-Todo texto gerado (roteiro, legenda, texto sobre a imagem) passa por checar_fatos(). Qualquer preço, link
-ou percentual que não esteja nos fatos do briefing reprova a peça (eliminatório).
+checar_fatos() devolve a lista de problemas de um texto gerado (quem chama decide usá-la como eliminatório):
+- preço (R$, US$, €, "49,90 reais"…) ou faixa de preço que não esteja nos fatos;
+- link ou domínio que não esteja nos fatos (citar só o domínio de um link autorizado vale);
+- percentual ("20%", "20 por cento", "vinte por cento") que não esteja nos fatos; "100%" é expressão comum
+  ("100% natural") e sempre passa;
+- campos listados em `obrigatorios` que não aparecem no texto como estão no briefing (sem diferenciar acento
+  e maiúsculas).
+Nomes que não estão em `obrigatorios` não são conferidos (o código não reconhece nome inventado).
 """
 
 import re
@@ -102,8 +108,37 @@ def _link_autorizado(link, permitidos):
     return "/" not in link and any(p.split("/", 1)[0] == link for p in permitidos)
 
 
+_PERC_EXTENSO_UNID = {"um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3, "quatro": 4, "cinco": 5, "seis": 6,
+                      "sete": 7, "oito": 8, "nove": 9, "dez": 10, "onze": 11, "doze": 12, "treze": 13,
+                      "catorze": 14, "quatorze": 14, "quinze": 15, "dezesseis": 16, "dezessete": 17, "dezoito": 18,
+                      "dezenove": 19}
+_PERC_EXTENSO_DEZ = {"vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50, "sessenta": 60, "setenta": 70,
+                     "oitenta": 80, "noventa": 90}
+_PALAVRA_NUM = "|".join(sorted([*_PERC_EXTENSO_UNID, *_PERC_EXTENSO_DEZ, "cem"], key=len, reverse=True))
+# "20 por cento", "vinte por cento", "vinte e cinco por cento", "cem por cento" (texto já sem acento)
+_PERC_POR_CENTO = re.compile(rf"(?<![\w,.])(\d+(?:[.,]\d+)?|(?:{_PALAVRA_NUM})(?:\s+e\s+(?:{_PALAVRA_NUM}))?)"
+                             r"\s+por\s+cento\b")
+_PERC_LIVRES = {100.0}  # "100% natural", "100% algodão": expressão comum, não é desconto inventado
+
+
+def _extenso_para_numero(texto):
+    total = 0
+    for parte in re.split(r"\s+e\s+", texto):
+        valor = 100 if parte == "cem" else _PERC_EXTENSO_UNID.get(parte, _PERC_EXTENSO_DEZ.get(parte))
+        if valor is None:
+            return None
+        total += valor
+    return float(total)
+
+
 def _percentuais(texto):
-    return {float(p.replace(",", ".")) for p in _PERCENTUAL.findall(texto)}
+    achados = {float(p.replace(",", ".")) for p in _PERCENTUAL.findall(texto)}
+    for m in _PERC_POR_CENTO.finditer(_sem_acento(texto)):
+        bruto = m.group(1)
+        valor = float(bruto.replace(",", ".")) if bruto[0].isdigit() else _extenso_para_numero(bruto)
+        if valor is not None:
+            achados.add(valor)
+    return achados
 
 
 def checar_fatos(texto, fatos):
@@ -132,7 +167,7 @@ def checar_fatos(texto, fatos):
             problemas.append(f"link não autorizado no texto: {link}")
 
     perc_ok = _percentuais(referencia)
-    for perc in sorted(_percentuais(texto) - perc_ok):
+    for perc in sorted(_percentuais(texto) - perc_ok - _PERC_LIVRES):
         problemas.append(f"percentual não autorizado no texto: {perc:g}%")
 
     texto_norm = _sem_acento(texto)

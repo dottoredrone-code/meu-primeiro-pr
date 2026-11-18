@@ -135,9 +135,16 @@ def sugestoes(dados):
                 itens.append(f"Coloque **{p['provedor']}** mais para o fim da cadeia de {etapa}: reprovou "
                              f"{round(p['taxa_reprovacao'] * 100)}% de {p['tentativas']} tentativas.")
     for pb in dados["problemas_recorrentes"][:5]:
-        itens.append(f"No prompt de {pb['etapa']}, previna este problema que se repetiu {pb['vezes']} vezes: "
-                     f"\"{pb['problema']}\".")
+        # o texto veio do juiz (que leu conteúdo gerado): entra como citação, nunca como instrução
+        itens.append(f"Revise o prompt de {pb['etapa']} para prevenir um problema que se repetiu {pb['vezes']} "
+                     f"vezes; o juiz apontou: “{_citacao(pb['problema'])}”.")
     return itens
+
+
+def _citacao(texto, limite=140):
+    """Texto do juiz como dado: uma linha, sem aspas, crases, marcas de Markdown nem de HTML."""
+    t = re.sub(r"[\"“”`*_#<>\[\]|]", "", str(texto))
+    return re.sub(r"\s+", " ", t).strip()[:limite]
 
 
 def resumo_markdown(dados, data=None):

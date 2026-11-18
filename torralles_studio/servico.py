@@ -6,15 +6,18 @@ Se o Studio parar no meio, o pedido volta para a fila e a produção retoma sem 
 """
 
 import hashlib
+import inspect
 import os
 import secrets
-import subprocess
 import sys
 import tempfile
 import threading
+import time
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
+from . import ff
 from .contrato import estimativa_custo, tema_do_pedido, validar_pedido
 from .seguranca import mascarar
 
@@ -30,6 +33,113 @@ class PedidoInvalido(Exception):
     def __init__(self, problemas):
         super().__init__("; ".join(problemas))
         self.problemas = problemas
+
+
+class TransicaoInvalida(Exception):
+    """Aprovar ou cancelar um pedido num status que não permite (ex.: cancelar um pedido já concluído)."""
+
+
+class PedidoCancelado(BaseException):
+    """A produção deve parar: o pedido foi cancelado ou passou para outro processo.
+
+    É BaseException de propósito: os `except Exception` da produção (fallback, trilha, efeitos) não a engolem.
+    """
+
+
+TRAVA = ".produzindo.trava"  # arquivo exclusivo na pasta do pedido: um processo por pasta
+TRAVA_VELHA_S = 180  # trava sem toque há 3 min é de processo travado ou morto (mesmo prazo do pedido órfão)
+
+
+def _processo_vivo(pid):
+    """True se o processo `pid` existe. No Windows, os.kill(pid, 0) MATARIA o processo: usa a API do sistema."""
+    if pid <= 0:
+        return False
+    if pid == os.getpid():
+        return True
+    if os.name == "nt":
+        import ctypes
+
+        k32 = ctypes.windll.kernel32
+        alca = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not alca:
+            return ctypes.GetLastError() == 5  # acesso negado: existe, mas é de outro usuário
+        try:
+            codigo = ctypes.c_ulong()
+            if not k32.GetExitCodeProcess(alca, ctypes.byref(codigo)):
+                return True
+            return codigo.value == 259  # STILL_ACTIVE
+        finally:
+            k32.CloseHandle(alca)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def travar_pasta(pasta, dono):
+    """Cria a trava exclusiva da pasta do pedido (O_CREAT|O_EXCL). Devolve o caminho, ou None se outro processo
+    vivo está produzindo nela. Trava de processo morto (ou sem toque há TRAVA_VELHA_S) é recuperada."""
+    pasta = Path(pasta)
+    pasta.mkdir(parents=True, exist_ok=True)
+    trava = pasta / TRAVA
+    conteudo = f"{os.getpid()}\n{dono}\n".encode()
+    for _ in range(3):
+        try:
+            fd = os.open(trava, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            try:
+                pid = int(trava.read_text(encoding="utf-8").split()[0])
+            except (OSError, ValueError, IndexError):
+                pid = -1  # trava ilegível (queda no meio da escrita): conta como morta
+            try:
+                velha = time.time() - trava.stat().st_mtime > TRAVA_VELHA_S
+            except OSError:
+                continue  # sumiu entre uma olhada e outra: tenta criar de novo
+            if _processo_vivo(pid) and not velha:
+                return None
+            try:
+                trava.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                return None
+            continue
+        try:
+            os.write(fd, conteudo)
+        finally:
+            os.close(fd)
+        return trava
+    return None
+
+
+def soltar_pasta(trava, dono):
+    """Remove a trava só se ainda for deste dono (outro processo pode tê-la recuperado)."""
+    try:
+        if Path(trava).read_text(encoding="utf-8").split()[1:2] == [dono]:
+            Path(trava).unlink()
+    except OSError:
+        pass
+
+
+def _aviso_que_cancela(aviso, continuar):
+    """Envolve o `aviso` do andamento: a cada etapa avisada, se não for para continuar, para a produção.
+
+    A produção (producao.py, roteador.py) chama o aviso antes de cada etapa e antes de cada provedor, ou seja,
+    antes de gastar: é o ponto seguro para parar sem pagar de novo.
+    """
+    avisar = aviso or (lambda texto: None)
+    if continuar is None:
+        return avisar
+
+    def checar(texto):
+        if not continuar():
+            raise PedidoCancelado("pedido cancelado ou passou para outro processo")
+        return avisar(texto)
+
+    return checar
 
 
 def _sha256(arquivo):
@@ -66,11 +176,10 @@ def compor_imagem(imagem, texto, proporcao, saida, fonte="Arial"):
     largura, altura = tamanho_do_formato(proporcao)
     with tempfile.TemporaryDirectory() as pasta:
         Path(pasta, "texto.ass").write_text(_ass_texto(texto, largura, altura, proporcao, fonte), encoding="utf-8")
-        proc = subprocess.run(
+        proc = ff.rodar(
             ["ffmpeg", "-y", "-v", "error", "-i", str(Path(imagem).resolve()), "-vf",
              f"scale={largura}:{altura}:force_original_aspect_ratio=increase,crop={largura}:{altura},setsar=1,"
-             "ass=texto.ass", "-frames:v", "1", str(Path(saida).resolve())],
-            capture_output=True, stdin=subprocess.DEVNULL, text=True, cwd=pasta)
+             "ass=texto.ass", "-frames:v", "1", str(Path(saida).resolve())], cwd=pasta)
     if proc.returncode != 0:
         raise ErroProvedor(f"ffmpeg falhou ao compor a imagem: {proc.stderr.strip()[-200:]}")
     return Path(saida)
@@ -102,12 +211,15 @@ class OrcamentoDoPedido:
         return o
 
 
-def fabricar_peca(pedido, pasta, *, config=None, aviso=None):
-    """Produz o entregável do pedido e devolve o resultado no formato da spec 08 (sem job_id/status)."""
-    from .config import carregar_biblioteca, carregar_config, carregar_loop, carregar_perfis, carregar_roteador
-    from .seguranca import Orcamento
+def fabricar_peca(pedido, pasta, *, config=None, aviso=None, continuar=None):
+    """Produz o entregável do pedido e devolve o resultado no formato da spec 08 (sem job_id/status).
 
-    avisar = aviso or (lambda texto: None)
+    `continuar()` (opcional) é consultada a cada aviso de etapa; se devolver False, a produção para com
+    PedidoCancelado (antes de chamar o próximo provedor, sem gastar mais).
+    """
+    from .config import carregar_biblioteca, carregar_config, carregar_loop, carregar_perfis, carregar_roteador
+
+    avisar = _aviso_que_cancela(aviso, continuar)
     pasta = Path(pasta)
     pasta.mkdir(parents=True, exist_ok=True)
     roteador = carregar_roteador(config)
@@ -165,6 +277,7 @@ def fabricar_peca(pedido, pasta, *, config=None, aviso=None):
             foto = _foto_gratuita(roteador, biblioteca, cena, base, pedido["proporcao"], perfil, avisar)
             (pasta / "foto.json").write_text(json.dumps(foto, ensure_ascii=False), encoding="utf-8")
             provedor = f"foto gratuita ({foto['fonte']})"
+    avisar("== texto por cima da imagem")  # ponto de parada se o pedido foi cancelado
     erros_fatos = checar_fatos(pedido["briefing"]["texto_overlay"], pedido["fatos_travados"]) \
         if pedido["fatos_travados"] else []
     final = compor_imagem(base, pedido["briefing"]["texto_overlay"], pedido["proporcao"], pasta / "peca.png")
@@ -209,9 +322,16 @@ class ServicoPecas:
             raise PedidoInvalido(problemas)
         job_id = "stu_" + secrets.token_hex(8)
         with self._banco() as banco:
-            if banco.pedidos_na_fila() >= LIMITE_FILA:
-                raise FilaCheia(f"já há {LIMITE_FILA} pedidos esperando; tente de novo depois")
-            banco.criar_pedido(job_id, pedido)
+            # Contar e inserir numa transação só (BEGIN IMMEDIATE reserva a escrita): dois processos (HTTP e MCP)
+            # não passam juntos do limite.
+            banco.con.execute("BEGIN IMMEDIATE")
+            try:
+                if banco.pedidos_na_fila() >= LIMITE_FILA:
+                    raise FilaCheia(f"já há {LIMITE_FILA} pedidos esperando; tente de novo depois")
+                banco.criar_pedido(job_id, pedido)  # o commit sai daqui
+            finally:
+                if banco.con.in_transaction:
+                    banco.con.rollback()
         self._acordar.set()
         return {"job_id": job_id, "status": "na_fila", "estimativa_custo_usd": estimativa_custo(pedido)}
 
@@ -223,7 +343,42 @@ class ServicoPecas:
         return {"job_id": p["id"], "status": p["status"], **(p["resultado"] or {}),
                 **({"erro": p["erro"]} if p["erro"] else {})}
 
+    def aprovar(self, job_id):
+        """Aprovação humana: 'aguardando_aprovacao' → 'concluido'. None se o pedido não existe."""
+        return self._mudar_status(job_id, ("aguardando_aprovacao",), "concluido")
+
+    def cancelar(self, job_id):
+        """Cancela: pedido na fila não é produzido; em produção, o trabalhador para na próxima etapa e não grava;
+        aguardando aprovação, fica recusado. None se o pedido não existe."""
+        return self._mudar_status(job_id, ("na_fila", "produzindo", "avaliando", "aguardando_aprovacao"), "cancelado")
+
+    def _mudar_status(self, job_id, de, para):
+        job_id = str(job_id)
+        marcas = ", ".join("?" * len(de))
+        with self._banco() as banco:
+            with banco.con:  # dono = NULL: o trabalhador que produzia perde o pedido (batimento falha, não grava)
+                mudou = banco.con.execute(
+                    f"UPDATE pedidos SET status = ?, dono = NULL, atualizado_em = ? WHERE id = ? AND status IN ({marcas})",
+                    (para, datetime.now(timezone.utc).isoformat(timespec="seconds"), job_id, *de)).rowcount
+            if not mudou:
+                p = banco.pedido(job_id)
+                if not p:
+                    return None
+                if p["status"] != para:  # repetir a mesma ação não é erro
+                    raise TransicaoInvalida(f"o pedido está '{p['status']}' e não pode passar para '{para}'")
+        return self.consultar(job_id)
+
     # -- trabalhador -----------------------------------------------------------
+    INTERVALO_BATIMENTO = 30  # s; o pedido vira órfão depois de 180 s sem batimento (banco.retomar_pedidos)
+    ESPERA_TRAVA = 600  # s esperando outro processo largar a pasta do pedido antes de devolvê-lo à fila
+
+    def _aceita(self, nome):
+        try:
+            parametros = inspect.signature(self.fabricar).parameters.values()
+        except (TypeError, ValueError):
+            return False
+        return any(x.name == nome or x.kind is inspect.Parameter.VAR_KEYWORD for x in parametros)
+
     def processar_proximo(self):
         """Produz o pedido mais antigo da fila. Devolve o job_id processado ou None se a fila estava vazia."""
         with self._banco() as banco:
@@ -231,25 +386,57 @@ class ServicoPecas:
         if not p:
             return None
         pasta = self.pasta_base / p["id"]
-        vivo = threading.Event()
+        vivo, perdido = threading.Event(), threading.Event()
+        trava = None
 
         def bater():  # batimento: outros processos sabem que este pedido não está órfão
-            while not vivo.wait(30):
+            while not vivo.wait(self.INTERVALO_BATIMENTO):
+                if trava is not None:
+                    try:
+                        os.utime(trava)  # a trava da pasta segue "fresca" enquanto este processo trabalha nela
+                    except OSError:
+                        pass
+                if perdido.is_set():
+                    continue
                 try:
                     with self._banco() as banco:
                         if not banco.batimento(p["id"], self.dono):
-                            print(f"⚠ o pedido {p['id']} passou para outro processo; o resultado deste não será gravado",
-                                  file=sys.stderr)
-                            return
+                            perdido.set()  # cancelado ou retomado por outro processo: a produção para
+                            print(f"⚠ o pedido {p['id']} foi cancelado ou passou para outro processo; "
+                                  "a produção aqui para na próxima etapa", file=sys.stderr)
                 except Exception as e:  # banco ocupado etc.: tenta de novo na próxima batida
                     print(mascarar(f"⚠ batimento falhou: {e}"), file=sys.stderr)
 
+        def continuar():
+            return not perdido.is_set()
+
         threading.Thread(target=bater, daemon=True).start()
         try:
-            resultado = self.fabricar(p["pedido"], pasta, config=self.config)
+            limite = time.monotonic() + self.ESPERA_TRAVA
+            while (trava := travar_pasta(pasta, self.dono)) is None:
+                if perdido.is_set() or self._parar.is_set() or time.monotonic() > limite:
+                    break
+                time.sleep(min(2.0, self.INTERVALO_BATIMENTO))
+            if trava is None:
+                if not perdido.is_set():  # outro processo ainda usa a pasta: o pedido volta para a fila
+                    with self._banco() as banco:
+                        banco.atualizar_pedido(p["id"], "na_fila", dono=self.dono)
+                    print(f"⚠ a pasta do pedido {p['id']} está em uso por outro processo; o pedido voltou para a "
+                          "fila", file=sys.stderr)
+                return p["id"]
+            with self._banco() as banco:  # cancelado enquanto esperava a pasta? então nem começa
+                if not banco.batimento(p["id"], self.dono):
+                    raise PedidoCancelado("o pedido foi cancelado ou passou para outro processo")
+            extras = {"continuar": continuar} if self._aceita("continuar") else {}
+            resultado = self.fabricar(p["pedido"], pasta, config=self.config, **extras)
+            if perdido.is_set():
+                raise PedidoCancelado("o pedido foi cancelado ou passou para outro processo")
             status = "aguardando_aprovacao" if p["pedido"].get("aprovacao_humana") else "concluido"
             with self._banco() as banco:
                 banco.atualizar_pedido(p["id"], status, resultado, dono=self.dono)
+        except PedidoCancelado:
+            print(f"⚠ produção do pedido {p['id']} interrompida aqui; nada foi gravado por este processo",
+                  file=sys.stderr)
         except Exception as e:  # o pedido falha sozinho; a fila continua
             detalhe = mascarar(f"{type(e).__name__}: {e}")
             with self._banco() as banco:
@@ -257,6 +444,8 @@ class ServicoPecas:
             print(mascarar(traceback.format_exc()), file=sys.stderr)  # detalhe para quem cuida, sem chaves
         finally:
             vivo.set()
+            if trava is not None:
+                soltar_pasta(trava, self.dono)
         return p["id"]
 
     def _laco(self):

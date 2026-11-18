@@ -6,13 +6,14 @@ o texto da resposta do modelo (JSON na régua, validado pelo Avaliador).
 
 import base64
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from .. import ff
 from ..rede import ErroProvedor, post_json
 from .base import Provedor
+from .texto import _temperatura
 
 # A API aceita ~20 MB por pedido; em base64 o arquivo cresce 4/3, então o limite do arquivo bruto é ~14 MB.
 LIMITE_INLINE_MB = 14
@@ -44,7 +45,7 @@ def versao_leve(video, pasta, altura=720):
     cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(video), "-vf", f"scale=-2:'min({altura},trunc(ih/2)*2)'",
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "32", "-pix_fmt", "yuv420p",
            "-c:a", "aac", "-b:a", "64k", str(saida)]
-    r = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    r = ff.rodar(cmd)
     if r.returncode != 0:
         raise ErroProvedor(f"não consegui reduzir o vídeo: {r.stderr[-300:]}")
     return saida
@@ -75,8 +76,9 @@ class GeminiVideoJuiz(Provedor):
                 "contents": [{"parts": [self._parte_video(video, pasta), {"text": prompt}]}],
                 "generationConfig": {"responseMimeType": "application/json"},
             }
-            if self.cfg.get("temperatura") is not None:
-                corpo["generationConfig"]["temperature"] = self.cfg["temperatura"]
+            temperatura = _temperatura(self.cfg)
+            if temperatura is not None:
+                corpo["generationConfig"]["temperature"] = temperatura
         if sistema:
             corpo["systemInstruction"] = {"parts": [{"text": sistema}]}
         r = post_json(

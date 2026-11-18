@@ -228,6 +228,59 @@ class TestMontagem(unittest.TestCase):
         self.assertEqual(v["medidas"]["resolucao"], "1080x1920")
         self.assertFalse((self.d / "t" / "audio_final_pico.wav").exists())
 
+    def test_verificacao_reaproveita_o_que_a_montagem_mediu(self):  # auditoria item 10
+        from unittest import mock
+
+        from torralles_studio import montagem
+
+        cenas = [{"video": self.clipe("a.mp4", 2), "voz": self.voz("v1.wav", 1.5), "narracao": "Uma cena."}]
+        r = montar(cenas, self.d / "f.mp4", tamanho=(180, 320), cfg=self.RAPIDO, pasta_trabalho=self.d / "t")
+        esperado = verificar_montagem(r)
+        self.assertIsNotNone(r["volume_final"]["lufs"])
+        with mock.patch.object(montagem, "sincronia", wraps=montagem.sincronia) as sinc, \
+                mock.patch.object(montagem, "medir_volume", wraps=montagem.medir_volume) as vol:
+            self.assertEqual(verificar_montagem(r), esperado)  # mesmo resultado, sem medir de novo
+            self.assertEqual((sinc.call_count, vol.call_count), (0, 0))
+            r["legendas"][0]["inicio"] += 0.05  # legenda mudou: a sincronia é medida de novo
+            verificar_montagem(r)
+            self.assertEqual(sinc.call_count, 1)
+            Path(r["arquivo"]).write_bytes(Path(r["arquivo"]).read_bytes() + b"\0")  # arquivo mudou: mede o volume
+            verificar_montagem(r)
+            self.assertEqual(vol.call_count, 1)
+
+    def test_fala_ja_medida_nao_e_medida_de_novo(self):  # auditoria item 11
+        from unittest import mock
+
+        from torralles_studio import montagem
+
+        voz = self.voz("v1.wav", 1.5)
+        fala, nivel = montagem.trecho_falado(voz), montagem.medir_volume(voz)["lufs"]
+        cenas = [{"video": self.clipe("a.mp4", 2), "voz": voz, "narracao": "Uma cena.", "fala": fala,
+                  "voz_lufs": nivel}]
+        with mock.patch.object(montagem, "trecho_falado", side_effect=AssertionError("mediu de novo")), \
+                mock.patch.object(montagem, "medir_volume", wraps=montagem.medir_volume) as vol:
+            r = montar(cenas, self.d / "f.mp4", tamanho=(180, 320), cfg=self.RAPIDO, pasta_trabalho=self.d / "t")
+        self.assertNotIn(str(voz), [str(c.args[0]) for c in vol.call_args_list])
+        self.assertEqual(r["legendas"][0]["inicio"], 0.2)
+        problemas = [p for p in verificar_montagem(r)["problemas"] if not p.startswith("resolu")]  # tamanho de teste
+        self.assertEqual(problemas, [])
+        # (início, fim) sem as pausas também vale; sem nada, mede como antes
+        cenas[0]["fala"] = fala[:2]
+        r2 = montar(cenas, self.d / "f2.mp4", tamanho=(180, 320), cfg=self.RAPIDO, pasta_trabalho=self.d / "t2")
+        self.assertEqual(r2["tempos"], r["tempos"])
+        del cenas[0]["fala"], cenas[0]["voz_lufs"]
+        r3 = montar(cenas, self.d / "f3.mp4", tamanho=(180, 320), cfg=self.RAPIDO, pasta_trabalho=self.d / "t3")
+        self.assertEqual(r3["tempos"], r["tempos"])
+
+    def test_guarda_o_ganho_da_normalizacao_final(self):  # auditoria item 12
+        from torralles_studio import montagem
+
+        cenas = [{"video": self.clipe("a.mp4", 2), "voz": self.voz("v1.wav", 1.5), "narracao": "Uma cena."}]
+        r = montar(cenas, self.d / "f.mp4", tamanho=(180, 320), cfg=self.RAPIDO, pasta_trabalho=self.d / "t")
+        t = self.d / "t"
+        medido = montagem.medir_volume(t / "audio_final.wav")["lufs"] - montagem.medir_volume(t / "voz.wav")["lufs"]
+        self.assertAlmostEqual(r["ganho_db"], medido, delta=0.5)
+
     def test_verificacao_reprova_volume_e_resolucao(self):
         cenas = [{"video": self.clipe("a.mp4", 2), "voz": self.voz("v1.wav", 1.5), "narracao": "Teste."}]
         r = montar(cenas, self.d / "f.mp4", tamanho=(320, 568), cfg={**self.RAPIDO, "lufs": -24},

@@ -1,5 +1,6 @@
 """Chamadas HTTP usando só a biblioteca padrão, com erros padronizados."""
 
+import http.client
 import json
 import socket
 import time
@@ -118,7 +119,7 @@ def baixar(url, *, timeout=120, permitidos=None, tamanho_maximo=None, prazo_tota
                 partes.append(bloco)
     except urllib.error.HTTPError as e:
         raise ErroProvedor(f"HTTP {e.code} no download", status=e.code, temporario=e.code in STATUS_TEMPORARIOS) from e
-    except (urllib.error.URLError, TimeoutError, socket.timeout) as e:
+    except (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionError, http.client.HTTPException) as e:
         raise ErroProvedor(f"falha de rede no download: {e}", temporario=True) from e
     return b"".join(partes)
 
@@ -141,7 +142,7 @@ def requisitar(url, *, metodo="GET", corpo=None, cabecalhos=None, timeout=120):
             temporario=e.code in STATUS_TEMPORARIOS,
             retry_after=_retry_after(e.headers),
         ) from e
-    except (urllib.error.URLError, TimeoutError, socket.timeout) as e:
+    except (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionError, http.client.HTTPException) as e:
         raise ErroProvedor(f"falha de rede: {e}", temporario=True) from e
 
 

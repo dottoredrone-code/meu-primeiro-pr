@@ -6,6 +6,8 @@ from pathlib import Path
 from ..rede import ErroProvedor, post_json, requisitar
 from .base import Provedor, salvar
 
+PRAZO_CONVERTER_S = 120  # converter uma fala curta leva segundos: passou disso, o FFmpeg travou
+
 
 class ElevenLabsVoz(Provedor):
     tipo = "voz"
@@ -93,9 +95,10 @@ class GeminiVoz(Provedor):
 def _gravar_audio(dados, mime, saida):
     import re
     import shutil
-    import subprocess
     import tempfile
     import wave
+
+    from .. import ff
 
     saida.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as pasta:
@@ -117,8 +120,6 @@ def _gravar_audio(dados, mime, saida):
         if bruto.suffix == saida.suffix.lower():
             shutil.copyfile(bruto, saida)
             return saida
-        proc = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(bruto), str(saida)], capture_output=True,
-                              stdin=subprocess.DEVNULL, text=True)
-        if proc.returncode != 0:
-            raise ErroProvedor(f"ffmpeg falhou ao converter a voz: {proc.stderr.strip()[-200:]}")
+        ff.ffmpeg(["-v", "error", "-i", str(bruto), str(saida)], prazo=PRAZO_CONVERTER_S,
+                  falha="ffmpeg falhou ao converter a voz", limite=200)
         return saida

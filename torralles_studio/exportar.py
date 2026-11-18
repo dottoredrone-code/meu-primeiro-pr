@@ -10,10 +10,9 @@ O CapCut não tem formato de projeto público e estável, então a exportação 
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 
-from .rede import ErroProvedor
+from . import ff
 
 
 class ErroExportacao(Exception):
@@ -24,10 +23,16 @@ def _tempo(s):
     return f"{int(s // 60):02d}:{s % 60:05.2f}"
 
 
-def _ganho_final(trabalho):
-    """Ganho (dB) que a normalização final deu à mistura, para as faixas soltas soarem como no vídeo pronto."""
+def _ganho_final(trabalho, resultado=None):
+    """Ganho (dB) que a normalização final deu à mistura, para as faixas soltas soarem como no vídeo pronto.
+
+    Usa o ganho guardado pela montagem (resultado["ganho_db"]); sem ele (montagem antiga), mede os WAVs.
+    """
     from .montagem import medir_volume
 
+    guardado = (resultado or {}).get("ganho_db")
+    if isinstance(guardado, (int, float)) and not isinstance(guardado, bool):
+        return round(float(guardado), 2)
     antes = next((trabalho / n for n in ("mistura_efeitos.wav", "mistura.wav") if (trabalho / n).is_file()),
                  trabalho / "voz.wav")  # o que entrou na normalização final
     depois = trabalho / "audio_final.wav"
@@ -38,10 +43,9 @@ def _ganho_final(trabalho):
 
 
 def _audio(origem, destino, ganho):
-    proc = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(origem), "-af", f"volume={ganho}dB,alimiter=limit=0.84:level=disabled",  # pico ≤ −1,5 dB, sem estourar
-                           "-c:a", "pcm_s16le", str(destino)], capture_output=True, stdin=subprocess.DEVNULL, text=True)
-    if proc.returncode != 0:
-        raise ErroProvedor(f"ffmpeg falhou no áudio {Path(destino).name}: {proc.stderr.strip()[-200:]}")
+    ff.ffmpeg(["-v", "error", "-i", str(origem),
+               "-af", f"volume={ganho}dB,alimiter=limit=0.84:level=disabled",  # pico ≤ −1,5 dB, sem estourar
+               "-c:a", "pcm_s16le", str(destino)], falha=f"ffmpeg falhou no áudio {Path(destino).name}", limite=200)
 
 
 def _cenas_do_roteiro(roteiro, total):
@@ -85,13 +89,12 @@ def exportar_capcut(resultado, destino, *, creditos=None, titulo=None, pasta_tra
         # os clipes da montagem têm a transição a mais no fim; aqui cada um fica com a duração exata da cena,
         # contada em quadros acumulados (arredondar cena a cena faria os cortes atrasarem em vídeos longos)
         quadros = round((tp["inicio"] + tp["duracao"]) * fps) - round(tp["inicio"] * fps)
-        proc = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(clipe), "-vf", "tpad=stop_mode=clone:stop=3",
-                               "-frames:v", str(max(1, quadros)),  # tpad: se faltar 1 quadro no fim, repete o último
-                               "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-pix_fmt", "yuv420p", "-an",
-                               str(pastas["01_clipes"] / f"cena_{i:02d}.mp4")], capture_output=True, stdin=subprocess.DEVNULL, text=True)
-        if proc.returncode != 0:
-            raise ErroProvedor(f"ffmpeg falhou ao cortar a cena {i}: {proc.stderr.strip()[-200:]}")
-    ganho = _ganho_final(trabalho)  # faixas já no volume do vídeo pronto (−14 LUFS juntas)
+        ff.ffmpeg(["-v", "error", "-i", str(clipe), "-vf", "tpad=stop_mode=clone:stop=3",
+                   "-frames:v", str(max(1, quadros)),  # tpad: se faltar 1 quadro no fim, repete o último
+                   "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-pix_fmt", "yuv420p", "-an",
+                   str(pastas["01_clipes"] / f"cena_{i:02d}.mp4")],
+                  falha=f"ffmpeg falhou ao cortar a cena {i}", limite=200)
+    ganho = _ganho_final(trabalho, resultado)  # faixas já no volume do vídeo pronto (−14 LUFS juntas)
     _audio(trabalho / "voz.wav", pastas["02_audio"] / "narracao.wav", ganho)
     # só a trilha DESTA montagem (com crédito no relatório); arquivo de montagem antiga não entra
     tem_trilha = bool(resultado.get("trilha")) and (trabalho / "trilha.wav").is_file()

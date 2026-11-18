@@ -1,10 +1,12 @@
 """Portas do Studio para outros sistemas (K28, spec 08, D13): HTTP local e MCP, as duas sobre a mesma fila.
 
 - HTTP (Torralles Ops): POST /v1/pecas → {"job_id", "status", "estimativa_custo_usd"} (202);
-  GET /v1/pecas/{job_id} → status e resultado; GET /v1/saude.
+  GET /v1/pecas/{job_id} → status e resultado; GET /v1/saude;
+  POST /v1/pecas/{job_id}/aprovar e /cancelar (aprovação humana e cancelamento).
   Escuta só em 127.0.0.1 por padrão. Com a variável TORRALLES_STUDIO_TOKEN definida, todo pedido precisa do
   cabeçalho "Authorization: Bearer <token>" (obrigatório se escutar fora do próprio PC).
-- MCP por stdio (Hermes e agentes): ferramentas produzir_peca e consultar_peca (JSON-RPC 2.0, uma mensagem por linha).
+- MCP por stdio (Hermes e agentes): ferramentas produzir_peca, consultar_peca, aprovar_peca e cancelar_peca
+  (JSON-RPC 2.0, uma mensagem por linha).
 """
 
 import hmac
@@ -13,10 +15,11 @@ import os
 import re
 import socket
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .seguranca import mascarar
-from .servico import FilaCheia, PedidoInvalido
+from .servico import FilaCheia, PedidoInvalido, TransicaoInvalida
 
 LIMITE_CORPO = 1_000_000  # 1 MB: um pedido é texto; nada de upload por aqui
 _LOCAL = ("127.0.0.1", "localhost", "[::1]")
@@ -24,15 +27,41 @@ _LOCAL = ("127.0.0.1", "localhost", "[::1]")
 _ORIGEM_LOCAL = re.compile(r"^https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$")
 VERSOES_MCP = ("2025-06-18", "2025-03-26", "2024-11-05")
 _ROTA_PECA = re.compile(r"^/v1/pecas/([A-Za-z0-9_-]{1,64})$")
+_ROTA_ACAO = re.compile(r"^/v1/pecas/([A-Za-z0-9_-]{1,64})/(aprovar|cancelar)$")
+MAX_CONEXOES = 8  # conexões atendidas ao mesmo tempo; acima disso responde 503 (cada uma é uma thread)
+ERROS_DE_JSON = (UnicodeDecodeError, json.JSONDecodeError, RecursionError)  # JSON muito aninhado estoura a pilha
+
+
+def _acao(servico, job_id, acao):
+    """(código, corpo) de aprovar/cancelar um pedido."""
+    try:
+        r = servico.aprovar(job_id) if acao == "aprovar" else servico.cancelar(job_id)
+    except TransicaoInvalida as e:
+        return 409, {"erro": str(e)}
+    return (200, r) if r else (404, {"erro": "pedido não encontrado"})
 
 
 def _manipulador(servico, token, so_local):
+    vagas = threading.BoundedSemaphore(MAX_CONEXOES)
+
     class Manipulador(BaseHTTPRequestHandler):
         server_version = "TorrallesStudio/1"
         timeout = 30  # conexão parada não prende o servidor
 
         def log_message(self, *args):  # silencioso: o terminal mostra só o andamento da produção
             pass
+
+        def handle_one_request(self):
+            if not vagas.acquire(blocking=False):  # muitas conexões ao mesmo tempo: recusa sem criar fila
+                self.raw_requestline = self.rfile.readline(65537)
+                if self.raw_requestline and self.parse_request():
+                    self._responder(503, {"erro": "servidor ocupado; tente de novo em instantes"})
+                self.close_connection = True
+                return
+            try:
+                return super().handle_one_request()
+            finally:
+                vagas.release()
 
         def _responder(self, codigo, corpo):
             dados = json.dumps(corpo, ensure_ascii=False).encode("utf-8")
@@ -77,6 +106,9 @@ def _manipulador(servico, token, so_local):
             barrado = self._barrar()
             if barrado:
                 return self._responder(*barrado)
+            acao = _ROTA_ACAO.match(self.path)
+            if acao:
+                return self._responder(*_acao(servico, acao.group(1), acao.group(2)))
             if self.path != "/v1/pecas":
                 return self._responder(404, {"erro": "rota não encontrada"})
             tipo = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
@@ -90,7 +122,7 @@ def _manipulador(servico, token, so_local):
                 return self._responder(413 if tamanho > LIMITE_CORPO else 400, {"erro": "corpo vazio ou grande demais"})
             try:
                 dados = json.loads(self.rfile.read(tamanho).decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
+            except ERROS_DE_JSON:
                 return self._responder(400, {"erro": "JSON inválido"})
             try:
                 return self._responder(202, servico.enviar(dados))
@@ -126,6 +158,12 @@ FERRAMENTAS = [
     {"name": "consultar_peca",
      "description": "Consulta o status e o resultado (arquivos, nota, custo) de um pedido pelo job_id.",
      "inputSchema": {"type": "object", "properties": {"job_id": {"type": "string"}}, "required": ["job_id"]}},
+    {"name": "aprovar_peca",
+     "description": "Aprovação humana de uma peça em 'aguardando_aprovacao' (passa a 'concluido').",
+     "inputSchema": {"type": "object", "properties": {"job_id": {"type": "string"}}, "required": ["job_id"]}},
+    {"name": "cancelar_peca",
+     "description": "Cancela um pedido na fila, em produção ou aguardando aprovação (não é produzido nem gravado).",
+     "inputSchema": {"type": "object", "properties": {"job_id": {"type": "string"}}, "required": ["job_id"]}},
 ]
 
 
@@ -160,6 +198,9 @@ def responder_mcp(servico, mensagem):
             elif nome == "consultar_peca":
                 corpo = servico.consultar(str(args.get("job_id", "")))
                 corpo, erro = (corpo, False) if corpo else ({"erro": "pedido não encontrado"}, True)
+            elif nome in ("aprovar_peca", "cancelar_peca"):
+                codigo, corpo = _acao(servico, str(args.get("job_id", "")), nome.split("_")[0])
+                erro = codigo != 200
             else:
                 return {"jsonrpc": "2.0", "id": ident, "error": {"code": -32602, "message": f"ferramenta {nome!r}"}}
         except PedidoInvalido as e:
@@ -205,7 +246,7 @@ def servir_mcp(servico, entrada=None, saida=None):
             mensagem = json.loads(linha)
             resposta = responder_mcp(servico, mensagem) if isinstance(mensagem, dict) else {
                 "jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "mensagem inválida"}}
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, RecursionError):
             resposta = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "JSON inválido"}}
         except Exception as e:  # o processo MCP nunca morre por causa de uma mensagem
             ident = mensagem.get("id") if isinstance(mensagem, dict) else None

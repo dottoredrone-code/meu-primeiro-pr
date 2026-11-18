@@ -12,9 +12,12 @@ comando `testar-voz` também grava os áudios para ouvir.
 import base64
 import os
 import re
+import sys
 import tempfile
 import unicodedata
 from pathlib import Path
+
+from . import ff
 
 LIMITE_WER = 0.10
 MINIMO_ERROS = 2
@@ -54,8 +57,10 @@ def por_extenso(n):
 
 
 def _numeros_por_extenso(texto):
-    t = re.sub(r"R\$\s*([\d.]+),(\d{2})\b", r"\1 reais e \2 centavos", texto)  # como se fala um preço
+    t = re.sub(r"R\$\s*([\d.]+),00\b", r"\1 reais", texto)  # "R$ 1.500,00" se fala "mil e quinhentos reais"
+    t = re.sub(r"R\$\s*([\d.]+),(\d{2})\b", r"\1 reais e \2 centavos", t)  # como se fala um preço
     t = re.sub(r"R\$\s*([\d.]+)", r"\1 reais", t)
+    t = re.sub(r"US\$\s*([\d.]+)[,.]00\b", r"\1 dólares", t)
     t = re.sub(r"US\$\s*([\d.]+)[,.](\d{2})\b", r"\1 dólares e \2 centavos", t)
     t = re.sub(r"US\$\s*([\d.]+)", r"\1 dólares", t)
     t = re.sub(r"(\d)\s*h\b", r"\1 horas", t)
@@ -105,33 +110,50 @@ def limpar_transcricao(texto, cortar_sons=True):
     return t
 
 
+def _transcrever_fala_gemini(arquivo):
+    
+    from .rede import ErroProvedor, post_json
+
+    modelo = os.environ.get("GEMINI_MODELO_PERCEPCAO", "gemini-3.6-flash")
+    with tempfile.TemporaryDirectory() as pasta:
+        audio = Path(pasta) / "fala.mp3"
+        proc = ff.rodar(["ffmpeg", "-y", "-v", "error", "-i", str(arquivo), "-vn", "-ac", "1", "-ar", "16000",
+                               "-b:a", "48k", str(audio)])
+        if proc.returncode != 0:
+            raise ErroProvedor(f"ffmpeg falhou: {proc.stderr.strip()[-300:]}")
+        dados = base64.b64encode(audio.read_bytes()).decode()
+    r = post_json(f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent",
+                  {"contents": [{"parts": [{"inline_data": {"mime_type": "audio/mp3", "data": dados}},
+                                           {"text": PROMPT_TRANSCRICAO}]}],
+                   "generationConfig": {"temperature": 0}},
+                  {"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, 120)
+    texto = "".join(p.get("text", "") for p in r["candidates"][0]["content"]["parts"])
+    return {"texto": texto, "motor": f"gemini:fala:{modelo}"}
+
+
 def transcrever_fala(arquivo):
-    """{"texto", "motor"}: Gemini com pedido de só o texto falado; senão a transcrição da percepção (Whisper)."""
-    if os.environ.get("GEMINI_API_KEY"):
-        try:
-            from .rede import post_json
+    """{"texto", "motor"}: Gemini com pedido de só o texto falado; senão Whisper local.
 
-            modelo = os.environ.get("GEMINI_MODELO_PERCEPCAO", "gemini-3.6-flash")
-            with tempfile.TemporaryDirectory() as pasta:
-                import subprocess
-
-                audio = Path(pasta) / "fala.mp3"
-                subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(arquivo), "-vn", "-ac", "1", "-ar", "16000",
-                                "-b:a", "48k", str(audio)], check=True, capture_output=True, stdin=subprocess.DEVNULL)
-                dados = base64.b64encode(audio.read_bytes()).decode()
-            r = post_json(f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent",
-                          {"contents": [{"parts": [{"inline_data": {"mime_type": "audio/mp3", "data": dados}},
-                                                   {"text": PROMPT_TRANSCRICAO}]}],
-                           "generationConfig": {"temperature": 0}},
-                          {"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, 120)
-            texto = "".join(p.get("text", "") for p in r["candidates"][0]["content"]["parts"])
-            return {"texto": texto, "motor": f"gemini:fala:{modelo}"}
-        except Exception:  # cai para a transcrição da percepção
-            pass
+    Se o Gemini falhar, avisa o motivo (sem chaves) e vai direto ao Whisper: não chama o Gemini de novo pela
+    percepção. Sem nenhum motor, devolve {"texto": None, "motivo"} com o motivo de cada um.
+    """
     from .percepcao import transcrever
 
+    motivo_gemini = None
+    if os.environ.get("GEMINI_API_KEY"):
+        try:
+            return _transcrever_fala_gemini(arquivo)
+        except Exception as e:  # não engole: avisa e tenta o Whisper
+            from .seguranca import mascarar
+
+            motivo_gemini = mascarar(f"gemini: {type(e).__name__}: {e}")
+            print(f"⚠ transcrição da fala pelo Gemini falhou ({motivo_gemini}); tentando o Whisper local",
+                  file=sys.stderr)
     with tempfile.TemporaryDirectory() as pasta:
-        return transcrever(Path(arquivo), Path(pasta))
+        r = transcrever(Path(arquivo), Path(pasta), usar_gemini=motivo_gemini is None)
+    if motivo_gemini and not r.get("texto"):
+        r = {**r, "motivo": "; ".join(filter(None, [motivo_gemini, r.get("motivo")]))}
+    return r
 
 
 def conferir_voz(arquivo, texto, transcrever=None):

@@ -11,32 +11,65 @@ import json
 import os
 import re
 import shutil
-import subprocess
 from pathlib import Path
 
+from . import ff
 from .rede import ErroProvedor, post_json
+from .seguranca import mascarar
 
 
 def _ff(*args, capturar_stderr=False):
-    proc = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", *args], capture_output=True, stdin=subprocess.DEVNULL, text=True)
+    proc = ff.rodar(["ffmpeg", "-hide_banner", "-nostats", *args])
     if proc.returncode != 0:
         raise ErroProvedor(f"ffmpeg falhou: {proc.stderr.strip()[-300:]}")
     return proc.stderr if capturar_stderr else proc.stdout
 
 
+CAMPOS_SONDA = "format=duration:stream=codec_type,codec_name,pix_fmt,width,height,r_frame_rate:stream_disposition=attached_pic"
+
+
+def sondar(arquivo, campos=CAMPOS_SONDA):
+    """ffprobe num lugar só: {"format": {...}, "streams": [...]} do arquivo.
+
+    Erro do ffprobe (arquivo corrompido, formato desconhecido) vira ErroProvedor com a mensagem dele.
+    Capas de MP3/MP4 (fluxo de vídeo com disposition.attached_pic) saem da lista: não são vídeo de verdade.
+    """
+    try:
+        proc = ff.rodar(["ffprobe", "-v", "error", "-show_entries", campos, "-of", "json", str(arquivo)])
+    except FileNotFoundError:
+        raise ErroProvedor("ffprobe não encontrado: instale o FFmpeg (ele traz o ffprobe)") from None
+    if proc.returncode != 0:
+        raise ErroProvedor(f"ffprobe não abriu o arquivo: {(proc.stderr or '').strip()[-300:] or 'erro desconhecido'}")
+    try:
+        dados = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError:
+        raise ErroProvedor("ffprobe devolveu uma resposta ilegível") from None
+    dados["streams"] = [s for s in dados.get("streams", [])
+                        if not (s.get("disposition") or {}).get("attached_pic")]
+    return dados
+
+
+def _fps(taxa):
+    """'30000/1001' → 29.97; '0/0', vazio ou inválido → None (sem divisão por zero)."""
+    try:
+        num, _, den = str(taxa).partition("/")
+        num, den = float(num), float(den or 1)
+    except ValueError:
+        return None
+    return round(num / den, 2) if den and num > 0 else None
+
+
 def _sondar(video):
-    proc = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries",
-         "format=duration:stream=codec_type,width,height,r_frame_rate", "-of", "json", str(video)],
-        capture_output=True, stdin=subprocess.DEVNULL, text=True, check=True,
-    )
-    dados = json.loads(proc.stdout)
-    info = {"duracao_s": round(float(dados["format"]["duration"]), 2), "tem_audio": False}
-    for s in dados.get("streams", []):
-        if s["codec_type"] == "video":
-            num, den = s["r_frame_rate"].split("/")
-            info.update(largura=s["width"], altura=s["height"], fps=round(int(num) / int(den), 2))
-        elif s["codec_type"] == "audio":
+    dados = sondar(video)
+    try:
+        duracao = round(float(dados.get("format", {}).get("duration")), 2)
+    except (TypeError, ValueError):
+        raise ErroProvedor("o arquivo não tem duração legível (corrompido ou sem mídia)") from None
+    info = {"duracao_s": duracao, "tem_audio": False}
+    for s in dados["streams"]:
+        if s.get("codec_type") == "video" and "largura" not in info:
+            info.update(largura=s.get("width"), altura=s.get("height"), fps=_fps(s.get("r_frame_rate")))
+        elif s.get("codec_type") == "audio":
             info["tem_audio"] = True
     return info
 
@@ -116,14 +149,19 @@ def _folha_contato(video, saida, duracao, colunas=6):
     return str(saida)
 
 
-def transcrever(video, pasta):
-    """Tenta Gemini e depois Whisper local. Devolve {"texto", "motor"} ou {"texto": None, "motivo"}."""
+def transcrever(video, pasta, usar_gemini=True):
+    """Tenta Gemini e depois Whisper local. Devolve {"texto", "motor"} ou {"texto": None, "motivo"}.
+
+    usar_gemini=False pula o Gemini (quem chama já tentou e ele falhou: não paga a mesma chamada duas vezes).
+    """
     motivos = []
-    if os.environ.get("GEMINI_API_KEY"):
+    if not usar_gemini:
+        pass
+    elif os.environ.get("GEMINI_API_KEY"):
         try:
             return _transcrever_gemini(video, pasta)
         except Exception as e:  # cai para o próximo motor
-            motivos.append(f"gemini: {e}")
+            motivos.append(mascarar(f"gemini: {e}"))
     else:
         motivos.append("gemini: falta GEMINI_API_KEY")
     try:

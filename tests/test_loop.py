@@ -59,7 +59,7 @@ class TestLoopCorrecao(unittest.TestCase):
         self.assertEqual((r.valor, r.motivo, len(r.tentativas)), ("v2", "aprovado", 2))
         self.assertNotIn("reprovada", gen.prompts[0])
         self.assertIn("A tentativa anterior foi reprovada (nota 65 / mínimo 70)", gen.prompts[1])
-        self.assertIn("[gancho 40, abaixo do piso]", gen.prompts[1])
+        self.assertIn("[gancho 40, abaixo do piso 60] motivo: abre com fato", gen.prompts[1])
         self.assertIn("Mantenha o que estava bom: clareza (90)", gen.prompts[1])
 
     def test_para_no_limite_e_devolve_a_melhor_para_revisao(self):
@@ -219,3 +219,41 @@ class TestLoopCorrecao(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAuditoriaLoop(unittest.TestCase):
+    def test_tentativa_escolhida_de_arquivo(self):  # item 4
+        import tempfile
+        from pathlib import Path
+
+        class GeradorArquivo(Falso):
+            def executar(self, prompt, saida):
+                Path(saida).write_bytes(prompt.encode())
+                return Path(saida)
+
+        with tempfile.TemporaryDirectory() as d:
+            gen = GeradorArquivo("gen", [])
+            loop = montar([gen], [Falso("juiz", [nota(40, 90), nota(85, 80)])])
+            loop.relatorio = RelatorioQualidade("demo")
+            r = loop.executar("roteiro", "roteiro",
+                              lambda fb: {"prompt": "img" + (fb or ""), "saida": Path(d) / "cena.png"})
+            self.assertEqual(r.valor, Path(d) / "cena.png")
+            self.assertEqual(r.tentativa_escolhida, 2)
+            self.assertEqual(loop.relatorio.entradas[-1]["tentativa_escolhida"], 2)
+
+    def test_feedback_limitado_aos_itens_mais_graves(self):  # item 12
+        from torralles_studio.loop import embrulhar_feedback
+
+        itens = [f"{i}. problema leve {i} (gravidade baixa)" for i in range(1, 8)]
+        itens += ["8. Sugestão: troque tudo", "9. corte cedo (gravidade alta)", "10. [gancho 40, abaixo do piso 60]",
+                  "11. [eliminatório] preço inventado", "12. outro problema"]
+        texto = embrulhar_feedback("A tentativa anterior foi reprovada. Corrija:\n" + "\n".join(itens)
+                                   + "\nMantenha o que estava bom: clareza (90).")
+        numerados = [l for l in texto.splitlines() if l[:1].isdigit()]
+        self.assertEqual(len(numerados), 8)
+        self.assertEqual(numerados[:4], ["1. [eliminatório] preço inventado", "2. [gancho 40, abaixo do piso 60]",
+                                         "3. corte cedo (gravidade alta)", "4. outro problema"])
+        self.assertNotIn("Sugestão", texto)
+        self.assertIn("(+4 itens menos graves omitidos)", texto)
+        self.assertIn("Mantenha o que estava bom", texto)
+        self.assertLess(texto.index("Corrija:"), texto.index("1. [eliminatório]"))

@@ -166,8 +166,11 @@ class Biblioteca:
         criado = False
         if not destino.exists() or _hash(destino) != digest:  # ausente ou corrompido: copia de novo
             temporario = destino.with_suffix(destino.suffix + ".parcial")
-            shutil.copyfile(arquivo, temporario)
-            temporario.replace(destino)  # nunca deixa arquivo pela metade com nome final
+            try:
+                shutil.copyfile(arquivo, temporario)
+                temporario.replace(destino)  # nunca deixa arquivo pela metade com nome final
+            finally:
+                temporario.unlink(missing_ok=True)
             criado = True
         try:
             with self.con:
@@ -202,8 +205,11 @@ class Biblioteca:
         if not guardado.exists() or _hash(guardado) != digest:  # arquivo sumiu ou estragou: repõe com o novo
             guardado.parent.mkdir(parents=True, exist_ok=True)
             temporario = guardado.with_suffix(guardado.suffix + ".parcial")
-            shutil.copyfile(arquivo, temporario)
-            temporario.replace(guardado)
+            try:
+                shutil.copyfile(arquivo, temporario)
+                temporario.replace(guardado)
+            finally:
+                temporario.unlink(missing_ok=True)
         with self.con:
             if linha["tipo"] == "outro" and tipo != "outro":
                 self.con.execute("UPDATE ativos SET tipo = ? WHERE hash = ?", (tipo, digest))

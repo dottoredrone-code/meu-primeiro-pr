@@ -25,8 +25,10 @@ class RelatorioQualidade:
 
     def registrar_final(self, etapa, peca, resultado):
         """Decisão do loop de correção para a peça: tentativa escolhida, aprovado, revisar_manual e motivo."""
-        escolhida = next((t.numero for t in resultado.tentativas if t.valor is resultado.valor
-                          and t.avaliacao is resultado.avaliacao), None)
+        escolhida = getattr(resultado, "tentativa_escolhida", None)
+        if escolhida is None:  # resultado montado fora do loop: procura pela tentativa com o mesmo valor
+            escolhida = next((t.numero for t in resultado.tentativas if t.valor is resultado.valor
+                              and t.avaliacao is resultado.avaliacao), None)
         av = resultado.avaliacao
         self.entradas.append({
             "quando": datetime.now(timezone.utc).isoformat(timespec="seconds"),

@@ -101,3 +101,43 @@ class TestGeminiVoz(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAuditoriaPronuncia(unittest.TestCase):
+    def test_centavos_zerados_nao_sao_falados(self):  # item 1
+        self.assertEqual(taxa_erro("Custa R$ 1.500,00", "custa mil e quinhentos reais"), 0.0)
+        self.assertEqual(taxa_erro("Custa US$ 20.00", "custa vinte dólares"), 0.0)
+        self.assertEqual(taxa_erro("Custa R$ 49,90", "custa quarenta e nove reais e noventa centavos"), 0.0)
+
+    def test_falha_do_gemini_avisa_e_nao_chama_o_gemini_de_novo(self):  # item 8
+        import contextlib
+        import io
+
+        from torralles_studio import percepcao, pronuncia
+
+        chamadas = []
+
+        def gemini_quebrado(arquivo):
+            raise ErroProvedor("HTTP 503 servidor ocupado")
+
+        def whisper_ou_nada(video, pasta, usar_gemini=True):
+            chamadas.append(usar_gemini)
+            return {"texto": None, "motivo": "whisper: instale faster-whisper"}
+
+        erro = io.StringIO()
+        with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "chave-falsa"}), \
+                mock.patch.object(pronuncia, "_transcrever_fala_gemini", gemini_quebrado), \
+                mock.patch.object(percepcao, "transcrever", whisper_ou_nada), contextlib.redirect_stderr(erro):
+            r = pronuncia.transcrever_fala("x.mp3")
+        self.assertEqual(chamadas, [False])  # a percepção não tenta o Gemini outra vez
+        self.assertIn("servidor ocupado", erro.getvalue())
+        self.assertIn("gemini:", r["motivo"])
+        self.assertIn("whisper", r["motivo"])
+
+    def test_sem_chave_a_percepcao_explica(self):
+        from torralles_studio import percepcao, pronuncia
+
+        with mock.patch.dict("os.environ", {"GEMINI_API_KEY": ""}), \
+                mock.patch.object(percepcao, "transcrever",
+                                  lambda v, p, usar_gemini=True: {"texto": None, "motivo": f"gemini={usar_gemini}"}):
+            self.assertEqual(pronuncia.transcrever_fala("x.mp3")["motivo"], "gemini=True")

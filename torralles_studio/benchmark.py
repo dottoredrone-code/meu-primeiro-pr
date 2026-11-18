@@ -15,9 +15,10 @@ import json
 import math
 import re
 import shutil
-import subprocess
 from datetime import date
 from pathlib import Path
+
+from . import ff
 
 BRIEFINGS = {
     "A": {"tema": "história do café no Brasil", "tipo": "informativo", "testa": "pesquisa e precisão"},
@@ -181,10 +182,9 @@ def listar_videos(pasta, aviso=None):
 
 def _sondar(video):
     """Fluxos do arquivo (codecs, tamanho já girado pela rotação do celular)."""
-    proc = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+    proc = ff.rodar(["ffprobe", "-v", "error", "-show_entries",
                            "stream=codec_type,codec_name,pix_fmt,width,height:stream_tags=rotate:"
-                           "stream_side_data=rotation", "-of", "json", str(video)],
-                          capture_output=True, stdin=subprocess.DEVNULL, text=True)
+                           "stream_side_data=rotation", "-of", "json", str(video)])
     if proc.returncode != 0:
         raise ValueError("o arquivo não abre como vídeo (corrompido ou formato desconhecido)")
     fluxos = json.loads(proc.stdout or "{}").get("streams", [])

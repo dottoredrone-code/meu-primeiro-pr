@@ -11,11 +11,11 @@ A escolhida entra na biblioteca (licença e crédito guardados) e vai para a mon
 
 import array
 import math
-import subprocess
 import tempfile
 from collections import Counter
 from pathlib import Path
 
+from . import ff
 from .biblioteca import ErroLicenca
 from .midia import _extensao, _parece_pagina, candidatos_aceitos
 from .rede import ErroProvedor, baixar
@@ -34,6 +34,7 @@ BPM_POR_CLIMA = {"calmo": (60, 95), "reflexivo": (60, 95), "curioso": (90, 125),
 _VOZ = {"vocal", "vocals", "vocalist", "vox", "voice", "voices", "singing", "singer", "sung", "song", "lyrics",
         "lyric", "rap", "acapella", "cappella", "choir", "chorus", "chant", "feat", "ft", "karaoke", "spoken",
         "speech", "narration", "podcast", "voz", "cancao", "canção", "letra", "cantada", "cantor", "cantora"}
+PRAZO_MEDIR_S = 120  # decodificar 60 s de música leva segundos: passou disso, o FFmpeg travou
 _INSTRUMENTAL = {"instrumental", "background", "ambient", "soundtrack", "score", "loop", "beat", "piano"}
 
 
@@ -67,8 +68,8 @@ def tem_voz(candidato):
 
 def medir_ritmo(arquivo, segundos=60):
     """{"bpm", "energia" (0–1), "duracao_s"} medidos com FFmpeg + autocorrelação simples da energia."""
-    proc = subprocess.run(["ffmpeg", "-v", "error", "-t", str(segundos), "-i", str(arquivo), "-ac", "1",
-                           "-ar", "4000", "-f", "s16le", "-"], capture_output=True, stdin=subprocess.DEVNULL)
+    proc = ff.rodar(["ffmpeg", "-nostdin", "-v", "error", "-t", str(segundos), "-i", str(arquivo), "-ac", "1",
+                     "-ar", "4000", "-f", "s16le", "-"], prazo=PRAZO_MEDIR_S, binario=True)
     if proc.returncode != 0 or not proc.stdout:
         raise ErroProvedor("não consegui ler o áudio da trilha")
     amostras = array.array("h")
@@ -104,7 +105,7 @@ def _duracao_total(arquivo, padrao):
 
     try:
         return duracao(arquivo)  # a medição lê só 60 s; a duração real vem do ffprobe
-    except ErroMontagem:
+    except (ErroMontagem, ErroProvedor):  # ilegível ou ffprobe travado: fica a duração lida
         return padrao
 
 

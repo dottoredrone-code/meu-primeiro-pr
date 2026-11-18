@@ -81,6 +81,22 @@ class TestAcervo(unittest.TestCase):
         e = escolher_efeitos(self.bib, [None, None, None])
         self.assertEqual([x["nome"] for x in e[1:]], ["whoosh", "whoosh-short"])
 
+    def test_duracao_ilegivel_descarta_mas_erro_de_programa_aparece(self):  # auditoria item 9
+        from torralles_studio.montagem import ErroMontagem
+        from torralles_studio.rede import ErroProvedor
+
+        _som(self.sons, "whoosh.mp3")
+        importar_pasta(self.bib, self.sons, "pixabay", "Pixabay")
+        for erro in (ErroMontagem("ilegível"), ErroProvedor("ffprobe travou"), OSError("sem acesso")):
+            def ruim(_arq, erro=erro):
+                raise erro
+            self.assertEqual(escolher_efeitos(self.bib, [None, None], duracao_de=ruim), [None, None])
+
+        def bug(_arq):
+            raise TypeError("erro de programação")
+        with self.assertRaises(TypeError):
+            escolher_efeitos(self.bib, [None, None], duracao_de=bug)
+
     def test_acervo_vazio_nao_escolhe_nada(self):
         self.assertEqual(escolher_efeitos(self.bib, ["alegre", "tenso"]), [None, None])
 

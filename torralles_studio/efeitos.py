@@ -11,6 +11,8 @@ A montagem põe cada som 15 LU abaixo da voz, começando um pouco antes do corte
 from pathlib import Path
 
 from .biblioteca import TIPOS, _etiqueta
+from .montagem import ErroMontagem
+from .rede import ErroProvedor
 
 # Ordem de preferência por clima da cena que entra (nomes de arquivo, sem extensão). Alterna entre os que
 # existirem para não repetir o mesmo som em todo corte.
@@ -75,7 +77,7 @@ def escolher_efeitos(biblioteca, climas, *, perfil=None, duracao_de=None):
                 try:
                     if duracao_de(arq) > DURACAO_MAX_S:
                         ativo = None
-                except Exception:  # duração ilegível: arquivo ruim não entra
+                except (ErroMontagem, ErroProvedor, OSError):  # duração ilegível: arquivo ruim não entra
                     ativo = None
             cache[nome] = ativo
         return cache[nome]

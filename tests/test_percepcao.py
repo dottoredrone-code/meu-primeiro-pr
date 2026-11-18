@@ -62,3 +62,42 @@ class TestFonteDaFolha(unittest.TestCase):
             self.assertEqual(percepcao._fonte(), "C\\:/Windows/Fonts/arial.ttf")
         with mock.patch.object(percepcao, "_FONTES", []):
             self.assertIsNone(percepcao._fonte())  # sem fonte: folha sai sem o tempo escrito
+
+
+class TestSondar(unittest.TestCase):  # item 3 e 13
+    def rodar(self, saida, codigo=0, erro=""):
+        from unittest import mock
+
+        from torralles_studio import percepcao
+
+        proc = subprocess.CompletedProcess([], codigo, stdout=json.dumps(saida) if saida is not None else "",
+                                           stderr=erro)
+        with mock.patch.object(percepcao.ff, "rodar", return_value=proc):
+            return percepcao._sondar("x.mp4")
+
+    def test_fps_zero_sobre_zero_nao_quebra(self):
+        info = self.rodar({"format": {"duration": "3.0"},
+                           "streams": [{"codec_type": "video", "width": 10, "height": 20, "r_frame_rate": "0/0"}]})
+        self.assertEqual((info["largura"], info["fps"]), (10, None))
+
+    def test_capa_do_audio_nao_conta_como_video(self):
+        info = self.rodar({"format": {"duration": "3.0"}, "streams": [
+            {"codec_type": "audio"},
+            {"codec_type": "video", "width": 500, "height": 500, "r_frame_rate": "90000/1",
+             "disposition": {"attached_pic": 1}}]})
+        self.assertTrue(info["tem_audio"])
+        self.assertNotIn("largura", info)
+
+    def test_erro_do_ffprobe_vira_erro_provedor(self):
+        from torralles_studio.rede import ErroProvedor
+
+        with self.assertRaises(ErroProvedor) as ctx:
+            self.rodar(None, codigo=1, erro="x.mp4: Invalid data found when processing input")
+        self.assertIn("Invalid data", str(ctx.exception))
+        with self.assertRaises(ErroProvedor):
+            self.rodar({"format": {}, "streams": []})  # sem duração
+
+    def test_fps_fracionario(self):
+        from torralles_studio.percepcao import _fps
+
+        self.assertEqual((_fps("30000/1001"), _fps("25/1"), _fps(""), _fps("x/y")), (29.97, 25.0, None, None))

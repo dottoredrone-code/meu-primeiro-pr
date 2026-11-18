@@ -1,4 +1,5 @@
 import re
+import tempfile
 import tomllib
 import unittest
 from pathlib import Path
@@ -15,13 +16,13 @@ APOSENTADOS = [
 
 class TestContratos(unittest.TestCase):
     def setUp(self):
-        self.dados = tomllib.loads(Path(CONFIG_PADRAO).read_text())
+        self.dados = tomllib.loads(Path(CONFIG_PADRAO).read_text(encoding="utf-8"))
 
     def test_config_sem_modelos_aposentados(self):
         from torralles_studio import percepcao
 
         usados = {cfg.get("modelo") for cfg in self.dados["provedores"].values() if cfg.get("modelo")}
-        padrao_percepcao = re.search(r'GEMINI_MODELO_PERCEPCAO", "([^"]+)"', Path(percepcao.__file__).read_text())
+        padrao_percepcao = re.search(r'GEMINI_MODELO_PERCEPCAO", "([^"]+)"', Path(percepcao.__file__).read_text(encoding="utf-8"))
         usados.add(padrao_percepcao.group(1))
         ruins = {m for m in usados for padrao in APOSENTADOS if re.search(padrao, m)}
         self.assertFalse(ruins, f"modelos aposentados: {ruins}")
@@ -46,15 +47,13 @@ class TestContratos(unittest.TestCase):
             enviado.update(url=url, corpo=corpo)
             return {"video": {"url": "https://v3.fal.media/x.mp4"}}
 
-        img = Path(__file__).with_name("_img_teste.png")
-        img.write_bytes(b"\x89PNG\r\n\x1a\n")
-        try:
+        with tempfile.TemporaryDirectory() as pasta:  # nada criado dentro do repositório
+            img = Path(pasta) / "img.png"
+            img.write_bytes(b"\x89PNG\r\n\x1a\n")
             with mock.patch("torralles_studio.provedores.video.post_json", falso_post), \
                  mock.patch("torralles_studio.provedores.video.baixar", return_value=b"mp4"), \
                  mock.patch("torralles_studio.provedores.video.salvar", side_effect=lambda s, d: s):
-                kling.executar(img, "câmera avança", Path("/tmp/x.mp4"), duracao=5)
-        finally:
-            img.unlink()
+                kling.executar(img, "câmera avança", Path(pasta) / "x.mp4", duracao=5)
         self.assertIn("/v3/", enviado["url"])
         self.assertIn("start_image_url", enviado["corpo"])
         self.assertNotIn("image_url", enviado["corpo"])

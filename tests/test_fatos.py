@@ -91,3 +91,19 @@ class TestFatosTravados(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAuditoriaPercentuais(unittest.TestCase):  # item 2
+    def test_cem_por_cento_e_expressao_comum(self):
+        for texto in ["Luminária Lua 30 cm, 100% algodão", "Luminária Lua 30 cm: cem por cento natural",
+                      "Luminária Lua 30 cm, 100 por cento nacional"]:
+            self.assertEqual(checar_fatos(texto, FATOS), [], texto)
+
+    def test_percentual_por_extenso_e_conferido(self):
+        for texto in ["Luminária Lua 30 cm com vinte por cento de desconto", "Luminária Lua 30 cm com 20 por cento off",
+                      "Luminária Lua 30 cm com vinte e cinco por cento off"]:
+            self.assertTrue(any("percentual não autorizado" in p for p in checar_fatos(texto, FATOS)), texto)
+
+    def test_percentual_autorizado_por_extenso_passa(self):
+        self.assertEqual(checar_fatos("Luminária Lua 30 cm com quinze por cento de desconto", FATOS), [])
+        self.assertEqual(checar_fatos("Luminária Lua 30 cm com 15 por cento off", FATOS), [])

@@ -168,7 +168,8 @@ class TestFila(unittest.TestCase):
 
 class TestHTTP(unittest.TestCase):
     def setUp(self):
-        self._d = tempfile.TemporaryDirectory()
+        # Windows: a thread do servidor pode segurar o banco um instante depois do teste
+        self._d = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.servico = ServicoPecas(Path(self._d.name) / "b.db", fabricar=Fabrica())
 
     def tearDown(self):
@@ -188,7 +189,7 @@ class TestHTTP(unittest.TestCase):
                                               **({"Authorization": f"Bearer {token}"} if token else {}),
                                               **(extra or {})})
         try:
-            with urllib.request.urlopen(req, timeout=10) as r:
+            with urllib.request.urlopen(req, timeout=60) as r:  # suíte inteira deixa o PC lento
                 return r.status, json.loads(r.read())
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read())
@@ -326,7 +327,7 @@ class TestMCP(unittest.TestCase):
             respostas = [json.loads(l) for l in saida.getvalue().splitlines()]
             self.assertEqual([r.get("id") for r in respostas], [1, 2, 3, None])  # notificação não tem resposta
             self.assertEqual(respostas[0]["result"]["protocolVersion"], "2025-06-18")
-            self.assertEqual({t["name"] for t in respostas[1]["result"]["tools"]}, {"produzir_peca", "consultar_peca"})
+            self.assertEqual({t["name"] for t in respostas[1]["result"]["tools"]}, {"produzir_peca", "consultar_peca", "aprovar_peca", "cancelar_peca"})
             job = json.loads(respostas[2]["result"]["content"][0]["text"])["job_id"]
             consulta = responder_mcp(servico, {"jsonrpc": "2.0", "id": 4, "method": "tools/call",
                                                "params": {"name": "consultar_peca", "arguments": {"job_id": job}}})
@@ -387,3 +388,97 @@ class TestFabricarPost(unittest.TestCase):
             self.assertIn("sem nenhum texto", img.pedido[0])  # o texto entra depois, sem erro de digitação da IA
             self.assertAlmostEqual(r["custo_usd"], 0.06)
             self.assertTrue(r["revisar_manual"])
+
+
+class TestAprovarCancelarETrava(unittest.TestCase):
+    """Auditoria 17/11: aprovação/cancelamento, JSON malicioso e um processo por pasta de pedido."""
+
+    def setUp(self):
+        self._d = tempfile.TemporaryDirectory()
+        self.d = Path(self._d.name)
+
+    def tearDown(self):
+        self._d.cleanup()
+
+    def test_aprovar_e_cancelar(self):
+        from torralles_studio.servico import TransicaoInvalida
+
+        fabrica = Fabrica()
+        s = ServicoPecas(self.d / "b.db", pasta_base=self.d / "pedidos", fabricar=fabrica)
+        a, b = s.enviar(PEDIDO), s.enviar(PEDIDO)
+        self.assertEqual(s.cancelar(b["job_id"])["status"], "cancelado")
+        s.processar_proximo()
+        self.assertIsNone(s.processar_proximo())  # o cancelado não é produzido
+        self.assertEqual(len(fabrica.chamadas), 1)
+        self.assertEqual(s.aprovar(a["job_id"])["status"], "concluido")
+        self.assertEqual(s.aprovar(a["job_id"])["status"], "concluido")  # repetir não é erro
+        with self.assertRaises(TransicaoInvalida):
+            s.cancelar(a["job_id"])
+        self.assertIsNone(s.aprovar("stu_nao_existe"))
+
+    def test_cancelado_durante_a_producao_para_e_nao_grava(self):
+        from torralles_studio.servico import PedidoCancelado
+
+        s = ServicoPecas(self.d / "b.db", pasta_base=self.d / "pedidos", fabricar=None)
+        r = s.enviar(PEDIDO)
+
+        def fabricar(pedido, pasta, config=None, continuar=None):
+            s.cancelar(r["job_id"])  # o Ops cancela no meio
+            with Banco(self.d / "b.db") as banco:  # o batimento percebe
+                self.assertFalse(banco.batimento(r["job_id"], s.dono))
+            raise PedidoCancelado("parou")
+
+        s.fabricar = fabricar
+        from contextlib import redirect_stderr
+
+        with redirect_stderr(io.StringIO()):
+            s.processar_proximo()
+        self.assertEqual(s.consultar(r["job_id"])["status"], "cancelado")
+
+    def test_trava_da_pasta_e_exclusiva_e_recupera_processo_morto(self):
+        from torralles_studio.servico import TRAVA, soltar_pasta, travar_pasta
+
+        pasta = self.d / "p"
+        trava = travar_pasta(pasta, "dono-a")
+        self.assertIsNotNone(trava)
+        self.assertIsNone(travar_pasta(pasta, "dono-b"))  # este processo está vivo
+        soltar_pasta(trava, "dono-a")
+        self.assertFalse((pasta / TRAVA).exists())
+        (pasta / TRAVA).write_text("999999999\nmorto\n", encoding="utf-8")  # processo que não existe mais
+        self.assertIsNotNone(travar_pasta(pasta, "dono-c"))
+
+    def test_http_aprovar_cancelar_e_json_aninhado(self):
+        servico = ServicoPecas(self.d / "b.db", fabricar=Fabrica())
+        http = criar_servidor_http(servico, "127.0.0.1", 0)
+        threading.Thread(target=http.serve_forever, daemon=True).start()
+        self.addCleanup(http.server_close)
+        self.addCleanup(http.shutdown)
+        base = f"http://127.0.0.1:{http.server_address[1]}"
+
+        def post(caminho, dados):
+            req = urllib.request.Request(base + caminho, data=dados, method="POST",
+                                         headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    return resp.status, json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read())
+
+        self.assertEqual(post("/v1/pecas", b"[" * 200000)[0], 400)  # antes: conexão caía sem resposta
+        _, r = post("/v1/pecas", json.dumps(PEDIDO).encode())
+        self.assertEqual(post(f"/v1/pecas/{r['job_id']}/cancelar", b"{}"), (200, {**servico.consultar(r["job_id"])}))
+        self.assertEqual(post(f"/v1/pecas/{r['job_id']}/aprovar", b"{}")[0], 409)
+        self.assertEqual(post("/v1/pecas/stu_x/aprovar", b"{}")[0], 404)
+
+    def test_mcp_cancelar_e_json_aninhado(self):
+        servico = ServicoPecas(self.d / "b.db", fabricar=Fabrica())
+        r = servico.enviar(PEDIDO)
+        msgs = ["[" * 200000,
+                json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                            "params": {"name": "cancelar_peca", "arguments": {"job_id": r["job_id"]}}})]
+        saida = io.StringIO()
+        servir_mcp(servico, io.StringIO("\n".join(msgs) + "\n"), saida)
+        respostas = [json.loads(l) for l in saida.getvalue().splitlines()]
+        self.assertEqual(respostas[0]["error"]["code"], -32700)
+        self.assertFalse(respostas[1]["result"]["isError"])
+        self.assertEqual(servico.consultar(r["job_id"])["status"], "cancelado")

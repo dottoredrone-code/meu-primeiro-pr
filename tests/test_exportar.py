@@ -105,6 +105,20 @@ class TestExportarCapCut(unittest.TestCase):
             self.assertEqual(main(["exportar-capcut", str(video)]), 0)
         self.assertTrue((video / "capcut" / "02_audio" / "narracao.wav").is_file())
 
+    def test_usa_o_ganho_guardado_pela_montagem(self):  # auditoria item 12
+        from unittest import mock
+
+        from torralles_studio import exportar, montagem
+
+        r = self.montagem(trilha=True)
+        self.assertIsInstance(r["ganho_db"], float)
+        trabalho = self.d / "trabalho"
+        medido = exportar._ganho_final(trabalho)  # reserva: mede os WAVs (montagem antiga, sem ganho_db)
+        self.assertAlmostEqual(r["ganho_db"], medido, delta=0.5)
+        with mock.patch.object(montagem, "medir_volume", side_effect=AssertionError("mediu os WAVs")):
+            self.assertEqual(exportar._ganho_final(trabalho, r), r["ganho_db"])
+            exportar_capcut(r, self.d / "capcut")
+
     def test_sem_arquivos_de_trabalho_explica(self):
         with self.assertRaises(ErroExportacao):
             exportar_capcut({"pasta_trabalho": str(self.d / "nada"), "tempos": [{"inicio": 0, "duracao": 2}]},

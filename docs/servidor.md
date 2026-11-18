@@ -9,8 +9,14 @@ volta para a fila e continua sem pagar de novo.
 python -m torralles_studio servidor            # http://127.0.0.1:8765, só este PC
 ```
 - `POST /v1/pecas` com o pedido em JSON → `202 {"job_id": "stu_…", "status": "na_fila", "estimativa_custo_usd": 0.08}`
-- `GET /v1/pecas/{job_id}` → status (`na_fila`, `produzindo`, `aguardando_aprovacao`, `concluido`, `falhou`) e,
+- `GET /v1/pecas/{job_id}` → status (`na_fila`, `produzindo`, `aguardando_aprovacao`, `concluido`, `falhou`, `cancelado`) e,
   quando pronto, `arquivos` (caminho e sha256), `qualidade`, `custo_usd`, `creditos`, `exportacao_capcut`.
+- `POST /v1/pecas/{job_id}/aprovar` → `aguardando_aprovacao` passa a `concluido` (aprovação humana, D19).
+- `POST /v1/pecas/{job_id}/cancelar` → `cancelado`: na fila não é produzido; em produção, o trabalhador para na
+  próxima etapa (antes de chamar outro provedor) e não grava nada; aguardando aprovação, fica recusado.
+  Mudança impossível (ex.: cancelar o que já está `concluido`) → `409`; pedido que não existe → `404`.
+- Um processo por pasta de pedido (`.produzindo.trava`): se dois servidores pegarem o mesmo pedido depois de uma
+  queda, só um produz; o outro devolve o pedido à fila. Até 8 conexões ao mesmo tempo (acima disso, `503`).
 - Pedido com problema → `422 {"erro": "pedido inválido", "problemas": [...]}` (diz o campo e o porquê).
 - Proteção:
   - o pedido precisa ir com `Content-Type: application/json` (formulário de site é recusado: 415);
@@ -34,7 +40,8 @@ Invoke-RestMethod http://127.0.0.1:8765/v1/pecas/stu_xxxxxxxx
 ```bash
 python -m torralles_studio mcp
 ```
-Ferramentas: `produzir_peca` (`{"pedido": {...}}`) e `consultar_peca` (`{"job_id": "stu_…"}`).
+Ferramentas: `produzir_peca` (`{"pedido": {...}}`), `consultar_peca`, `aprovar_peca` e `cancelar_peca`
+(`{"job_id": "stu_…"}`).
 Configuração típica de um cliente MCP (stdio): comando `python`, argumentos `-m torralles_studio mcp`,
 pasta de trabalho = pasta do repositório.
 

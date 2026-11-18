@@ -45,12 +45,20 @@ class Orcamento:
 
     @classmethod
     def estimar(cls, provedor, kwargs):
+        """Custo previsto. Provedor que não recebe a duração (`enviar_duracao = false`, ex.: Wan) gera e cobra o
+        clipe padrão dele (`duracao_padrao_s`): esse é o mínimo cobrado, mesmo que a cena peça menos."""
         cfg = provedor.cfg
         por_segundo = float(cfg.get("custo_usd_por_segundo", 0))
         try:
-            duracao = float(kwargs.get("duracao") or cfg.get("duracao_padrao_s") or cls.DURACAO_PADRAO_S)
+            padrao = float(cfg.get("duracao_padrao_s") or cls.DURACAO_PADRAO_S)
         except (TypeError, ValueError):
-            duracao = cls.DURACAO_PADRAO_S
+            padrao = cls.DURACAO_PADRAO_S
+        try:
+            duracao = float(kwargs.get("duracao") or padrao)
+        except (TypeError, ValueError):
+            duracao = padrao
+        if not cfg.get("enviar_duracao", True):
+            duracao = max(duracao, padrao)
         return float(cfg.get("custo_usd", 0)) + por_segundo * duracao
 
     def cabe(self, valor):
