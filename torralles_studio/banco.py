@@ -201,6 +201,12 @@ MIGRACOES = [
         "atualizado_em TEXT NOT NULL, PRIMARY KEY (id, pasta))",
         "CREATE INDEX idx_pedidos_navegador_estado ON pedidos_navegador(pasta, estado)",
     ],
+    # 11 — decisões do Diego no painel (K43, spec 15): aprovar ou pedir alteração por item do projeto
+    [
+        "CREATE TABLE revisoes (id INTEGER PRIMARY KEY, projeto TEXT NOT NULL, item TEXT NOT NULL, "
+        "decisao TEXT NOT NULL, comentario TEXT, criado_em TEXT NOT NULL, atendida INTEGER NOT NULL DEFAULT 0)",
+        "CREATE INDEX idx_revisoes_projeto ON revisoes(projeto, item, id)",
+    ],
 ]
 # Cada migração é uma lista de comandos (sem partir por ";", que quebraria textos e gatilhos).
 
@@ -566,6 +572,26 @@ class Banco:
             return self.con.execute("UPDATE pedidos SET status = 'na_fila', dono = NULL, atualizado_em = ? "
                                     "WHERE status IN ('produzindo', 'avaliando') AND atualizado_em <= ?",
                                     (_agora(), limite)).rowcount
+
+    def listar_pedidos(self, limite=200):
+        """Pedidos mais novos primeiro (para o painel)."""
+        ids = [l["id"] for l in self.con.execute("SELECT id FROM pedidos ORDER BY criado_em DESC, rowid DESC LIMIT ?",
+                                                 (int(limite),))]
+        return [self.pedido(i) for i in ids]
+
+    # -- revisões do painel (K43) ----------------------------------------------
+    def registrar_revisao(self, projeto, item, decisao, comentario=None):
+        with self.con:
+            cur = self.con.execute("INSERT INTO revisoes (projeto, item, decisao, comentario, criado_em) "
+                                   "VALUES (?, ?, ?, ?, ?)", (projeto, item, decisao, comentario, _agora()))
+        return cur.lastrowid
+
+    def revisoes(self, projeto=None):
+        """Decisões (mais novas primeiro); sem `projeto`, de todos."""
+        sql, args = "SELECT * FROM revisoes", []
+        if projeto is not None:
+            sql, args = sql + " WHERE projeto = ?", [projeto]
+        return [dict(l) for l in self.con.execute(sql + " ORDER BY id DESC", args)]
 
     def pedidos_na_fila(self):
         return self.con.execute("SELECT COUNT(*) FROM pedidos WHERE status = 'na_fila'").fetchone()[0]

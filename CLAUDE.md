@@ -41,6 +41,7 @@ torralles_studio/
   trilha.py       trilha pelo clima do roteiro (BPM e energia pelo FFmpeg, voz eliminatória); exportar.py pasta para o CapCut
   efeitos.py      sons curtos nos cortes, pelo clima, só do acervo local (importar-sons)
   contrato.py     pedido Ops → Studio (spec 08); servico.py fila de pedidos; servidor.py HTTP local e MCP
+  painel.py       painel no navegador (K43, spec 15): projetos, aprovar ou pedir alteração; página em painel_web/
   montagem.py     vídeo final: tempo da fala, transições na batida, legendas na área segura, trilha sob a voz, −14 LUFS
   banco.py        SQLite: projetos, peças, tentativas, custo, retomada e cache (dados/, fora do Git)
   biblioteca.py   mídia por hash (sem duplicatas), licença obrigatória, busca por etiqueta, créditos CC-BY
@@ -80,7 +81,7 @@ python -m torralles_studio prompt-midia "ideia" -m animar       # prompt pronto 
 python -m torralles_studio pedidos-navegador saidas/<tema> -m imagem   # K37: pedidos para a skill midia-navegador
 python -m torralles_studio importar-midia saidas/<tema> --site adobe_firefly   # confere e registra o que veio dos sites
 python -m torralles_studio testar-voz                          # frase com lh, nh, rr em cada voz pronta (ouvir + erro de palavras)
-python -m torralles_studio servidor                           # HTTP local para o Ops (docs/servidor.md); 'mcp' para o Hermes
+python -m torralles_studio servidor                           # painel em http://127.0.0.1:8765/ + HTTP para o Ops (docs/servidor.md); 'mcp' para o Hermes
 python -m torralles_studio montar projeto.json -o final.mp4   # montagem final + régua (docs/montagem.md)
 python -m torralles_studio --config outro.toml status   # config alternativo (ou TORRALLES_CONFIG)
 ```

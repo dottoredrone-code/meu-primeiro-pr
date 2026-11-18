@@ -3,6 +3,7 @@
 - HTTP (Torralles Ops): POST /v1/pecas → {"job_id", "status", "estimativa_custo_usd"} (202);
   GET /v1/pecas/{job_id} → status e resultado; GET /v1/saude;
   POST /v1/pecas/{job_id}/aprovar e /cancelar (aprovação humana e cancelamento).
+  Painel no navegador (K43, spec 15): GET / abre /painel/; a API do painel fica em /painel/api/.
   Escuta só em 127.0.0.1 por padrão. Com a variável TORRALLES_STUDIO_TOKEN definida, todo pedido precisa do
   cabeçalho "Authorization: Bearer <token>" (obrigatório se escutar fora do próprio PC).
 - MCP por stdio (Hermes e agentes): ferramentas produzir_peca, consultar_peca, aprovar_peca e cancelar_peca
@@ -13,10 +14,13 @@ import hmac
 import json
 import os
 import re
+import secrets
 import socket
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from .seguranca import mascarar
 from .servico import FilaCheia, PedidoInvalido, TransicaoInvalida
@@ -29,6 +33,24 @@ VERSOES_MCP = ("2025-06-18", "2025-03-26", "2024-11-05")
 _ROTA_PECA = re.compile(r"^/v1/pecas/([A-Za-z0-9_-]{1,64})$")
 _ROTA_ACAO = re.compile(r"^/v1/pecas/([A-Za-z0-9_-]{1,64})/(aprovar|cancelar)$")
 MAX_CONEXOES = 8  # conexões atendidas ao mesmo tempo; acima disso responde 503 (cada uma é uma thread)
+# Painel (K43, spec 15): página sem dados + API JSON + arquivos por nome de lista fechada.
+PASTA_WEB = Path(__file__).resolve().parent / "painel_web"
+ESTATICOS = {"/painel/": ("index.html", "text/html; charset=utf-8"),
+             "/painel/app.js": ("app.js", "text/javascript; charset=utf-8"),
+             "/painel/estilo.css": ("estilo.css", "text/css; charset=utf-8")}
+SEGURANCA_PAINEL = {
+    "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self'; "
+                               "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
+                               "form-action 'self'",
+    "X-Frame-Options": "DENY", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+}
+COOKIE = "torralles_token"
+_ROTA_PROJETO = re.compile(r"^/painel/api/projetos/([a-z0-9][a-z0-9_-]{0,79})$")
+_ROTA_REVISAO = re.compile(r"^/painel/api/projetos/([a-z0-9][a-z0-9_-]{0,79})/revisao$")
+_ROTA_ARQUIVO = re.compile(r"^/painel/arquivo/([a-z0-9][a-z0-9_-]{0,79})/([A-Za-z0-9_.-]{1,40})$")
+_ROTA_MIDIA = re.compile(r"^/painel/midia/([0-9a-f]{64})$")
+_RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
 ERROS_DE_JSON = (UnicodeDecodeError, json.JSONDecodeError, RecursionError)  # JSON muito aninhado estoura a pilha
 
 
@@ -41,8 +63,9 @@ def _acao(servico, job_id, acao):
     return (200, r) if r else (404, {"erro": "pedido não encontrado"})
 
 
-def _manipulador(servico, token, so_local):
+def _manipulador(servico, token, so_local, painel=None):
     vagas = threading.BoundedSemaphore(MAX_CONEXOES)
+    sessoes, trava_sessoes = set(), threading.Lock()  # sessões do painel (só na memória; reiniciar pede o token)
 
     class Manipulador(BaseHTTPRequestHandler):
         server_version = "TorrallesStudio/1"
@@ -63,67 +86,262 @@ def _manipulador(servico, token, so_local):
             finally:
                 vagas.release()
 
-        def _responder(self, codigo, corpo):
+        def _responder(self, codigo, corpo, extras=None):
             dados = json.dumps(corpo, ensure_ascii=False).encode("utf-8")
             self.send_response(codigo)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(dados)))
+            for nome, valor in (extras or {}).items():
+                self.send_header(nome, valor)
             self.end_headers()
             self.wfile.write(dados)
 
+        def _cookie_sessao(self):
+            """Valor do cookie do painel. Lido à mão: o navegador manda junto os cookies de outros apps deste PC
+            (cookie não separa por porta) e um valor fora do padrão faria o leitor da biblioteca desistir."""
+            for parte in (self.headers.get("Cookie") or "").split(";"):
+                nome, _, valor = parte.strip().partition("=")
+                if nome == COOKIE:
+                    return valor.strip()
+            return ""
+
         def _autorizado(self):
+            self._via_cookie = False
             if not token:
                 return True
             recebido = self.headers.get("Authorization", "")
-            return hmac.compare_digest(recebido.encode(), f"Bearer {token}".encode())
+            if hmac.compare_digest(recebido.encode("utf-8", "replace"), f"Bearer {token}".encode("utf-8", "replace")):
+                return True
+            # painel no navegador: o token entra uma vez e vira uma sessão aleatória num cookie HttpOnly
+            # (o token de verdade nunca vai para o cookie, que outros servidores deste PC também recebem)
+            valor = self._cookie_sessao()
+            with trava_sessoes:
+                ok = bool(valor) and any(hmac.compare_digest(valor.encode("utf-8", "replace"), s.encode())
+                                         for s in sessoes)
+            self._via_cookie = ok
+            return ok
 
-        def _barrar(self):
+        def _origem_propria(self):
+            """Pedido com cookie que muda algo precisa vir desta mesma página (mesmo host e porta): o cookie
+            SameSite também vai para páginas de outras portas deste PC."""
+            origem = self.headers.get("Origin") or ""
+            host = self.headers.get("Host") or ""
+            return bool(host) and origem.lower() == f"http://{host}".lower()
+
+        def _ler_corpo(self):
+            """(dados, None) ou (None, (código, corpo do erro)). Exige JSON de verdade."""
+            tipo = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if tipo != "application/json":  # formulário de site (text/plain) não passa: exige JSON de verdade
+                return None, (415, {"erro": "envie o pedido com Content-Type: application/json"})
+            try:
+                tamanho = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                tamanho = -1
+            if not 0 < tamanho <= LIMITE_CORPO:
+                return None, (413 if tamanho > LIMITE_CORPO else 400, {"erro": "corpo vazio ou grande demais"})
+            try:
+                return json.loads(self.rfile.read(tamanho).decode("utf-8")), None
+            except ERROS_DE_JSON:
+                return None, (400, {"erro": "JSON inválido"})
+
+        # -- painel (K43) -----------------------------------------------------
+        def _estatico(self, rota):
+            nome, tipo = ESTATICOS[rota]
+            try:
+                dados = (PASTA_WEB / nome).read_bytes()
+            except OSError:
+                return self._responder(404, {"erro": "página do painel não encontrada"})
+            self.send_response(200)
+            self.send_header("Content-Type", tipo)
+            self.send_header("Content-Length", str(len(dados)))
+            for nome_cab, valor in SEGURANCA_PAINEL.items():
+                self.send_header(nome_cab, valor)
+            self.end_headers()
+            self.wfile.write(dados)
+
+        def _arquivo(self, caminho):
+            """Envia um arquivo do projeto ou da biblioteca, com Range (o player avança e volta no vídeo)."""
+            from .painel import TIPOS_ARQUIVO
+
+            tamanho = caminho.stat().st_size
+            inicio, fim, codigo = 0, tamanho - 1, 200
+            pedido_range = (self.headers.get("Range") or "").strip()
+            if pedido_range and tamanho:
+                m = _RANGE.fullmatch(pedido_range)
+                if not m or (not m.group(1) and not m.group(2)):
+                    return self._range_invalido(tamanho)
+                if m.group(1):
+                    inicio = int(m.group(1))
+                    fim = min(int(m.group(2)), tamanho - 1) if m.group(2) else tamanho - 1
+                else:  # últimos N bytes
+                    inicio = max(0, tamanho - int(m.group(2)))
+                if inicio > fim or inicio >= tamanho:
+                    return self._range_invalido(tamanho)
+                codigo = 206
+            self.send_response(codigo)
+            self.send_header("Content-Type", TIPOS_ARQUIVO.get(caminho.suffix.lower(), "application/octet-stream"))
+            self.send_header("Content-Length", str(fim - inicio + 1 if tamanho else 0))
+            self.send_header("Accept-Ranges", "bytes")
+            if codigo == 206:
+                self.send_header("Content-Range", f"bytes {inicio}-{fim}/{tamanho}")
+            for nome_cab, valor in SEGURANCA_PAINEL.items():
+                self.send_header(nome_cab, valor)
+            self.end_headers()
+            if not tamanho:
+                return None
+            with open(caminho, "rb") as f:
+                f.seek(inicio)
+                falta = fim - inicio + 1
+                while falta > 0:
+                    bloco = f.read(min(1 << 16, falta))
+                    if not bloco:
+                        break
+                    try:
+                        self.wfile.write(bloco)
+                    except OSError:  # o player fechou a conexão (pulou para outro trecho) ou passou do prazo
+                        self.close_connection = True
+                        break
+                    falta -= len(bloco)
+            return None
+
+        def _range_invalido(self, tamanho):
+            self.send_response(416)
+            self.send_header("Content-Range", f"bytes */{tamanho}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def _painel_get(self, rota, consulta):
+            """True se a rota é do painel (já respondida)."""
+            from .painel import ErroPainel
+
+            if rota == "/" or rota == "/painel":
+                self.send_response(302)
+                self.send_header("Location", "/painel/")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return True
+            if rota in ESTATICOS:
+                self._estatico(rota)
+                return True
+            if not rota.startswith("/painel/"):
+                return False
+            if not self._autorizado():
+                self._responder(401, {"erro": "token ausente ou errado", "precisa_token": True})
+                return True
+            try:
+                if rota == "/painel/api/resumo":
+                    self._responder(200, painel.resumo())
+                elif rota == "/painel/api/perfis":
+                    self._responder(200, {"perfis": painel.perfis()[0]})
+                elif rota == "/painel/api/projetos":
+                    self._responder(200, {"projetos": painel.projetos()})
+                elif rota == "/painel/api/biblioteca":
+                    q = parse_qs(consulta)
+                    self._responder(200, {"ativos": painel.biblioteca((q.get("busca") or [""])[0],
+                                                                       (q.get("tipo") or [""])[0])})
+                elif m := _ROTA_PROJETO.fullmatch(rota):
+                    self._responder(200, painel.projeto(m.group(1)))
+                elif m := _ROTA_ARQUIVO.fullmatch(rota):
+                    self._arquivo(painel.arquivo(m.group(1), m.group(2)))
+                elif m := _ROTA_MIDIA.fullmatch(rota):
+                    self._arquivo(painel.midia(m.group(1)))
+                else:
+                    self._responder(404, {"erro": "rota não encontrada"})
+            except ErroPainel as e:
+                self._responder(e.codigo, {"erro": str(e)})
+            except Exception as e:  # nunca derruba a conexão sem resposta
+                self._responder(500, {"erro": mascarar(f"{type(e).__name__}: {e}")[:300]})
+            return True
+
+        def _painel_post(self, rota):
+            from .painel import ErroPainel
+
+            if rota == "/painel/entrar":
+                dados, erro = self._ler_corpo()
+                if erro:
+                    return self._responder(*erro)
+                recebido = str((dados or {}).get("token") or "") if isinstance(dados, dict) else ""
+                if not token:
+                    return self._responder(200, {"ok": True})
+                if not hmac.compare_digest(recebido.encode("utf-8", "replace"), token.encode("utf-8", "replace")):
+                    return self._responder(401, {"erro": "token errado"})
+                sessao = secrets.token_urlsafe(32)
+                with trava_sessoes:
+                    if len(sessoes) >= 100:  # nunca cresce sem limite: entrar de novo derruba as mais antigas
+                        sessoes.clear()
+                    sessoes.add(sessao)
+                biscoito = f"{COOKIE}={sessao}; HttpOnly; SameSite=Strict; Path=/"
+                return self._responder(200, {"ok": True}, {"Set-Cookie": biscoito})
+            if not self._autorizado():
+                return self._responder(401, {"erro": "token ausente ou errado", "precisa_token": True})
+            if self._via_cookie and not self._origem_propria():
+                return self._responder(403, {"erro": "origem não permitida"})
+            dados, erro = self._ler_corpo()
+            if erro:
+                return self._responder(*erro)
+            try:
+                if rota == "/painel/api/novo":
+                    return self._responder(202, painel.novo(dados))
+                m = _ROTA_REVISAO.fullmatch(rota)
+                if m:
+                    return self._responder(200, painel.revisar(m.group(1), dados))
+                return self._responder(404, {"erro": "rota não encontrada"})
+            except ErroPainel as e:
+                return self._responder(e.codigo, {"erro": str(e)})
+            except Exception as e:
+                return self._responder(500, {"erro": mascarar(f"{type(e).__name__}: {e}")[:300]})
+
+        def _barrar(self, exigir_token=True):
             """Resposta de recusa (ou None se pode seguir): host, origem de navegador e token."""
             cabecalho = (self.headers.get("Host") or "").lower()
             host = cabecalho.split("]")[0] + "]" if cabecalho.startswith("[") else cabecalho.rsplit(":", 1)[0]
             if so_local and host not in _LOCAL:  # contra "DNS rebinding": nome de outro site apontando para cá
                 return 403, {"erro": "host não permitido"}
             origem = self.headers.get("Origin")
-            if origem is not None and not _ORIGEM_LOCAL.match(origem):
+            if origem is not None and not _ORIGEM_LOCAL.fullmatch(origem):
                 return 403, {"erro": "origem não permitida"}
-            if not self._autorizado():
+            if exigir_token and not self._autorizado():
                 return 401, {"erro": "token ausente ou errado"}
             return None
 
         def do_GET(self):
+            partes = urlsplit(self.path)
+            if painel is not None and (partes.path in ("/", "/painel") or partes.path.startswith("/painel/")):
+                barrado = self._barrar(exigir_token=False)  # o painel confere o token por rota (a página abre sem)
+                if barrado:
+                    return self._responder(*barrado)
+                if self._painel_get(partes.path, partes.query):
+                    return None
             barrado = self._barrar()
             if barrado:
                 return self._responder(*barrado)
             if self.path == "/v1/saude":
                 return self._responder(200, {"ok": True})
-            m = _ROTA_PECA.match(self.path)
+            m = _ROTA_PECA.fullmatch(self.path)
             if not m:
                 return self._responder(404, {"erro": "rota não encontrada"})
             r = servico.consultar(m.group(1))
             return self._responder(200, r) if r else self._responder(404, {"erro": "pedido não encontrado"})
 
         def do_POST(self):
+            if painel is not None and self.path.startswith("/painel/"):
+                barrado = self._barrar(exigir_token=False)
+                if barrado:
+                    return self._responder(*barrado)
+                return self._painel_post(urlsplit(self.path).path)
             barrado = self._barrar()
             if barrado:
                 return self._responder(*barrado)
-            acao = _ROTA_ACAO.match(self.path)
+            if getattr(self, "_via_cookie", False) and not self._origem_propria():
+                return self._responder(403, {"erro": "origem não permitida"})  # cookie só da própria página
+            acao = _ROTA_ACAO.fullmatch(self.path)
             if acao:
                 return self._responder(*_acao(servico, acao.group(1), acao.group(2)))
             if self.path != "/v1/pecas":
                 return self._responder(404, {"erro": "rota não encontrada"})
-            tipo = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-            if tipo != "application/json":  # formulário de site (text/plain) não passa: exige JSON de verdade
-                return self._responder(415, {"erro": "envie o pedido com Content-Type: application/json"})
-            try:
-                tamanho = int(self.headers.get("Content-Length") or 0)
-            except ValueError:
-                tamanho = -1
-            if not 0 < tamanho <= LIMITE_CORPO:
-                return self._responder(413 if tamanho > LIMITE_CORPO else 400, {"erro": "corpo vazio ou grande demais"})
-            try:
-                dados = json.loads(self.rfile.read(tamanho).decode("utf-8"))
-            except ERROS_DE_JSON:
-                return self._responder(400, {"erro": "JSON inválido"})
+            dados, erro = self._ler_corpo()
+            if erro:
+                return self._responder(*erro)
             try:
                 return self._responder(202, servico.enviar(dados))
             except PedidoInvalido as e:
@@ -136,14 +354,15 @@ def _manipulador(servico, token, so_local):
     return Manipulador
 
 
-def criar_servidor_http(servico, host="127.0.0.1", porta=8765, token=None):
+def criar_servidor_http(servico, host="127.0.0.1", porta=8765, token=None, painel=None):
     token = token if token is not None else os.environ.get("TORRALLES_STUDIO_TOKEN") or None
     if host not in ("127.0.0.1", "localhost", "::1") and not token:
         raise ValueError("para escutar fora deste PC, defina TORRALLES_STUDIO_TOKEN (proteção do servidor)")
     classe = ThreadingHTTPServer
     if ":" in host:  # IPv6 (ex.: ::1)
         classe = type("ServidorIPv6", (ThreadingHTTPServer,), {"address_family": socket.AF_INET6})
-    return classe((host, porta), _manipulador(servico, token, so_local=host in ("127.0.0.1", "localhost", "::1")))
+    return classe((host, porta), _manipulador(servico, token, so_local=host in ("127.0.0.1", "localhost", "::1"),
+                                              painel=painel))
 
 
 # ---------------------------------------------------------------- MCP (stdio)

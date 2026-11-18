@@ -4,6 +4,18 @@ O mesmo pedido (contrato da [spec 08](sdd/08-contrato-ops-studio.md)) entra por 
 numa fila no banco do Studio e são produzidos um por vez, em segundo plano. Se o PC desligar no meio, o pedido
 volta para a fila e continua sem pagar de novo.
 
+## Painel no navegador (K43, spec 15)
+Com o servidor ligado, abra **http://127.0.0.1:8765/** no navegador do seu PC:
+- **Projetos:** cada vídeo de `saidas/` e cada pedido da fila, com filtro (para revisar, alteração pedida, aprovados…).
+- **Projeto:** o vídeo, as cenas (imagem, trecho, fala, fonte e licença), a capa, o post (botão copiar), os créditos e a
+  régua. Em cada item: **Aprovar** ou **Pedir alteração** (com comentário). Aprovar o vídeo de um pedido que espera você
+  também aprova o pedido. Refazer sozinho o item com alteração pedida vem no K44.
+- **Novo:** tema, tipo (vídeo curto, story, post de imagem), formato, duração, perfil e teto (até US$ 1,50).
+- **Biblioteca** (mídia com fonte e licença) e **Controle** (provedores prontos, cotas grátis, fila e gasto do mês).
+
+Com `TORRALLES_STUDIO_TOKEN` no `.env`, a página pede o token uma vez e o guarda num cookie só deste site. A página não
+usa nada da internet; os arquivos saem só por nome de uma lista fechada (vídeo, cenas, vozes, capa).
+
 ## HTTP local (Torralles Ops)
 ```bash
 python -m torralles_studio servidor            # http://127.0.0.1:8765, só este PC

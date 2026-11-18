@@ -343,15 +343,18 @@ def comando_servidor(args):
 
             servir_mcp(servico, entrada=canal, saida=saida_utf8())
             return 0
+        from .painel import Painel
         from .servidor import criar_servidor_http
 
+        painel = Painel(RAIZ / "saidas", caminho_banco(args.config), config=args.config, servico=servico)
         try:
-            http = criar_servidor_http(servico, args.host, args.porta)
+            http = criar_servidor_http(servico, args.host, args.porta, painel=painel)
         except (ValueError, OSError) as e:
             print(f"✗ {e}", file=sys.stderr)
             return 1
-        print(f"✓ Torralles Studio ouvindo em http://{args.host}:{args.porta}/v1/pecas (Ctrl+C para parar)",
-              file=sys.stderr)
+        endereco = f"http://{'[::1]' if args.host == '::1' else args.host}:{args.porta}"
+        print(f"✓ Torralles Studio ouvindo em {endereco}/v1/pecas (Ctrl+C para parar)\n"
+              f"  Painel: abra {endereco}/ no navegador", file=sys.stderr)
         try:
             http.serve_forever()
         except KeyboardInterrupt:

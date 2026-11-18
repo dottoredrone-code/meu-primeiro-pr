@@ -1,6 +1,6 @@
 # Kanban — Torralles Studio
 
-> Atualizado em 17/11/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
+> Atualizado em 18/11/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
 > Fluxo de cada cartão: **Backlog → Especificado → Em andamento → Em verificação → Pronto**.
 
 ## Regras do quadro
@@ -22,6 +22,7 @@
 | K37 | Sites grátis no navegador do Claude: skill `midia-navegador`, `pedidos-navegador`, `importar-midia` (tipo pelos bytes, tamanho antes de abrir, só a pasta do pedido, licença do config), fila `[sites.*]` com 9 sites (hoje entra só o Adobe Firefly) — teste real pendente (logins do Diego) | [14](docs/sdd/14-fila-gratuita-midia.md) · D24 |
 | K38 | Juiz de visão nas imagens (`[avaliacao.imagem]`, cadeia `juiz_imagem`, família diferente de quem gerou); reprovada, refaz uma vez com a correção e fica a melhor; sem juiz, fica "revisar" — teste real pendente (chave com visão) | [03](docs/sdd/03-parametros-avaliacao.md) · [14](docs/sdd/14-fila-gratuita-midia.md) |
 | K39 | Transcrição grátis no PC (faster-whisper, modelo small) antes do Gemini: conferência da narração, percepção e tempo de cada palavra; conferência local não entra no orçamento; áudio lido pelo FFmpeg do Studio (D25) | D25 |
+| K43 | Painel do Studio no navegador (`python -m torralles_studio servidor` → `http://127.0.0.1:8765/`): projetos e pedidos, vídeo, cenas (imagem, trecho, fala, fonte e licença), capa, post, créditos e régua; aprovar ou pedir alteração com comentário por item (tabela `revisoes`); pedido novo; biblioteca; controle (provedores, cotas, fila, gasto). Só biblioteca padrão, sem CDN, CSP só `'self'`, arquivos por lista fechada, token por cookie HttpOnly. Refazer sozinho o item com alteração pedida fica para a etapa 2 (K44) | [15](docs/sdd/15-painel.md) |
 | K42 | Voz Kokoro-82M em português no PC, grátis, última reserva da cadeia de voz (pf_dora e pm_alex com 0% de erro na frase de lh/nh/rr); roda em processo separado porque o fonemizador é GPL-3 (D26); conferência da voz aceita hífen junto ou separado | D26 |
 | K41 | Legenda karaokê no tempo real de cada palavra: tempo do Whisper alinhado ao texto do roteiro (palavra falada diferente, como "30"/"trinta", fica entre as vizinhas), guardado em `voz_XX.palavras.json` para a retomada; sem Whisper ou com fala que não bate, vale a estimativa; regras de leitura da legenda mantidas | D25 · [03](docs/sdd/03-parametros-avaliacao.md) |
 | K40 | Vídeo de banco grátis (Pexels/Pixabay, uso comercial) nas cenas antes da imagem de IA: só clipe que combina com a cena, cortado no formato e na duração da fala, com licença e crédito; liga sozinho quando houver a chave — falta `PEXELS_API_KEY`/`PIXABAY_API_KEY` do Diego | D25 · [11](docs/sdd/11-banco-midia-gratuita.md) |
@@ -104,6 +105,12 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
 | K32 | Primeiro vídeo real ponta a ponta, **aprovado por você** | D19 | K22 · K09 | Você aprova o vídeo completo |
+
+### Camada 8 — Painel (spec 15)
+| ID | Cartão | Spec | Depende de | Aceite |
+|---|---|---|---|---|
+| K44 | Refazer pelo painel só o item com alteração pedida (uma cena, a voz, a trilha, a capa ou o post), usando o comentário como correção e sem pagar de novo o resto; marca a revisão como atendida | [15](docs/sdd/15-painel.md) | K43 | Pedir alteração na cena 2 do chá verde troca só a cena 2 e remonta o vídeo |
+| K45 | Anúncios (chamada para ação, formatos por plataforma, cuidado com promessas) como novo tipo de peça no painel | — | K43 | Spec própria aprovada pelo Diego |
 
 ### Camada 7 — Fila gratuita de imagem e vídeo (D24)
 ✅ K34–K38 prontos em 17/11/2026 (verificados por agentes independentes). Testes reais dependem do Diego (veja
