@@ -18,6 +18,7 @@ from . import funcoes
 from .montagem import PADROES, ErroMontagem, duracao as duracao_midia, montar, trecho_falado, verificar_montagem
 from .rede import ErroProvedor
 from .roteador import TodosFalharam
+from .seguranca import mascarar
 
 _RESERVADOS = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}
 _ASSINATURAS = (b"\x89PNG", b"\xff\xd8\xff", b"RIFF", b"GIF8")  # PNG, JPEG, WebP, GIF
@@ -71,7 +72,7 @@ def _mais_novo(a, b):
         return False
 
 
-_MIDIA_DA_CENA = re.compile(r"(cena_\d{2}(\.parte)?\.(png|mp4)|voz_\d{2}(\.parte)?\.mp3)")
+_MIDIA_DA_CENA = re.compile(r"(cena_\d{2}(\.parte)?\.(png|mp4)|voz_\d{2}(\.parte)?\.mp3|voz_\d{2}\.palavras\.json)")
 
 
 def _apagar(arquivo):
@@ -166,7 +167,19 @@ def _conferir(conferir_voz, roteador, arquivo, texto):
         finally:
             if antes is not None:
                 os.environ["GEMINI_API_KEY"] = antes
-    r = conferir_voz(arquivo, texto)
+    extra = {}
+    if local:
+        import inspect
+
+        try:
+            aceita = "transcrever" in inspect.signature(conferir_voz).parameters
+        except (TypeError, ValueError):
+            aceita = False
+        palavras = palavras_da_voz(arquivo) if aceita else None
+        if palavras:  # o mesmo Whisper serve à conferência e à legenda no tempo real (K41)
+            texto_falado = " ".join(p for p, _, _ in palavras)
+            extra["transcrever"] = lambda a, p: {"texto": texto_falado, "motor": "faster-whisper:fala"}
+    r = conferir_voz(arquivo, texto, **extra)
     motor = str((r or {}).get("motor") or "")
     if (r is not None and not motor.startswith("faster-whisper")) or (r is None and not local):
         roteador.orcamento.registrar("conferencia_voz", CUSTO_CONFERENCIA_USD)  # só a transcrição paga conta
@@ -250,6 +263,50 @@ def _clipe_guardado(foto, biblioteca):
     except (KeyError, TypeError, OSError):
         return None
     return caminho if caminho.is_file() else None
+
+
+def palavras_da_voz(voz, avisar=None):
+    """[(palavra, início, fim)] reais da narração pelo Whisper local (K41), guardadas ao lado da voz
+    (voz_XX.palavras.json) para a retomada não transcrever de novo. None sem Whisper ou se falhar."""
+    from .percepcao import transcrever_whisper, whisper_disponivel
+
+    voz = Path(voz)
+    guardado = voz.with_suffix(".palavras.json")
+    if guardado.is_file() and not _mais_novo(voz, guardado):
+        dados = _palavras_validas(_ler_json(guardado))
+        if dados is not None:
+            return dados
+    if not whisper_disponivel():
+        return None
+    try:
+        palavras = [tuple(p) for s in transcrever_whisper(voz, palavras=True) for p in s.get("palavras", [])]
+    except Exception as e:  # sem o tempo real a legenda usa a estimativa de sempre
+        global _AVISOU_WHISPER
+        if avisar and not _AVISOU_WHISPER:  # um aviso só, não um por cena
+            avisar(f"  ⚠ tempo das palavras indisponível ({mascarar(str(e))[:150]}); legenda pela estimativa")
+            _AVISOU_WHISPER = True
+        return None
+    try:
+        guardado.write_text(json.dumps(palavras, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass  # sem o arquivo, a retomada só transcreve de novo
+    return palavras
+
+
+_AVISOU_WHISPER = False
+
+
+def _palavras_validas(dados):
+    """Lista de (palavra, início, fim) ou None se o arquivo guardado estiver estragado."""
+    if not isinstance(dados, list):
+        return None
+    saida = []
+    for p in dados:
+        if not (isinstance(p, (list, tuple)) and len(p) == 3 and isinstance(p[0], str)
+                and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in p[1:])):
+            return None
+        saida.append((p[0], float(p[1]), float(p[2])))
+    return saida
 
 
 def _cena_de_banco(origem, saida, duracao, proporcao):
@@ -385,6 +442,7 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
     so_fotos = False  # depois que a IA de imagem falha numa cena, as próximas vão direto para a foto
     folga = c["folga_inicio_s"] + c["folga_fim_s"] + c["transicao_s"] + 0.5  # + pausa extra que a montagem dá
     usar_banco = bool(video_banco and biblioteca is not None and banco_de_video_pronto(roteador))
+    karaoke_real = (cfg_montagem or {}).get("karaoke", PADROES.get("karaoke", True))  # K41: legenda no tempo da fala
     for i, cena in enumerate(roteiro["cenas"], 1):
         img, voz, video = pasta / f"cena_{i:02d}.png", pasta / f"voz_{i:02d}.mp3", pasta / f"cena_{i:02d}.mp4"
         try:
@@ -476,7 +534,8 @@ def produzir_video(roteador, loop, tema, pasta, *, duracao=30, perfil=None, pesq
                     etapa(f"cena {i}: vídeo", r.provedor)
         except TodosFalharam as e:
             raise ErroProducao(f"cena {i}: {e}") from None
-        cenas.append({"video": str(video), "voz": str(voz), "narracao": cena["narracao"], "fala": fala,
+        palavras = palavras_da_voz(voz, avisar) if karaoke_real else None
+        cenas.append({"video": str(video), "voz": str(voz), "narracao": cena["narracao"], "fala": fala, "palavras": palavras,
                       "texto_tela": cena.get("texto_tela"), "duracao": cena.get("duracao"), "clima": cena.get("clima")})
 
     # 4. Trilha pelo clima do roteiro (K21): reaproveita a escolhida antes; sem trilha, o vídeo sai só com voz

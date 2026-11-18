@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from torralles_studio.config import carregar_config
 from torralles_studio.loop import LoopCorrecao
@@ -85,6 +86,12 @@ class Voz(Provedor):
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg não instalado")
 class TestProduzirVideo(unittest.TestCase):
+    def setUp(self):
+        # O faster-whisper pode estar instalado no PC: os testes nunca carregam o modelo de verdade
+        sem_whisper = mock.patch("torralles_studio.percepcao.whisper_disponivel", return_value=False)
+        sem_whisper.start()
+        self.addCleanup(sem_whisper.stop)
+
     def montar(self, roteiros=None):
         juiz = json.dumps({"criterios": {c: {"evidencia": "ok", "nota": 85} for c in CRITERIOS}, "problemas": []})
         self.redator = Texto("redator", roteiros or [json.dumps(ROTEIRO)], "deepseek")

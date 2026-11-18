@@ -229,6 +229,59 @@ def quebrar_texto(texto, max_chars):
     return blocos
 
 
+def _normal(palavra):
+    import unicodedata
+
+    t = unicodedata.normalize("NFD", str(palavra).lower())
+    return "".join(c for c in t if c.isalnum() and unicodedata.category(c) != "Mn")
+
+
+def alinhar_palavras(texto, palavras_faladas, minimo=0.5):
+    """[(início, fim)] de cada palavra do texto (na ordem de texto.split()), pelo tempo real da fala (K41).
+
+    palavras_faladas: [(palavra, início, fim)] do Whisper, no tempo do arquivo de voz. As palavras do roteiro
+    são casadas com as ouvidas (sem acento e pontuação); as que não casam ("30" falado "trinta") ganham o tempo
+    entre as vizinhas, pelo tamanho. None se menos de `minimo` das palavras casarem (aí vale a estimativa).
+    """
+    import difflib
+
+    escritas = str(texto or "").split()
+    ouvidas = [(p, float(a), float(b)) for p, a, b in palavras_faladas or [] if _normal(p)]
+    if not escritas or not ouvidas:
+        return None
+    pares = difflib.SequenceMatcher(None, [_normal(p) for p in escritas], [_normal(p) for p, _, _ in ouvidas],
+                                    autojunk=False)
+    tempos = [None] * len(escritas)
+    for bloco in pares.get_matching_blocks():
+        for k in range(bloco.size):
+            _, a, b = ouvidas[bloco.b + k]
+            tempos[bloco.a + k] = (a, b)
+    casadas = sum(1 for t in tempos if t)
+    if casadas < max(1, minimo * len(escritas)):
+        return None
+    # sem casamento: reparte o buraco entre as vizinhas casadas, pelo tamanho de cada palavra
+    inicio_fala, fim_fala = ouvidas[0][1], ouvidas[-1][2]
+    i = 0
+    while i < len(tempos):
+        if tempos[i]:
+            i += 1
+            continue
+        j = i
+        while j < len(tempos) and not tempos[j]:
+            j += 1
+        de = tempos[i - 1][1] if i > 0 else inicio_fala
+        ate = tempos[j][0] if j < len(tempos) else fim_fala
+        ate = max(ate, de)
+        pesos = [len(w) + 1 for w in escritas[i:j]]
+        total, acumulado = sum(pesos), de
+        for k, peso in zip(range(i, j), pesos):
+            passo = (ate - de) * peso / total
+            tempos[k] = (round(acumulado, 3), round(acumulado + passo, 3))
+            acumulado += passo
+        i = j
+    return tempos
+
+
 def distribuir_legendas(texto, inicio_fala, fim_fala, pausas_internas=(), max_chars=42, fim_cena=None):
     """[(inicio, fim, [linhas])] no tempo da fala.
 
@@ -361,10 +414,16 @@ def transicao_da_cena(clima, padrao="fade"):
     return TRANSICAO_POR_CLIMA.get(str(clima or "").strip().lower(), padrao)
 
 
-def _karaoke(linhas, duracao):
-    """Texto ASS com cada palavra acendendo no seu tempo (\\k em centésimos, proporcional ao tamanho)."""
-    falado = max(duracao * 0.85, 0.1)  # o fim do bloco é só leitura: as palavras acendem antes
+def _karaoke(linhas, duracao, tempos=None, inicio=0.0):
+    """Texto ASS com cada palavra acendendo no seu tempo (\\k em centésimos).
+
+    tempos: [(início, fim)] reais de cada palavra do bloco (K41, Whisper), na linha do tempo do vídeo; sem eles,
+    o tempo é proporcional ao tamanho da palavra.
+    """
     palavras = [w for linha in linhas for w in linha.split()]
+    if tempos and len(tempos) == len(palavras):
+        return _karaoke_real(linhas, duracao, tempos, inicio)
+    falado = max(duracao * 0.85, 0.1)  # o fim do bloco é só leitura: as palavras acendem antes
     total = sum(len(w) + 1 for w in palavras) or 1
     partes, acumulado, feito = [], 0.0, 0
     for n, linha in enumerate(linhas):
@@ -378,8 +437,52 @@ def _karaoke(linhas, duracao):
     return "\\N".join(partes)
 
 
-def gerar_ass(legendas, textos_tela, largura, altura, proporcao, fonte="Arial", karaoke=False):
-    """karaoke: a palavra fica amarela quando é falada; sem ele, a legenda inteira aparece branca."""
+def retemporizar_legendas(blocos, tempos, fim_cena=None):
+    """Blocos com o início na 1ª palavra falada e o fim 0,4 s depois da última (K41), sem invadir o próximo nem
+    passar do fim da cena; cada bloco fica pelo menos o mínimo de leitura, se houver espaço."""
+    lim = LIMITES_LEGENDA
+    inis = [t[0][0] if t else a for (a, _, _), t in zip(blocos, tempos)]
+    saida = []
+    for k, ((a, b, linhas), t) in enumerate(zip(blocos, tempos)):
+        ini = inis[k]
+        fim = (t[-1][1] + 0.4) if t else b
+        teto = inis[k + 1] if k + 1 < len(blocos) else (fim_cena if fim_cena is not None else fim + 0.4)
+        precisa = max(lim["min_s"], sum(len(x) for x in linhas) / lim["cps"] + 0.01)
+        fim = min(max(fim, ini + precisa), teto)
+        saida.append((round(ini, 3), round(max(fim, ini), 3), linhas))
+    return saida
+
+
+def _karaoke_real(linhas, duracao, tempos, inicio):
+    """\\k pelo tempo real: cada palavra acende quando começa a ser dita (sílaba vazia cobre o atraso)."""
+    fim_bloco = inicio + duracao
+    marcas = [min(max(a, inicio), fim_bloco) for a, _ in tempos]
+    for k in range(1, len(marcas)):  # nunca volta no tempo (Whisper às vezes sobrepõe palavras)
+        marcas[k] = max(marcas[k], marcas[k - 1])
+    ultimo_fim = min(max(tempos[-1][1], marcas[-1]), fim_bloco)
+    feito = 0
+    atraso = round((marcas[0] - inicio) * 100)
+    partes, n = [], 0
+    if atraso > 0:
+        partes_inicio = f"{{\\k{atraso}}}"
+        feito = atraso
+    else:
+        partes_inicio = ""
+    for linha in linhas:
+        trechos = []
+        for w in linha.split():
+            fim = marcas[n + 1] if n + 1 < len(marcas) else ultimo_fim
+            cs = max(1, round((fim - inicio) * 100) - feito)
+            feito += cs
+            trechos.append(f"{{\\k{cs}}}{_texto_ass(w)}")
+            n += 1
+        partes.append(" ".join(trechos))
+    return partes_inicio + "\\N".join(partes)
+
+
+def gerar_ass(legendas, textos_tela, largura, altura, proporcao, fonte="Arial", karaoke=False, tempos_palavras=None):
+    """karaoke: a palavra fica amarela quando é falada; sem ele, a legenda inteira aparece branca.
+    tempos_palavras: para cada legenda, [(início, fim)] real de cada palavra (K41) ou None (estimativa)."""
     e = estilo_legenda(largura, altura, proporcao)
     primaria = "&H0000E5FF" if karaoke else "&H00FFFFFF"  # depois de falada (amarelo) / antes (branco)
     cab = (
@@ -397,9 +500,10 @@ def gerar_ass(legendas, textos_tela, largura, altura, proporcao, fonte="Arial", 
     quebra = "\\N"  # quebra de linha do ASS
     entrada = "{\\fad(120,80)}"  # legenda surge e some suave
     pulo = "{\\fad(200,150)\\fscx80\\fscy80\\t(0,250,\\fscx100\\fscy100)}"  # título cresce ao entrar
+    tempos = tempos_palavras or [None] * len(legendas)
     eventos = [f"Dialogue: 0,{_tempo_ass(a)},{_tempo_ass(b)},Legenda,,0,0,0,,{entrada}"
-               + (_karaoke(linhas, b - a) if karaoke else quebra.join(map(_texto_ass, linhas)))
-               for a, b, linhas in legendas]
+               + (_karaoke(linhas, b - a, reais, a) if karaoke else quebra.join(map(_texto_ass, linhas)))
+               for (a, b, linhas), reais in zip(legendas, tempos)]
     eventos += [f"Dialogue: 1,{_tempo_ass(a)},{_tempo_ass(b)},Tela,,0,0,0,,{pulo}{quebra.join(map(_texto_ass, linhas))}"
                 for a, b, linhas in textos_tela]
     return cab + "\n".join(eventos) + "\n"
@@ -483,7 +587,9 @@ def montar(cenas, saida, *, proporcao="9:16", trilha=None, bpm=None, primeira_ba
              "texto_tela": texto curto no alto (opcional), "duracao": segundos do roteiro (opcional),
              "efeito": som curto que toca no corte que abre a cena (opcional; 15 LU abaixo da voz),
              "fala": (início, fim[, pausas internas]) já medidos com trecho_falado (opcional; não mede de novo),
-             "voz_lufs": nível da voz já medido com medir_volume (opcional)}]
+             "voz_lufs": nível da voz já medido com medir_volume (opcional),
+             "palavras": [[palavra, início, fim], ...] no tempo do arquivo de voz (Whisper; opcional, K41: a
+             legenda karaokê acende cada palavra quando ela é dita)}]
     trilha: arquivo de música (opcional; repete se for curta). bpm: batidas por minuto da trilha (opcional).
     tamanho: (largura, altura) para forçar outro tamanho (testes); o padrão vem da proporção.
     duracao_alvo: duração pedida; se a fala ficar curta, a última cena segura até 1,5 s a mais e as outras
@@ -559,18 +665,33 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
 
     # 3. Legendas e textos na tela
     estilo = estilo_legenda(largura, altura, proporcao)
-    legendas, textos_tela = [], []
+    legendas, textos_tela, tempos_legendas = [], [], []
     for cena, tp, fala in zip(cenas, tempos, falas):
         fim_cena = tp["inicio"] + tp["duracao"]
         if fala and cena.get("narracao"):
             deslocamento = tp["inicio"] + tp["fala_em"] - fala[0]  # posição do arquivo de voz na linha do tempo
-            legendas += distribuir_legendas(
+            blocos = distribuir_legendas(
                 cena["narracao"], fala[0] + deslocamento, fala[1] + deslocamento,
                 [(a + deslocamento, b + deslocamento) for a, b in fala[2]], estilo["max_chars"], fim_cena)
+            reais = alinhar_palavras(cena["narracao"], cena.get("palavras"))  # K41: tempo real de cada palavra
+            por_bloco = [None] * len(blocos)
+            if reais:
+                reais = [(a + deslocamento, b + deslocamento) for a, b in reais]
+                qtds = [sum(len(linha.split()) for linha in linhas) for _, _, linhas in blocos]
+                if sum(qtds) == len(reais):  # contagem não bateu: fica a estimativa
+                    n = 0
+                    for k, qtd in enumerate(qtds):
+                        por_bloco[k] = reais[n:n + qtd]
+                        n += qtd
+                    reais_blocos = retemporizar_legendas(blocos, por_bloco, fim_cena)
+                    if not checar_legendas(reais_blocos, estilo["max_chars"]):  # só se continuar legível
+                        blocos = reais_blocos
+            legendas += blocos
+            tempos_legendas += por_bloco
         if cena.get("texto_tela"):
             textos_tela.append((tp["inicio"] + 0.1, fim_cena, linhas_tela(cena["texto_tela"], proporcao)))
     (pasta / "legendas.ass").write_text(gerar_ass(legendas, textos_tela, largura, altura, proporcao, c["fonte"],
-                                                  karaoke=bool(c.get("karaoke"))),
+                                                  karaoke=bool(c.get("karaoke")), tempos_palavras=tempos_legendas),
                                         encoding="utf-8")
     (pasta / "legendas.srt").write_text(gerar_srt(legendas), encoding="utf-8")
 
@@ -727,6 +848,7 @@ def _montar(cenas, saida, pasta, proporcao, largura, altura, trilha, bpm, primei
         "duracao_s": total, "tempos": tempos, "congelado_s": congelados,
         "cortes_na_batida": sum(1 for tp in tempos if tp.get("na_batida")),
         "legendas": [{"inicio": a, "fim": b, "linhas": linhas} for a, b, linhas in legendas],
+        "legendas_tempo_real": sum(1 for x in tempos_legendas if x),  # K41: blocos com o tempo real das palavras
         "textos_tela": [{"inicio": a, "fim": b, "linhas": linhas} for a, b, linhas in textos_tela],
         "estilo_legenda": estilo, "voz": medida_voz, "trilha": info_trilha, "efeitos": info_efeitos,
         "sincronia": sinc, "volume_final": volume_final,

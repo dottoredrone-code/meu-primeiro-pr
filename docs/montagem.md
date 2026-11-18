@@ -24,6 +24,10 @@ Caminhos relativos valem a partir da pasta do JSON.
 - `video` pode ser um vídeo ou uma imagem (vira cena parada).
 - `voz`, `narracao`, `texto_tela`, `efeito`, `trilha` e `bpm` são opcionais. `efeito` (por cena) é um som curto que toca
   no corte que abre a cena.
+- `palavras` (por cena, opcional): `[["palavra", início, fim], ...]` no tempo do arquivo de voz, como o Whisper
+  devolve. Com elas, a legenda karaokê acende cada palavra quando ela é dita e o bloco começa na 1ª palavra (K41);
+  sem elas, ou se a fala não bater com o texto, vale a estimativa pelo tamanho das palavras. O `produzir` preenche
+  sozinho quando o faster-whisper está instalado.
 
 ## O que a montagem faz
 | Etapa | Regra |
