@@ -62,6 +62,69 @@ class EdgeVoz(Provedor):
         return saida
 
 
+RAIZ = Path(__file__).resolve().parents[2]
+FERRAMENTA_KOKORO = RAIZ / "ferramentas" / "kokoro_tts.py"
+
+
+_KOKORO_ISOLADO = {}
+
+
+def _kokoro_no_isolado():
+    """O processo separado (python -I, sem o site-packages do usuário) acha o kokoro-onnx? Confere uma vez."""
+    if "ok" not in _KOKORO_ISOLADO:
+        import subprocess
+        import sys
+
+        try:
+            proc = subprocess.run([sys.executable, "-I", "-c",
+                                   "import importlib.util as u, sys; sys.exit(u.find_spec('kokoro_onnx') is None)"],
+                                  capture_output=True, stdin=subprocess.DEVNULL, timeout=30)
+            _KOKORO_ISOLADO["ok"] = proc.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            _KOKORO_ISOLADO["ok"] = False
+    return _KOKORO_ISOLADO["ok"]
+
+
+class KokoroVoz(Provedor):
+    """Kokoro-82M em português, no próprio PC e grátis (K42). Roda em processo separado (ferramentas/kokoro_tts.py):
+    o Studio não importa o Kokoro nem o fonemizador, que é GPL-3 (D26)."""
+
+    tipo = "voz"
+
+    def _arquivo(self, campo, padrao):
+        caminho = Path(self.cfg.get(campo, padrao))
+        return caminho if caminho.is_absolute() else RAIZ / caminho
+
+    def configurado(self):
+        if importlib.util.find_spec("kokoro_onnx") is None or not _kokoro_no_isolado():
+            return "opcional: pip install kokoro-onnx, sem --user (fonemizador GPL-3, veja D26)"
+        for campo, padrao in (("modelo_arquivo", "dados/modelos/kokoro/kokoro-v1.0.int8.onnx"),
+                              ("vozes_arquivo", "dados/modelos/kokoro/voices-v1.0.bin")):
+            if not self._arquivo(campo, padrao).is_file():
+                return f"falta o arquivo do modelo {self._arquivo(campo, padrao).name} (docs/teste-real.md)"
+        return None
+
+    def executar(self, texto, saida):
+        import sys
+        import tempfile
+
+        from .. import ff
+
+        saida = Path(saida)
+        modelo = self._arquivo("modelo_arquivo", "dados/modelos/kokoro/kokoro-v1.0.int8.onnx")
+        vozes = self._arquivo("vozes_arquivo", "dados/modelos/kokoro/voices-v1.0.bin")
+        with tempfile.TemporaryDirectory() as pasta:
+            entrada, wav = Path(pasta) / "fala.txt", Path(pasta) / "fala.wav"
+            entrada.write_text(str(texto), encoding="utf-8")
+            proc = ff.rodar([sys.executable, "-I", str(FERRAMENTA_KOKORO), "--texto-arquivo", str(entrada),
+                             "--saida", str(wav), "--voz", str(self.cfg.get("voz", "pf_dora")),
+                             "--velocidade", str(float(self.cfg.get("velocidade", 1.0))),
+                             "--modelo", str(modelo), "--vozes", str(vozes)], prazo=self.timeout, cwd=RAIZ)
+            if proc.returncode != 0 or not wav.is_file():
+                raise ErroProvedor(f"o Kokoro falhou: {(proc.stderr or '').strip()[-300:] or 'sem detalhe'}")
+            return _gravar_audio(wav.read_bytes(), "audio/wav", saida)
+
+
 class GeminiVoz(Provedor):
     """Voz do Gemini (TTS) com a mesma chave do texto e do juiz. Fala pt-BR natural e aceita instrução de tom.
 

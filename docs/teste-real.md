@@ -38,6 +38,16 @@ Grava em `saidas/teste-voz/` a mesma frase (com lh, nh, r e rr) em cada voz pron
 Ouça os arquivos: a voz do Gemini (`gemini_voz`) deve falar "olha" e "vermelho" certinho. Se aparecer 404, o nome
 do modelo TTS em `config/fallbacks.toml` precisa de ajuste (KR1).
 
+**Voz local Kokoro (K42, opcional, D26):** última reserva da cadeia de voz, grátis e no próprio PC.
+```powershell
+pip install kokoro-onnx
+mkdir dados\modelos\kokoro
+curl.exe -L -o dados\modelos\kokoro\kokoro-v1.0.int8.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx
+curl.exe -L -o dados\modelos\kokoro\voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+```
+No teste de 18/11, `pf_dora` e `pm_alex` falaram a frase de lh/nh/rr sem nenhum erro. O fonemizador que o Kokoro usa
+é GPL-3: ele roda em processo separado e não vai junto com o Studio (D26).
+
 ## 2b. Vídeo completo (K32)
 Precisa de uma voz: `pip install edge-tts` (grátis) ou chave da ElevenLabs/OpenAI.
 ```bash

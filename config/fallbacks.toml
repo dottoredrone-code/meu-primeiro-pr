@@ -191,6 +191,18 @@ chave_env = "GEMINI_API_KEY"
 classe = "edge_tts"
 voz = "pt-BR-FranciscaNeural"
 
+[provedores.kokoro]
+# Kokoro-82M no próprio PC, grátis (K42). Pesos Apache-2.0; fonemizador GPL-3 em processo separado (D26).
+# Teste 18/11 com a frase de lh/nh/rr: pf_dora 0% e pm_alex 0% de erro de palavras; pm_santa 7%.
+classe = "kokoro_voz"
+voz = "pf_dora"            # pf_dora (feminina) ou pm_alex (masculina)
+velocidade = 1.0
+modelo_arquivo = "dados/modelos/kokoro/kokoro-v1.0.int8.onnx"   # versão int8: rápida no processador
+vozes_arquivo = "dados/modelos/kokoro/voices-v1.0.bin"
+licenca = "comercial"
+familia = "kokoro"
+timeout = 300
+
 # ---------------------------------------------------------------- vídeo
 
 [provedores.fal_kling]
@@ -308,7 +320,7 @@ cadeia = ["nano_banana", "fal_flux", "openai_imagem", "cloudflare_flux", "pollin
 
 [tarefas.voz]
 # ElevenLabs no plano grátis não permite uso comercial (D2): só entra com plano pago (chave no .env).
-cadeia = ["elevenlabs", "openai_voz", "gemini_voz", "edge_tts"]
+cadeia = ["elevenlabs", "openai_voz", "gemini_voz", "edge_tts", "kokoro"]
 
 [tarefas.animar]
 # Imagem → vídeo curto (antes "video"; o nome antigo continua valendo como apelido, spec 14).

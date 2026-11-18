@@ -53,6 +53,7 @@ torralles_studio/
 config/fallbacks.toml   cadeias, modelos, custos, segurança
 .claude/skills/capcut-navegador/  o Claude monta e finaliza no CapCut web pelo navegador do Claude (K33)
 .claude/skills/midia-navegador/   o Claude gera cenas em sites grátis, com fallback quando os créditos acabam (K37)
+ferramentas/kokoro_tts.py         voz Kokoro em processo separado (opcional; fonemizador GPL-3 fora do Studio, D26)
 docs/sdd/               specs (SDD) e decisões
 exemplos/               vídeos de teste da percepção
 ```

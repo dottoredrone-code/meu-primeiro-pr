@@ -391,7 +391,7 @@ def medidas_do_video(resultado, roteiro):
                "duracao_media_plano_s": round(dur / cenas, 2)}
     falado = " ".join(str(c.get("narracao") or "") for c in lista if isinstance(c, dict))
     if palavras(falado):  # sem narração conhecida, não compara a fala
-        medidas["palavras_por_segundo"] = round(len(palavras(falado)) / dur, 2)
+        medidas["palavras_por_segundo"] = round(len(palavras(falado, juntar_hifen=False)) / dur, 2)
     return medidas
 
 

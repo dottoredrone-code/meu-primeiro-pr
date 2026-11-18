@@ -74,10 +74,13 @@ def _numeros_por_extenso(texto):
     return re.sub(r"\d+(?:,\d+)?", troca, t)
 
 
-def palavras(texto):
-    """Palavras normalizadas (números por extenso, minúsculas, sem acento e sem pontuação)."""
+def palavras(texto, juntar_hifen=True):
+    """Palavras normalizadas (números por extenso, minúsculas, sem acento e sem pontuação).
+    juntar_hifen: "anti-inflamatória" vira uma palavra só; False separa em duas."""
     t = _numeros_por_extenso(str(texto or ""))
     t = "".join(c for c in unicodedata.normalize("NFD", t.lower()) if unicodedata.category(c) != "Mn")
+    if juntar_hifen:
+        t = re.sub(r"(?<=[a-z])-(?=[a-z])", "", t)
     return re.findall(r"[a-z]+", t)
 
 
@@ -91,12 +94,30 @@ def _distancia(ref, hip):
     return anterior[-1]
 
 
+def _comparar(referencia, hipotese):
+    """(erros, palavras do texto). Palavra com hífen conta como uma só nos dois lados, e duas palavras vizinhas
+    da transcrição que formam uma palavra com hífen do texto ("guarda chuva" = "guarda-chuva") se juntam: a
+    transcrição pode escrever junto, separado ou com hífen a mesma fala."""
+    ref, hip = palavras(referencia), palavras(hipotese)
+    compostas = {p for p in ref} - set(palavras(referencia, juntar_hifen=False))
+    juntas, i = [], 0
+    while i < len(hip):
+        if i + 1 < len(hip) and hip[i] + hip[i + 1] in compostas:
+            juntas.append(hip[i] + hip[i + 1])
+            i += 2
+        else:
+            juntas.append(hip[i])
+            i += 1
+    return _distancia(ref, juntas), len(ref)
+
+
 def taxa_erro(referencia, hipotese):
     """WER: (trocas + faltas + sobras) / palavras do texto, pela distância de edição entre as listas."""
     ref, hip = palavras(referencia), palavras(hipotese)
     if not ref:
         return 0.0 if not hip else 1.0
-    return round(_distancia(ref, hip) / len(ref), 3)
+    erros, total = _comparar(referencia, hipotese)
+    return round(erros / total, 3)
 
 
 def limpar_transcricao(texto, cortar_sons=True):
@@ -183,7 +204,7 @@ def conferir_voz(arquivo, texto, transcrever=None):
     ref, hip = palavras(texto), palavras(falado)
     if not hip:  # nada sobrou para comparar: não conta como erro (não paga outra voz)
         return None
-    erros = _distancia(ref, hip)
-    wer = round(erros / len(ref), 3) if ref else (0.0 if not hip else 1.0)
+    erros, total = _comparar(texto, falado)
+    wer = round(erros / total, 3) if ref else (0.0 if not hip else 1.0)
     return {"wer": wer, "erros": erros, "transcricao": " ".join(falado.split())[:500], "motor": t.get("motor"),
             "ok": wer <= LIMITE_WER or erros < MINIMO_ERROS}
