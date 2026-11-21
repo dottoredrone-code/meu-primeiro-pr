@@ -113,6 +113,14 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 | K44 | Refazer pelo painel só o item com alteração pedida (uma cena, a voz, a trilha, a capa ou o post), usando o comentário como correção e sem pagar de novo o resto; marca a revisão como atendida | [15](docs/sdd/15-painel.md) | K43 | Pedir alteração na cena 2 do chá verde troca só a cena 2 e remonta o vídeo |
 | K45 | Anúncios (chamada para ação, formatos por plataforma, cuidado com promessas) como novo tipo de peça no painel | — | K43 | Spec própria aprovada pelo Diego |
 
+### Camada 9 — Acervo de mídia para os agentes (spec 16, ⏳ proposta aguardando o Diego)
+| ID | Cartão | Spec | Depende de | Aceite |
+|---|---|---|---|---|
+| K47 | Taxonomia (tipo, clima, energia, BPM, duração, loop, orientação), medidas guardadas e `importar-acervo` | [16](docs/sdd/16-acervo-midia.md) | — | 10 trilhas da Pixabay importadas com medidas; `acervo buscar --clima calmo` acha as calmas |
+| K48 | Busca para agentes: `acervo buscar --json`, `acervo usar --para`, MCP `buscar_midia`, filtros no painel | [16](docs/sdd/16-acervo-midia.md) | K47 | Teste do Remotion montado com trilha e efeito do acervo e `creditos.txt` certo |
+| K49 | `produzir` usa sonoplastia pelos "sons" do roteiro e ambiente por cena | [16](docs/sdd/16-acervo-midia.md) | K47 | Vídeo de teste com trilha, efeitos e som de ação no tempo certo |
+| K50 | Primeiro acervo com o Diego (~20 trilhas, ~40 efeitos, ~20 sonoplastias e ambientes) | [16](docs/sdd/16-acervo-midia.md) | K47 · termos conferidos | `acervo` lista itens com licença e medidas |
+
 ### Camada 7 — Fila gratuita de imagem e vídeo (D24)
 ✅ K34–K38 prontos em 17/11/2026 (verificados por agentes independentes). Testes reais dependem do Diego (veja
 "Bloqueios atuais").
