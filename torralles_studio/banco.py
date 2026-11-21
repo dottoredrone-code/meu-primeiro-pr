@@ -207,6 +207,11 @@ MIGRACOES = [
         "decisao TEXT NOT NULL, comentario TEXT, criado_em TEXT NOT NULL, atendida INTEGER NOT NULL DEFAULT 0)",
         "CREATE INDEX idx_revisoes_projeto ON revisoes(projeto, item, id)",
     ],
+    # 12 — medidas de cada arquivo do acervo (K47, spec 16): duração, energia, BPM, loop, tamanho. São do conteúdo
+    # (iguais para todos os perfis), por isso ficam em `ativos` e não em `ativo_perfil`.
+    [
+        "ALTER TABLE ativos ADD COLUMN medidas_json TEXT",
+    ],
 ]
 # Cada migração é uma lista de comandos (sem partir por ";", que quebraria textos e gatilhos).
 

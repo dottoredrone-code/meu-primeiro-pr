@@ -240,7 +240,7 @@ class Biblioteca:
 
     # -- consulta -------------------------------------------------------------
     def _linhas_visiveis(self, digest, perfil):
-        sql = (f"SELECT l.*, a.id, a.tipo, a.caminho FROM ativo_perfil l JOIN ativos a ON a.hash = l.hash "
+        sql = (f"SELECT l.*, a.id, a.tipo, a.caminho, a.medidas_json FROM ativo_perfil l JOIN ativos a ON a.hash = l.hash "
                f"WHERE l.hash = ? AND l.perfil IN ('', ?) AND l.licenca IN ({','.join('?' * len(LICENCAS))})")
         return self.con.execute(sql, [digest, perfil or "", *LICENCAS]).fetchall()
 
@@ -254,7 +254,16 @@ class Biblioteca:
         d["tags"] = sorted({t for l in linhas for t in l["tags"].split(",") if t})
         d["parametros"] = json.loads(d.pop("parametros_json") or "{}")
         d["uso_comercial"] = bool(d["uso_comercial"])
+        d["medidas"] = json.loads(propria["medidas_json"] or "{}")
         return d
+
+    def gravar_medidas(self, digest, medidas):
+        """Guarda as medidas do arquivo (K47): são do conteúdo, valem para todos os perfis."""
+        with self.con:
+            cur = self.con.execute("UPDATE ativos SET medidas_json = ? WHERE hash = ?",
+                                   (json.dumps(medidas, ensure_ascii=False, sort_keys=True), digest))
+        if not cur.rowcount:
+            raise KeyError(digest)
 
     def _linha(self, digest):
         return self.con.execute("SELECT * FROM ativos WHERE hash = ?", (digest,)).fetchone()

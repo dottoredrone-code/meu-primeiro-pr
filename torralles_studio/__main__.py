@@ -130,6 +130,86 @@ def comando_importar_sons(args):
     return 0
 
 
+def comando_importar_acervo(args):
+    """Pasta de trilhas, efeitos, sonoplastias, ambientes, imagens ou vídeos → acervo medido e etiquetado (K47)."""
+    from .acervo import ErroAcervo, importar_pasta
+    from .biblioteca import ErroLicenca, conferir_licenca
+    from .config import carregar_biblioteca
+
+    try:
+        conferir_licenca(args.licenca)  # licença recusada: nem abre a biblioteca
+        importados, problemas = importar_pasta(carregar_biblioteca(args.config), args.pasta, args.tipo, args.licenca,
+                                               args.fonte, clima=args.clima, link=args.link, autor=args.autor,
+                                               arquivo_licenca=args.arquivo_licenca)
+    except (ErroLicenca, ErroAcervo, FileNotFoundError) as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    for p in problemas[:5]:
+        print(f"  ⚠ {p}", file=sys.stderr)
+    if len(problemas) > 5:
+        print(f"  … e mais {len(problemas) - 5} arquivos com problema", file=sys.stderr)
+    if not importados:
+        motivo = "nada entrou" if problemas else f"nenhum arquivo de {args.tipo} em {args.pasta}"
+        print(f"✗ {motivo}", file=sys.stderr)
+        return 1
+    novos = sum(1 for a in importados if not a.get("duplicado"))
+    print(f"✓ {len(importados)} itens de {args.tipo} no acervo ({novos} novos, {len(importados) - novos} já estavam)")
+    for a in importados[:20]:
+        m = a["medidas"]
+        clima = next((t[6:] for t in a["tags"] if t.startswith("clima-")), "sem clima")
+        detalhes = [clima]
+        if m.get("duracao_s") is not None:
+            detalhes.append(f"{m['duracao_s']:.1f} s")
+        if m.get("energia") is not None:
+            detalhes.append(f"energia {m['energia']:.2f}")
+        if m.get("bpm"):
+            detalhes.append(f"{m['bpm']:.0f} BPM")
+        if m.get("loop"):
+            detalhes.append("loop")
+        if m.get("orientacao"):
+            detalhes.append(f"{m['orientacao']} {m['largura']}x{m['altura']}")
+        print(f"  · {a['titulo']}: {', '.join(detalhes)}")
+    if any(not any(t.startswith("clima-") for t in a["tags"]) for a in importados):
+        print("  Dica: itens sem clima não aparecem na busca por clima; use --clima ao importar.")
+    return 0
+
+
+def comando_acervo(args):
+    """Busca no acervo para agentes e pessoas (K47; --json para agentes)."""
+    import json as _json
+
+    from .acervo import ErroAcervo, buscar, resumo
+    from .config import carregar_biblioteca
+
+    bib = carregar_biblioteca(args.config)
+    try:
+        achados = buscar(bib, tipo=args.tipo, clima=args.clima, energia=args.energia, duracao=args.duracao,
+                         orientacao=args.orientacao, palavras=args.palavra or (),
+                         loop=True if args.loop else None, limite=args.limite)
+    except ErroAcervo as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    itens = [dict(resumo(a, args.tipo, args.clima), arquivo=str(bib.caminho(a))) for a in achados]
+    if args.json:
+        print(_json.dumps(itens, ensure_ascii=False, indent=2))
+        return 0
+    if not itens:
+        print("Nada no acervo com esses filtros.")
+        return 0
+    for i in itens:
+        m = i["medidas"]
+        partes = [i["tipo"] or "?", i["clima"] or "sem clima"]
+        if m.get("duracao_s") is not None:
+            partes.append(f"{m['duracao_s']:.1f} s")
+        if m.get("energia") is not None:
+            partes.append(f"energia {m['energia']:.2f}")
+        if m.get("bpm"):
+            partes.append(f"{m['bpm']:.0f} BPM")
+        print(f"· {i['titulo']} ({', '.join(partes)}) — {i['licenca']}, {i['fonte']}")
+        print(f"  {i['arquivo']}")
+    return 0
+
+
 def comando_cotas(args):
     """Quanto falta de cada cota gratuita e quando renova (K34); --esgotar/--liberar marcam à mão."""
     from .config import carregar_banco, carregar_roteador
@@ -824,6 +904,28 @@ def main(argv=None):
     s.add_argument("--link", help="página da licença ou da fonte (http/https)")
     s.add_argument("--autor", help="autor (obrigatório em CC BY)")
 
+    s = sub.add_parser("importar-acervo", help="põe uma pasta de mídia no acervo, medida e etiquetada (K47)")
+    s.add_argument("pasta", help="pasta com os arquivos (as subpastas também entram)")
+    s.add_argument("--tipo", required=True, choices=["trilha", "efeito", "sonoplastia", "ambiente", "imagem", "video"])
+    s.add_argument("--licenca", required=True, help="licença de todos os arquivos (ex.: pixabay, cc0)")
+    s.add_argument("--fonte", required=True, help="de onde vieram (ex.: Pixabay)")
+    s.add_argument("--clima", choices=["calmo", "alegre", "epico", "tenso", "inspirador", "curioso", "reflexivo"],
+                   help="clima de todos os arquivos (sem isto, vem do nome do arquivo ou da pasta)")
+    s.add_argument("--link", help="página da licença ou da fonte (http/https)")
+    s.add_argument("--autor", help="autor (obrigatório em CC BY)")
+    s.add_argument("--arquivo-licenca", help="texto da licença da fonte, para guardar uma cópia (D18)")
+    s = sub.add_parser("acervo", help="busca no acervo por tipo, clima, energia e duração (K47)")
+    s.add_argument("acao", choices=["buscar"])
+    s.add_argument("--tipo", choices=["trilha", "efeito", "sonoplastia", "ambiente", "imagem", "video"])
+    s.add_argument("--clima", choices=["calmo", "alegre", "epico", "tenso", "inspirador", "curioso", "reflexivo"])
+    s.add_argument("--energia", choices=["baixa", "media", "alta"])
+    s.add_argument("--duracao", type=float, help="segundos que o item precisa cobrir (ou chegar perto)")
+    s.add_argument("--orientacao", choices=["vertical", "horizontal", "quadrado"])
+    s.add_argument("--palavra", action="append", help="palavra do nome (pode repetir)")
+    s.add_argument("--loop", action="store_true", help="só os que fazem loop")
+    s.add_argument("--limite", type=int, default=10)
+    s.add_argument("--json", action="store_true", help="saída em JSON para agentes")
+
     s = sub.add_parser("analisar-referencia", help="analisa um vídeo de referência (link do YouTube ou arquivo) para a régua")
     s.add_argument("video", help="link de um vídeo do YouTube (sem baixar) ou arquivo local")
     s.add_argument("-c", "--categoria", required=True, help="categoria de referência (A, B, C… de config/referencias.toml)")
@@ -904,6 +1006,10 @@ def main(argv=None):
         return comando_importar_midia(args)
     if args.comando == "importar-sons":
         return comando_importar_sons(args)
+    if args.comando == "importar-acervo":
+        return comando_importar_acervo(args)
+    if args.comando == "acervo":
+        return comando_acervo(args)
     if args.comando == "montar":
         return comando_montar(args)
     if args.comando == "assistir":

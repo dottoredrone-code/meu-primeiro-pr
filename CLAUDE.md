@@ -40,6 +40,7 @@ torralles_studio/
   producao.py     vídeo completo de um tema: pesquisa → roteiro → imagem, voz e cena → montagem (retoma sem pagar de novo)
   trilha.py       trilha pelo clima do roteiro (BPM e energia pelo FFmpeg, voz eliminatória); exportar.py pasta para o CapCut
   efeitos.py      sons curtos nos cortes, pelo clima, só do acervo local (importar-sons)
+  acervo.py       acervo medido e etiquetado (tipo, clima, energia, BPM, loop, orientação) e busca para agentes (K47)
   contrato.py     pedido Ops → Studio (spec 08); servico.py fila de pedidos; servidor.py HTTP local e MCP
   painel.py       painel no navegador (K43, spec 15): projetos, aprovar ou pedir alteração; página em painel_web/
   montagem.py     vídeo final: tempo da fala, transições na batida, legendas na área segura, trilha sob a voz, −14 LUFS
@@ -76,6 +77,8 @@ python -m torralles_studio roteiro "tema" -q                    # com juiz e loo
 python -m torralles_studio produzir "tema" -d 30 --pesquisa      # vídeo completo + capa.jpg + post.txt; --capcut, --sem-trilha, --sem-post, --sem-juiz-imagem, --sem-video-banco
 python -m torralles_studio exportar-capcut saidas/<tema>         # pasta para editar no CapCut
 python -m torralles_studio importar-sons <pasta> --licenca pixabay --fonte Pixabay   # efeitos dos cortes no acervo
+python -m torralles_studio importar-acervo <pasta> --tipo trilha --licenca pixabay --fonte Pixabay   # mede e etiqueta (K47)
+python -m torralles_studio acervo buscar --tipo trilha --clima calmo --duracao 30 --json   # busca para agentes
 python -m torralles_studio cotas                              # quanto falta de cada cota grátis; --esgotar/--liberar <serviço>
 python -m torralles_studio prompt-midia "ideia" -m animar       # prompt pronto de cada serviço, já conferido (sem chave)
 python -m torralles_studio pedidos-navegador saidas/<tema> -m imagem   # K37: pedidos para a skill midia-navegador

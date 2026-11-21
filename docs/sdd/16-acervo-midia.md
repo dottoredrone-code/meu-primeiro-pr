@@ -1,6 +1,6 @@
 # 16 — Spec: Acervo de mídia para os agentes (imagens, vídeos, trilhas, efeitos e sonoplastia)
 
-> Status: **proposta para o Diego aprovar** (pedido de 19/11/2026). Amplia a [spec 11](11-banco-midia-gratuita.md)
+> Status: **aprovada pelo Diego em 21/11/2026** (pedido de 19/11/2026); K47 pronto. Amplia a [spec 11](11-banco-midia-gratuita.md)
 > e a biblioteca da [spec 05](05-dados-seguranca-memoria.md). Licenças mudam: reconfirmar no site oficial antes
 > de importar cada fonte.
 
@@ -87,6 +87,8 @@ python -m torralles_studio importar-acervo <pasta> --tipo trilha --licenca pixab
 | K50 | Primeiro acervo (com o Diego): ~20 trilhas por clima, ~40 efeitos, ~20 sonoplastias e ambientes | K47 · termos conferidos | `acervo` lista os itens com licença e medidas |
 
 ## Perguntas para o Diego
+Respostas assumidas ao começar o K47 (21/11): 1 — tipos e etiquetas como estão; 2 — o Diego baixa os primeiros da Pixabay; os termos de Mixkit, Freesound e YouTube são lidos antes do K50; 3 — agentes de motion só com o acervo (sem os serviços pagos da `media-use`).
+
 1. Aprovar os tipos e etiquetas da seção 1?
 2. Você baixa os primeiros arquivos à mão (Pixabay primeiro) ou prefere que eu leia os termos de Mixkit, Freesound
    e YouTube antes?
