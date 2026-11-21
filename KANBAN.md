@@ -1,6 +1,6 @@
 # Kanban — Torralles Studio
 
-> Atualizado em 18/11/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
+> Atualizado em 20/11/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
 > Fluxo de cada cartão: **Backlog → Especificado → Em andamento → Em verificação → Pronto**.
 
 ## Regras do quadro
@@ -22,6 +22,7 @@
 | K37 | Sites grátis no navegador do Claude: skill `midia-navegador`, `pedidos-navegador`, `importar-midia` (tipo pelos bytes, tamanho antes de abrir, só a pasta do pedido, licença do config), fila `[sites.*]` com 9 sites (hoje entra só o Adobe Firefly) — teste real pendente (logins do Diego) | [14](docs/sdd/14-fila-gratuita-midia.md) · D24 |
 | K38 | Juiz de visão nas imagens (`[avaliacao.imagem]`, cadeia `juiz_imagem`, família diferente de quem gerou); reprovada, refaz uma vez com a correção e fica a melhor; sem juiz, fica "revisar" — teste real pendente (chave com visão) | [03](docs/sdd/03-parametros-avaliacao.md) · [14](docs/sdd/14-fila-gratuita-midia.md) |
 | K39 | Transcrição grátis no PC (faster-whisper, modelo small) antes do Gemini: conferência da narração, percepção e tempo de cada palavra; conferência local não entra no orçamento; áudio lido pelo FFmpeg do Studio (D25) | D25 |
+| K46 | Skills de motion graphics só no Studio (`.claude/skills`, nível do projeto): motion-design (LottieFiles `2e1f3c0`, MIT), 8 do GSAP (`aed9cfd`, MIT), 13 do Remotion (`6f55706`) e 6 do HyperFrames (v0.9.69 `3229c3a`, Apache-2.0); projetos de teste em `motion/` (Remotion 4.0.545 e HyperFrames 0.9.69, versões exatas); teste de 10 s em 1080x1920 renderizado nos dois. Ficam fora do Git: `node_modules/`, `.hyperframes/`, `.claude/fontes-motion/` e os vídeos (`saidas/`) | D27 |
 | K43 | Painel do Studio no navegador (`python -m torralles_studio servidor` → `http://127.0.0.1:8765/`): projetos e pedidos, vídeo, cenas (imagem, trecho, fala, fonte e licença), capa, post, créditos e régua; aprovar ou pedir alteração com comentário por item (tabela `revisoes`); pedido novo; biblioteca; controle (provedores, cotas, fila, gasto). Só biblioteca padrão, sem CDN, CSP só `'self'`, arquivos por lista fechada, token por cookie HttpOnly. Refazer sozinho o item com alteração pedida fica para a etapa 2 (K44) | [15](docs/sdd/15-painel.md) |
 | K42 | Voz Kokoro-82M em português no PC, grátis, última reserva da cadeia de voz (pf_dora e pm_alex com 0% de erro na frase de lh/nh/rr); roda em processo separado porque o fonemizador é GPL-3 (D26); conferência da voz aceita hífen junto ou separado | D26 |
 | K41 | Legenda karaokê no tempo real de cada palavra: tempo do Whisper alinhado ao texto do roteiro (palavra falada diferente, como "30"/"trinta", fica entre as vizinhas), guardado em `voz_XX.palavras.json` para a retomada; sem Whisper ou com fala que não bate, vale a estimativa; regras de leitura da legenda mantidas | D25 · [03](docs/sdd/03-parametros-avaliacao.md) |

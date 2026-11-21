@@ -3,3 +3,7 @@ saidas/
 __pycache__/
 *.pyc
 dados/
+# Projetos de motion (K46): dependências, cache e cópias de origem ficam fora do Git
+node_modules/
+.hyperframes/
+.claude/fontes-motion/
