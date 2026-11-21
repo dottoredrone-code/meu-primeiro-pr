@@ -473,12 +473,18 @@ padroes = ["credits", "créditos"]
 nome = "Kling AI"
 endereco = "https://kling.ai"
 modalidades = ["imagem", "animar", "video_texto"]
-licenca = "a_conferir"     # uso comercial só para membros pagos
-marca_dagua = true         # não membro precisa manter a marca do Kling (art. 7.2)
+# Fica "a_conferir" de propósito (nunca entra sozinho). Termos relidos em 21/11/2026 (versão de 10/10/2026):
+# - uso comercial e sem marca d'água só com ASSINATURA ativa (Terms of Paid Service, art. 3.1); créditos
+#   avulsos não tornam a conta "membro" (a conta do Diego hoje só tem créditos avulsos);
+# - os Termos de Serviço proíbem "automated scripts" para interagir com o serviço: o Claude NÃO opera o
+#   site do Kling. Para usar o Kling com o Studio: pelo fal.ai (provedores.fal_kling) ou o Diego gera à mão
+#   e o Studio registra com `importar-midia --site kling`.
+licenca = "a_conferir"
+marca_dagua = true         # conta sem assinatura: vídeo com a marca do Kling
 familia = "kuaishou"
 molde = "video"
 termos = "https://kling.ai/docs/payment-policy"
-licenca_conferida = "2026-11-17"
+licenca_conferida = "2026-11-21"
 
 [sites.hailuo]
 nome = "Hailuo AI"

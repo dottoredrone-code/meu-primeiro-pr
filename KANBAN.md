@@ -1,6 +1,6 @@
 # Kanban — Torralles Studio
 
-> Atualizado em 20/11/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
+> Atualizado em 21/11/2026. Cada cartão aponta para a spec que o define (`docs/sdd/`).
 > Fluxo de cada cartão: **Backlog → Especificado → Em andamento → Em verificação → Pronto**.
 
 ## Regras do quadro
@@ -88,7 +88,7 @@ K07–K10 prontos em 16/10/2026. Falta só o K06 (roda no PC, com a chave do Gem
 | ID | Cartão | Spec | Depende de | Critérios de aceite |
 |---|---|---|---|---|
 | K17 | 🔒 Imagens com consistência entre cenas (Nano Banana 2 / FLUX) | [03](docs/sdd/03-parametros-avaliacao.md) | K01 · K09 · **chaves** | Juízes aprovam consistência e anatomia |
-| K19 | 🔒 Vídeo por cena no modo misto (Kling v3 nas cenas-chave, zoom nas demais) — zoom local já segue a proporção do perfil e o movimento da cena (17/10) | D20 | K01 · K04 · **chave fal.ai** | Custo dentro do teto; sem congelamento indevido |
+| K19 | Vídeo por cena no modo misto (Kling v3 nas cenas-chave, zoom nas demais) — zoom local já segue a proporção do perfil e o movimento da cena (17/10) | D20 | K01 · K04 · chave fal.ai ✅ (21/11: `FAL_KEY` no `.env`; Kling animou 5 s da cena do chá verde) | Custo dentro do teto; sem congelamento indevido |
 
 ### Camada 4 — Dados e memória (pode começar junto com a Camada 1)
 ✅ Concluída em 16/10/2026 (K24–K27).
@@ -165,7 +165,7 @@ graph LR
 |---|---|
 | Teste real com `GEMINI_API_KEY` no PC (`.env`; os segredos da nuvem não servem ao Gemini) | K06, K12, K21 (ouvir trilhas) |
 | Suas indicações de canais para as categorias C, D e F (`config/referencias.toml`) | K12–K14 nessas categorias (a A já pode seguir) |
-| Chaves de produção (fal.ai, ElevenLabs, DeepSeek, Tavily) | K16–K19 com provedores reais |
+| Chaves de produção (ElevenLabs; fal.ai ✅ em 21/11, DeepSeek e Tavily já prontas) | K16–K19 com provedores reais |
 | Chaves grátis do Pexels e da Pixabay (`PEXELS_API_KEY`, `PIXABAY_API_KEY`) | K40: vídeo de banco nas cenas (e fotos melhores que as do Openverse) |
 | Chave grátis da Cloudflare (`CLOUDFLARE_ACCOUNT_ID` e `CLOUDFLARE_API_TOKEN` no `.env`) | K36: imagem grátis com uso comercial (a Pollinations saiu por marca d'água) |
 | Chave com visão (`ANTHROPIC_API_KEY` + `CLAUDE_MODEL`, ou OpenAI, ou o Gemini pago) | K38: nota do juiz nas imagens (sem ela, as imagens ficam "revisar") |
