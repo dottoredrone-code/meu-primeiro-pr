@@ -317,6 +317,47 @@ class TestAuditoriaTemperatura(unittest.TestCase):  # item 6
             self.assertNotIn("temperature", corpo)
             self.assertNotIn("generationConfig", corpo)
 
+    def test_pensar_desligado_so_quando_configurado(self):  # K51
+        from torralles_studio.provedores import texto
+        from torralles_studio.rede import ErroProvedor
+
+        self.assertEqual(self.corpo(texto.OpenAICompatTexto, {"pensar": False})["reasoning_effort"], "none")
+        self.assertNotIn("reasoning_effort", self.corpo(texto.OpenAICompatTexto, {}))
+        self.assertNotIn("reasoning_effort", self.corpo(texto.OpenAICompatTexto, {"pensar": True}))
+        with self.assertRaises(ErroProvedor):
+            self.corpo(texto.OpenAICompatTexto, {"pensar": "nao"})
+
+    def test_tira_raciocinio_do_comeco(self):  # K51
+        from unittest import mock
+
+        from torralles_studio.provedores import texto
+        from torralles_studio.rede import ErroProvedor
+
+        def responder(conteudo):
+            prov = texto.OpenAICompatTexto("p", {"modelo": "m", "base_url": "http://localhost:1"})
+            with mock.patch.object(texto, "post_json", lambda *a: {"choices": [{"message": {"content": conteudo}}]}):
+                return prov.executar("oi")
+
+        self.assertEqual(responder('<think>\nvou pensar\n</think>\n\n{"a": 1}'), '{"a": 1}')
+        self.assertEqual(responder("<think></think>Olá"), "Olá")
+        # Só o bloco do começo sai; <think> no meio do texto fica como está.
+        self.assertEqual(responder("Use a tag <think>x</think> assim"), "Use a tag <think>x</think> assim")
+        with self.assertRaises(ErroProvedor):  # só raciocínio, sem resposta
+            responder("<think>só pensei</think>")
+        with self.assertRaises(ErroProvedor):  # cortada antes de fechar o raciocínio
+            responder("<think>pensando {\"a\": 1}")
+
+    def test_resposta_cortada_e_erro(self):  # K51
+        from unittest import mock
+
+        from torralles_studio.provedores import texto
+        from torralles_studio.rede import ErroProvedor
+
+        prov = texto.OpenAICompatTexto("p", {"modelo": "m", "base_url": "http://localhost:1"})
+        cortada = {"choices": [{"finish_reason": "length", "message": {"content": "{\"a\": "}}]}
+        with mock.patch.object(texto, "post_json", lambda *a: cortada), self.assertRaises(ErroProvedor):
+            prov.executar("oi")
+
     def test_temperatura_invalida(self):
         from torralles_studio.provedores import texto
         from torralles_studio.rede import ErroProvedor

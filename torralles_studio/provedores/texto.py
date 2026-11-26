@@ -1,4 +1,5 @@
 import os
+import re
 
 from ..rede import ErroProvedor, post_json
 from .base import Provedor, data_uri
@@ -31,6 +32,27 @@ def _exigir_texto(texto):
     return texto
 
 
+# Modelos que "pensam" (qwen3, deepseek-r1 no Ollama) podem devolver o raciocínio antes da resposta.
+_PENSAMENTO = re.compile(r"^\s*<think>.*?</think>\s*", re.S)
+
+
+def _sem_pensamento(texto):
+    """Tira o bloco <think>...</think> do começo; a resposta é o que vem depois."""
+    if not texto:
+        return texto
+    if texto.lstrip().startswith("<think>") and "</think>" not in texto:
+        raise ErroProvedor("resposta cortada no meio do raciocínio")
+    return _PENSAMENTO.sub("", texto, count=1)
+
+
+def _pensar(cfg):
+    """Campo opcional `pensar` (true/false); None = padrão do modelo."""
+    p = cfg.get("pensar")
+    if p is not None and not isinstance(p, bool):
+        raise ErroProvedor(f"pensar inválido no config: {p!r} (use true ou false)")
+    return p
+
+
 class OpenAICompatTexto(Provedor):
     """APIs no formato da OpenAI: DeepSeek, OpenAI, OpenRouter, Ollama..."""
 
@@ -59,13 +81,18 @@ class OpenAICompatTexto(Provedor):
         corpo = {"model": self.modelo, "messages": mensagens}
         if (temp := _temperatura(self.cfg)) is not None:
             corpo["temperature"] = temp
+        if _pensar(self.cfg) is False:  # Ollama: desliga o raciocínio (mais rápido e sem <think> na resposta)
+            corpo["reasoning_effort"] = "none"
         r = post_json(
             f"{self.base_url}/chat/completions",
             corpo,
             cab,
             self.timeout,
         )
-        return _exigir_texto(r["choices"][0]["message"]["content"])
+        escolha = r["choices"][0]
+        if escolha.get("finish_reason") == "length":
+            raise ErroProvedor("resposta cortada no limite de tokens")
+        return _exigir_texto(_sem_pensamento(escolha["message"]["content"]))
 
 
 class AnthropicTexto(Provedor):

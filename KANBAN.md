@@ -15,6 +15,7 @@
 ## ✅ Pronto
 | ID | Cartão | Spec |
 |---|---|---|
+| K51 | Ollama local na RX 580 (26/11): `ollama_local` troca o `qwen2.5:7b` (texto sem sentido na placa, via Vulkan) pelo `qwen3:latest` (100% na GPU); campo `pensar = false` no `openai_compat` envia `reasoning_effort: none`; bloco `<think>` do começo é retirado, raciocínio sem fechar e `finish_reason = length` viram erro (vai ao próximo); família `qwen`. Teste real: roteiro de 20 s em 36 s e post em 12 s, só pelo Ollama. Primeira carga do modelo ~2 min. Verificado por agente e corrigido | — |
 | K00a | Roteador com fallback por função, provedores e CLI (protótipo) | — |
 | K34 | Cotas gratuitas que duram entre execuções (tabela `cotas`, UTC no banco, Brasília na tela; cota esgotada só por padrão declarado ou Retry-After > 1 h), licença por modalidade no perfil (D24), tarefa `video` renomeada para `animar` (apelido mantido) e comando `cotas`; verificado por agente e corrigido | [14](docs/sdd/14-fila-gratuita-midia.md) · D24 |
 | K35 | Prompts por serviço (`prompts_midia.py`, moldes em `config/prompts_midia.toml`): cada serviço recebe o prompt no formato dele; checagem por regra antes de gastar cota (texto pedido na imagem, nomes que o perfil evita, campos, limite, movimento); Ken Burns nunca barrado; comando `prompt-midia` | [14](docs/sdd/14-fila-gratuita-midia.md) |

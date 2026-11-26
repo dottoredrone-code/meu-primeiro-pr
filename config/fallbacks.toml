@@ -91,11 +91,13 @@ modelo = "deepseek/deepseek-chat-v3.1:free"
 chave_env = "OPENROUTER_API_KEY"
 
 [provedores.ollama_local]
-familia = "local"  # juiz nunca é da mesma família de quem gerou
-# Roda no seu computador: instale o Ollama e baixe o modelo (ollama pull qwen2.5:7b).
+familia = "qwen"  # juiz nunca é da mesma família de quem gerou
+# Roda no seu computador: instale o Ollama e baixe o modelo (ollama pull qwen3).
+# K51 (26/11/2026): na RX 580 (Vulkan) o qwen2.5:7b gera texto sem sentido; o qwen3 funciona (~14 tokens/s).
 classe = "openai_compat"
 base_url_env = "OLLAMA_BASE_URL"   # ex.: http://localhost:11434/v1
-modelo = "qwen2.5:7b"
+modelo = "qwen3:latest"
+pensar = false   # sem raciocínio antes da resposta: mais rápido e sem <think> no texto
 timeout = 600
 
 # ---------------------------------------------------------------- busca
