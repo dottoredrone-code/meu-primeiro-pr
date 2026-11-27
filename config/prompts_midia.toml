@@ -1,0 +1,101 @@
+# Moldes de prompt por serviço de imagem e vídeo (K35, spec 14 §A). Dados, não código:
+# ajuste aqui quando um serviço mudar o jeito de entender o prompt.
+#
+# Cada cena vira um "prompt neutro" (descrição, ação, estilo, luz, câmera, proporção, o que evitar).
+# O molde diz como esse prompt é escrito para cada serviço:
+#   forma     "frase" (inglês natural) ou "etiquetas" (termos curtos separados por vírgula)
+#   limite    máximo de caracteres do prompt
+#   negativo  "embutido" (", avoid: ..." no fim), "separado" (campo à parte, se o provedor aceitar) ou "nenhum"
+#   ordem     ordem dos campos; quando não cabe no limite, os últimos saem primeiro
+
+[geral]
+# Sempre evitados (a imagem do Studio nunca leva texto: legendas e títulos entram na montagem)
+evitar_padrao = ["text", "letters", "watermark", "logo", "blurry", "distorted hands", "extra fingers"]
+# Pedidos de texto dentro da imagem (reprovam o prompt, salvo cena com texto_na_imagem = true)
+pedidos_de_texto = ["text that says", "with the words", "with the text", "caption", "subtitle", "typography",
+                    "lettering", "written", "headline", "sign that reads", "sign that says", "logo of", "letters",
+                    "com o texto", "com a palavra", "com as palavras", "escrito", "escrita", "legenda", "letreiro"]
+
+[proporcao]
+"9:16" = "vertical 9:16 composition, subject centered"
+"16:9" = "horizontal 16:9 composition"
+"1:1" = "square 1:1 composition, subject centered"
+"4:5" = "vertical 4:5 composition, subject centered"
+
+[luz]
+# luz e cor pelo clima da cena (roteiro.CLIMAS)
+calmo = "soft diffused light, gentle pastel tones"
+curioso = "clean even light with subtle highlights"
+inspirador = "warm uplifting light, soft glow"
+epico = "golden hour backlight, cinematic contrast"
+alegre = "bright natural light, vivid colors"
+reflexivo = "muted soft light, gentle shadows"
+tenso = "high-contrast dramatic lighting, deep shadows"
+
+[camera]
+# movimento pedido (o mesmo reconhecimento do zoom local) → palavras de câmera
+aproximar = "slow push-in toward the subject"
+afastar = "slow zoom out, pulling back to reveal the scene"
+direita = "smooth pan to the right"
+esquerda = "smooth pan to the left"
+subir = "gentle tilt up"
+descer = "gentle tilt down"
+
+[moldes.padrao]
+forma = "frase"
+limite = 900
+negativo = "embutido"
+ordem = ["descricao", "estilo", "luz", "proporcao"]
+
+[moldes.flux]
+# FLUX entende frase natural e não usa prompt negativo (palavras de "evitar" às vezes até atraem o que se quer evitar)
+forma = "frase"
+limite = 500
+negativo = "nenhum"
+ordem = ["descricao", "estilo", "luz", "proporcao"]
+
+[moldes.etiquetas]
+# serviços no estilo Stable Diffusion: termos curtos e prompt negativo à parte
+forma = "etiquetas"
+limite = 380
+negativo = "separado"
+ordem = ["descricao", "estilo", "luz", "proporcao"]
+
+[moldes.video]
+# imagem → vídeo: a câmera vem primeiro, depois o que se mexe na cena
+forma = "frase"
+limite = 600
+negativo = "embutido"
+ordem = ["camera", "acao", "descricao", "luz"]
+
+[moldes.video_texto]
+forma = "frase"
+limite = 800
+negativo = "embutido"
+ordem = ["descricao", "acao", "camera", "estilo", "luz", "proporcao"]
+
+[moldes.editar]
+# editar imagem/vídeo: a instrução de mudança manda; o resto só preserva o estilo
+forma = "frase"
+limite = 500
+negativo = "nenhum"
+ordem = ["instrucao", "estilo"]
+
+[servicos]
+# provedor (config/fallbacks.toml) → molde; sem entrada, vale o molde da modalidade
+pollinations = "flux"
+fal_flux = "flux"
+cloudflare_flux = "flux"
+nano_banana = "padrao"
+openai_imagem = "padrao"
+fal_kling = "video"
+fal_wan = "video"
+ken_burns = "video"
+
+[modalidades]
+# molde padrão de cada modalidade
+imagem = "padrao"
+editar_imagem = "editar"
+animar = "video"
+video_texto = "video_texto"
+editar_video = "editar"

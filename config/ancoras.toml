@@ -1,0 +1,10 @@
+# Âncoras aprovadas por categoria (K14, specs 03 e 09): dizem ao juiz o que vale nota 90 e o que vale nota 40 em
+# cada critério de potencial. Entram no prompt de `analisar-referencia`. Parta das "ancoras_sugeridas" das análises
+# (dados/referencias/<categoria>/*.json), ajuste com as suas palavras e, depois de mudar, reanalise e rode `calibrar`.
+# Vazio = o juiz usa só a descrição dos critérios.
+#
+# [A]
+# gancho = "nota 90: fato surpreendente com número concreto no 1º segundo; nota 40: frase genérica sem informação"
+# fluxo = ""
+# valor = ""
+# tendencia = ""

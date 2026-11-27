@@ -1,0 +1,173 @@
+import os
+import tomllib
+from pathlib import Path
+
+from .cotas import Cotas
+from .provedores import CLASSES
+from .rede import configurar_downloads
+from .roteador import Roteador
+from .seguranca import Orcamento
+
+RAIZ = Path(__file__).resolve().parent.parent
+CONFIG_PADRAO = RAIZ / "config" / "fallbacks.toml"
+
+
+def carregar_env(caminho=RAIZ / ".env"):
+    """Lê um arquivo .env simples (CHAVE=valor) sem sobrescrever variáveis já definidas."""
+    if not caminho.exists():
+        return
+    for linha in caminho.read_text(encoding="utf-8-sig").splitlines():
+        linha = linha.strip()
+        if not linha or linha.startswith("#") or "=" not in linha:
+            continue
+        chave, valor = linha.split("=", 1)
+        valor = valor.strip()
+        if valor[:1] in ('"', "'"):
+            valor = valor[1:].split(valor[0], 1)[0]
+        else:
+            valor = valor.split("#", 1)[0].strip()  # comentário no fim da linha
+        if valor:
+            os.environ.setdefault(chave.strip(), valor)
+
+
+def montar_provedores(dados):
+    provedores = {}
+    for nome, cfg in dados["provedores"].items():
+        classe = CLASSES.get(cfg.get("classe"))
+        if classe is None:
+            raise ValueError(f"{rotulo} '{nome}': classe desconhecida '{cfg.get('classe')}'")
+        provedores[nome] = classe(nome, cfg)
+    return provedores
+
+
+def validar_cotas_e_licencas(provedores, rotulo="provedor"):
+    """Erros de digitação em cota/licença viram erro na hora, não um provedor que nunca é pulado (K34, D24)."""
+    from .cotas import LICENCAS, validar_renova
+
+    for nome, prov in provedores.items():
+        licenca = prov.cfg.get("licenca")
+        if licenca is not None and licenca not in LICENCAS:
+            raise ValueError(f"{rotulo} '{nome}': licenca {licenca!r} inválida (use {', '.join(LICENCAS)})")
+        cota = prov.cfg.get("cota")
+        if cota is None:
+            continue
+        if not isinstance(cota, dict):
+            raise ValueError(f"{rotulo} '{nome}': 'cota' precisa ser uma tabela [provedores.{nome}.cota]")
+        erro = validar_renova(cota.get("renova"))
+        if erro:
+            raise ValueError(f"{rotulo} '{nome}': {erro}")
+        limite = cota.get("limite")
+        if limite is not None and cota.get("renova") is None:
+            raise ValueError(f"{rotulo} '{nome}': cota.limite precisa de cota.renova (senão o gasto nunca volta a zero)")
+        if limite is not None and (isinstance(limite, bool) or not isinstance(limite, (int, float)) or limite <= 0):
+            raise ValueError(f"{rotulo} '{nome}': cota.limite precisa ser um número maior que zero")
+
+
+def validar_cadeias(provedores, cadeias):
+    for tarefa, cadeia in cadeias.items():
+        if not cadeia:
+            raise ValueError(f"tarefa '{tarefa}' sem provedores")
+        tipos = set()
+        for nome in cadeia:
+            if nome not in provedores:
+                raise ValueError(f"tarefa '{tarefa}': provedor '{nome}' não existe")
+            tipos.add(provedores[nome].tipo)
+        if len(tipos) > 1:
+            raise ValueError(f"tarefa '{tarefa}' mistura tipos de provedor: {sorted(tipos)}")
+
+
+def carregar_config(caminho=None):
+    carregar_env()
+    caminho = Path(caminho or os.environ.get("TORRALLES_CONFIG") or os.environ.get("ESTUDIO_CONFIG") or CONFIG_PADRAO)
+    return tomllib.loads(caminho.read_text(encoding="utf-8-sig"))
+
+
+def carregar_avaliador(roteador=None, caminho=None):
+    from .qualidade import Avaliador
+
+    dados = carregar_config(caminho)
+    return Avaliador(roteador or carregar_roteador(caminho), dados.get("avaliacao", {}))
+
+
+def carregar_loop(roteador=None, caminho=None, relatorio=None):
+    """Loop de correção (K09) com roteador e avaliador do mesmo config (mesmo orçamento)."""
+    from .loop import LoopCorrecao
+
+    roteador = roteador or carregar_roteador(caminho)
+    dados = carregar_config(caminho)
+    avaliador = carregar_avaliador(roteador, caminho)
+    return LoopCorrecao.do_config(roteador, avaliador, dados.get("avaliacao", {}).get("loop", {}), relatorio)
+
+
+def caminho_banco(caminho=None):
+    """Arquivo do banco local ([banco].caminho, relativo à raiz do repositório)."""
+    destino = Path(carregar_config(caminho).get("banco", {}).get("caminho", "dados/torralles.db"))
+    return destino if destino.is_absolute() else RAIZ / destino
+
+
+def carregar_banco(caminho=None):
+    """Banco local do config ([banco].caminho, relativo à raiz do repositório)."""
+    from .banco import Banco
+
+    return Banco(caminho_banco(caminho))
+
+
+def carregar_biblioteca(caminho=None, banco=None):
+    """Biblioteca de mídia (K25) na pasta do config, registrada no banco local."""
+    from .biblioteca import Biblioteca
+
+    destino = Path(carregar_config(caminho).get("biblioteca", {}).get("pasta", "dados/biblioteca"))
+    return Biblioteca(destino if destino.is_absolute() else RAIZ / destino, banco or carregar_banco(caminho))
+
+
+MODELO_PERFIL = RAIZ / "config" / "perfil_modelo.toml"
+
+
+def pasta_perfis(caminho=None):
+    destino = Path(carregar_config(caminho).get("perfis", {}).get("pasta", "dados/perfis"))
+    return destino if destino.is_absolute() else RAIZ / destino
+
+
+def carregar_perfis(caminho=None):
+    """Perfis por projeto (K26). Ajustes só podem citar provedores que existem no config."""
+    from .perfis import Perfis
+
+    dados = carregar_config(caminho)
+    return Perfis(pasta_perfis(caminho), provedores_conhecidos=set(dados["provedores"]),
+                  teto_maximo=dados.get("roteador", {}).get("teto_custo_usd"))
+
+
+def carregar_roteador(caminho=None, banco=None):
+    """banco: opcional (carregar_banco()); com ele, resultados repetidos vêm do cache sem custo."""
+    dados = carregar_config(caminho)
+    provedores = montar_provedores(dados)
+    cadeias = {tarefa: t["cadeia"] for tarefa, t in dados["tarefas"].items()}
+    validar_cadeias(provedores, cadeias)
+    validar_cotas_e_licencas(provedores)
+    from .navegador import sites_do_config
+
+    sites = sites_do_config(dados)
+    validar_cotas_e_licencas(sites, "site")
+    from .cotas import MODALIDADES
+    from .prompts_midia import carregar_moldes
+
+    moldes = carregar_moldes().get("moldes", {})
+    for nome, site in sites.items():
+        erradas = [m for m in site.cfg.get("modalidades") or [] if m not in MODALIDADES]
+        if erradas:
+            raise ValueError(f"site '{nome}': modalidade desconhecida {erradas} (use {', '.join(MODALIDADES)})")
+        molde = site.cfg.get("molde")
+        if molde and molde not in moldes:
+            raise ValueError(f"site '{nome}': molde {molde!r} não existe em config/prompts_midia.toml")
+    seguranca = dados.get("seguranca", {})
+    configurar_downloads(seguranca.get("dominios_download"), seguranca.get("tamanho_maximo_download_mb"))
+    opcoes = dados.get("roteador", {})
+    return Roteador(
+        provedores,
+        cadeias,
+        repeticoes=opcoes.get("repeticoes", 1),
+        espera_base=opcoes.get("espera_base", 1.0),
+        orcamento=Orcamento(opcoes.get("teto_custo_usd")),
+        cache=banco,
+        cotas=Cotas(banco) if banco is not None else None,
+    )

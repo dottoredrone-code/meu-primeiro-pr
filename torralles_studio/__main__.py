@@ -1,0 +1,1097 @@
+"""Linha de comando: python -m torralles_studio <comando> ..."""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from . import funcoes
+from .config import carregar_roteador
+from .roteador import TodosFalharam
+
+
+def mostrar_status(roteador):
+    for tarefa, itens in roteador.status().items():
+        print(f"\n{tarefa}:")
+        for i, (nome, motivo) in enumerate(itens, 1):
+            print(f"  {i}. {nome:<20} {'pronto' if motivo is None else motivo}")
+
+
+def relatar(resultado):
+    for t in resultado.tentativas:
+        if t.status != "ok":
+            print(f"  · {t.provedor}: {t.status} ({t.detalhe})", file=sys.stderr)
+    print(f"✓ feito com: {resultado.provedor}", file=sys.stderr)
+
+
+def comando_perfis(args):
+    from .config import MODELO_PERFIL, carregar_perfis, pasta_perfis
+    from .perfis import ErroPerfil, criar_perfil
+
+    try:
+        if args.comando == "perfil-novo":
+            destino = criar_perfil(pasta_perfis(args.config), args.id, args.nome, MODELO_PERFIL)
+            print(f"✓ perfil criado: {destino}\n  Edite o arquivo e ponha o kit visual em {destino.with_suffix('')}/")
+            return 0
+        perfis = list(carregar_perfis(args.config))
+    except ErroPerfil as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    for pid, motivo in sorted(carregar_perfis(args.config).erros.items()):
+        print(f"⚠ {pid}: {motivo}", file=sys.stderr)
+    if not perfis:
+        print("Nenhum perfil ainda. Crie com: python -m torralles_studio perfil-novo <id> \"<nome>\"")
+    for pf in perfis:
+        extra = f" · Hermes: {pf.hermes_perfil}" if pf.hermes_perfil else ""
+        print(f"{pf.id:<20} {pf.nome} (categoria {pf.categoria or '-'}){extra}")
+    return 0
+
+
+def comando_cerebro(args):
+    from pathlib import Path
+
+    from .banco import Banco
+    from .cerebro import exportar, validar_data
+    from .config import RAIZ, carregar_config
+    from .perfis import ID_VALIDO
+
+    try:  # valida antes de tudo, mesmo sem banco
+        validar_data(args.desde)
+        if args.perfil is not None and not ID_VALIDO.match(args.perfil):
+            raise ValueError(f"perfil inválido {args.perfil!r}: use o id do perfil (veja: perfis)")
+    except ValueError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+
+    caminho = Path(carregar_config(args.config).get("banco", {}).get("caminho", "dados/torralles.db"))
+    caminho = caminho if caminho.is_absolute() else RAIZ / caminho
+    if not caminho.exists():  # não cria banco vazio só para resumir
+        print("Sem produção registrada ainda (o banco local não existe): nada para o Cérebro.")
+        return 0
+    banco = Banco(caminho)
+    if args.perfil and not banco.projetos(args.perfil):
+        print(f"⚠ o perfil {args.perfil!r} não tem projetos no banco (confira o id com: perfis)", file=sys.stderr)
+    try:
+        destino = exportar(banco, args.pasta or RAIZ / "dados" / "cerebro", desde=args.desde, perfil=args.perfil)
+    except ValueError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    print(destino.read_text(encoding="utf-8"))
+    print(f"✓ salvo em {destino} (cole no CEREBRO_MESTRE.md)", file=sys.stderr)
+    return 0
+
+
+def comando_avaliar_video(args):
+    from .config import carregar_avaliador, carregar_env
+    from .percepcao import analisar_video, avaliar_video
+
+    carregar_env()
+    from urllib.parse import urlparse
+
+    percepcao = None
+    if args.percepcao and urlparse(str(args.video)).scheme.lower() not in ("http", "https"):
+        percepcao = analisar_video(args.video, "saidas/percepcao")
+    av = avaliar_video(carregar_avaliador(caminho=args.config), args.video, contexto=args.contexto,
+                       percepcao=percepcao)
+    print(json.dumps(av.como_dict(), ensure_ascii=False, indent=2))
+    if av.sem_juiz:
+        motivos = av.problemas[1:] or ["nenhum provedor na cadeia juiz_video"]
+        print("⚠ nenhum juiz de vídeo conseguiu avaliar:", file=sys.stderr)
+        for m in motivos:
+            print(f"  · {m}", file=sys.stderr)
+        if any("falta GEMINI_API_KEY" in m for m in motivos):
+            print("  Coloque GEMINI_API_KEY no .env (veja docs/configurar-chaves.md).", file=sys.stderr)
+        return 1
+    return 0
+
+
+def comando_importar_sons(args):
+    from .biblioteca import ErroLicenca, conferir_licenca
+    from .config import carregar_biblioteca
+    from .efeitos import importar_pasta
+
+    try:
+        conferir_licenca(args.licenca)  # licença recusada: nem abre a biblioteca
+        importados, problemas = importar_pasta(carregar_biblioteca(args.config), args.pasta, args.licenca,
+                                               args.fonte, link=args.link, autor=args.autor)
+    except (ErroLicenca, FileNotFoundError) as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    for p in problemas[:5]:
+        print(f"  ⚠ {p}", file=sys.stderr)
+    if len(problemas) > 5:
+        print(f"  … e mais {len(problemas) - 5} arquivos com problema", file=sys.stderr)
+    if not importados:
+        motivo = "nenhum som entrou" if problemas else f"nenhum arquivo de áudio em {args.pasta}"
+        print(f"✗ {motivo}", file=sys.stderr)
+        return 1
+    novos = sum(1 for a in importados if not a.get("duplicado"))
+    print(f"✓ {len(importados)} sons no acervo ({novos} novos, {len(importados) - novos} já estavam)")
+    return 0
+
+
+def comando_importar_acervo(args):
+    """Pasta de trilhas, efeitos, sonoplastias, ambientes, imagens ou vídeos → acervo medido e etiquetado (K47)."""
+    from .acervo import ErroAcervo, importar_pasta
+    from .biblioteca import ErroLicenca, conferir_licenca
+    from .config import carregar_biblioteca
+
+    try:
+        conferir_licenca(args.licenca)  # licença recusada: nem abre a biblioteca
+        importados, problemas = importar_pasta(carregar_biblioteca(args.config), args.pasta, args.tipo, args.licenca,
+                                               args.fonte, clima=args.clima, link=args.link, autor=args.autor,
+                                               arquivo_licenca=args.arquivo_licenca)
+    except (ErroLicenca, ErroAcervo, FileNotFoundError) as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    for p in problemas[:5]:
+        print(f"  ⚠ {p}", file=sys.stderr)
+    if len(problemas) > 5:
+        print(f"  … e mais {len(problemas) - 5} arquivos com problema", file=sys.stderr)
+    if not importados:
+        motivo = "nada entrou" if problemas else f"nenhum arquivo de {args.tipo} em {args.pasta}"
+        print(f"✗ {motivo}", file=sys.stderr)
+        return 1
+    novos = sum(1 for a in importados if not a.get("duplicado"))
+    print(f"✓ {len(importados)} itens de {args.tipo} no acervo ({novos} novos, {len(importados) - novos} já estavam)")
+    for a in importados[:20]:
+        m = a["medidas"]
+        clima = next((t[6:] for t in a["tags"] if t.startswith("clima-")), "sem clima")
+        detalhes = [clima]
+        if m.get("duracao_s") is not None:
+            detalhes.append(f"{m['duracao_s']:.1f} s")
+        if m.get("energia") is not None:
+            detalhes.append(f"energia {m['energia']:.2f}")
+        if m.get("bpm"):
+            detalhes.append(f"{m['bpm']:.0f} BPM")
+        if m.get("loop"):
+            detalhes.append("loop")
+        if m.get("orientacao"):
+            detalhes.append(f"{m['orientacao']} {m['largura']}x{m['altura']}")
+        print(f"  · {a['titulo']}: {', '.join(detalhes)}")
+    if any(not any(t.startswith("clima-") for t in a["tags"]) for a in importados):
+        print("  Dica: itens sem clima não aparecem na busca por clima; use --clima ao importar.")
+    return 0
+
+
+def comando_acervo(args):
+    """Busca no acervo para agentes e pessoas (K47; --json para agentes)."""
+    import json as _json
+
+    from .acervo import ErroAcervo, buscar, resumo
+    from .config import carregar_biblioteca
+
+    bib = carregar_biblioteca(args.config)
+    try:
+        achados = buscar(bib, tipo=args.tipo, clima=args.clima, energia=args.energia, duracao=args.duracao,
+                         orientacao=args.orientacao, palavras=args.palavra or (),
+                         loop=True if args.loop else None, limite=args.limite)
+    except ErroAcervo as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    itens = [dict(resumo(a, args.tipo, args.clima), arquivo=str(bib.caminho(a))) for a in achados]
+    if args.json:
+        print(_json.dumps(itens, ensure_ascii=False, indent=2))
+        return 0
+    if not itens:
+        print("Nada no acervo com esses filtros.")
+        return 0
+    for i in itens:
+        m = i["medidas"]
+        partes = [i["tipo"] or "?", i["clima"] or "sem clima"]
+        if m.get("duracao_s") is not None:
+            partes.append(f"{m['duracao_s']:.1f} s")
+        if m.get("energia") is not None:
+            partes.append(f"energia {m['energia']:.2f}")
+        if m.get("bpm"):
+            partes.append(f"{m['bpm']:.0f} BPM")
+        print(f"· {i['titulo']} ({', '.join(partes)}) — {i['licenca']}, {i['fonte']}")
+        print(f"  {i['arquivo']}")
+    return 0
+
+
+def comando_cotas(args):
+    """Quanto falta de cada cota gratuita e quando renova (K34); --esgotar/--liberar marcam à mão."""
+    from .config import carregar_banco, carregar_roteador
+    from .cotas import Cotas, conta_de, config_cota, hora_local, licenca_do_provedor
+
+    with carregar_banco(args.config) as banco:
+        roteador = carregar_roteador(args.config, banco=banco)
+        cotas = roteador.cotas or Cotas(banco)
+        contas = {}
+        for nome, prov in roteador.provedores.items():
+            contas.setdefault(conta_de(nome, prov), []).append((nome, prov))
+        alvo = args.esgotar or args.liberar
+        if alvo:
+            achados = {c for c, provs in contas.items() if c == alvo or any(n == alvo for n, _ in provs)}
+            if not achados:
+                print(f"✗ serviço {alvo!r} não existe no config", file=sys.stderr)
+                return 1
+            conta = achados.pop()
+            cota = config_cota(contas[conta][0][1])
+            if args.esgotar:
+                ate = cotas.esgotar(conta, cota, args.motivo or "marcado à mão")
+                print(f"⏸ {conta}: esgotado até {hora_local(ate)}")
+            else:
+                cotas.liberar(conta)
+                print(f"✓ {conta}: cota liberada")
+            return 0
+        guardadas = cotas.listar()
+        linhas = 0
+        for conta, provs in sorted(contas.items()):
+            cota = config_cota(provs[0][1])
+            if not cota and conta not in guardadas:
+                continue
+            linhas += 1
+            estado = cotas.estado(conta, cota)
+            limite = cota.get("limite")
+            uso = f"{estado['usado']:g} de {limite:g} créditos" if limite else f"{estado['usado']:g} créditos usados"
+            if estado["esgotado_ate"]:
+                situacao = f"⏸ esgotado, volta {hora_local(estado['esgotado_ate'])}"
+            elif estado["renova_em"]:
+                situacao = f"renova {hora_local(estado['renova_em'])}"
+            else:
+                situacao = "sem período em uso"
+            licencas = sorted({licenca_do_provedor(p) for _, p in provs})
+            print(f"{conta}: {uso} · {situacao} · licença {', '.join(licencas)}"
+                  + (f" · {', '.join(n for n, _ in provs)}" if len(provs) > 1 or provs[0][0] != conta else ""))
+        if not linhas:
+            print("nenhum serviço com cota no config ainda (veja [provedores.X.cota] na spec 14)")
+    return 0
+
+
+def comando_prompt_midia(args):
+    """Prompt pronto de cada serviço da fila para uma ideia (K35): funciona sem chave nenhuma."""
+    from .config import carregar_config
+    from .prompts_midia import PromptReprovado, neutro_da_cena, preparar
+
+    perfil = None
+    if args.perfil:
+        from .config import carregar_perfis
+
+        perfil = carregar_perfis(args.config).obter(args.perfil)
+    cena = {"prompt_imagem": args.ideia, "prompt_movimento": args.movimento or "", "clima": args.clima,
+            "instrucao": args.instrucao, "texto_na_imagem": args.com_texto}
+    neutro = neutro_da_cena(cena, args.modalidade, perfil=perfil, proporcao=args.proporcao)
+    dados = carregar_config(args.config)
+    tarefa = args.modalidade
+    servicos = [args.servico] if args.servico else list(dados.get("tarefas", {}).get(tarefa, {}).get("cadeia", []))
+    servicos += [] if args.servico else list((dados.get("sites") or {}))
+    if not servicos:
+        servicos = ["padrao"]
+    falhas = 0
+    for servico in servicos:
+        try:
+            pronto = preparar(servico, neutro, perfil=perfil)
+        except PromptReprovado as e:
+            falhas += 1
+            print(f"✗ {servico}: {e}")
+            continue
+        print(f"== {servico} (molde {pronto['molde']}, {len(pronto['prompt'])} caracteres)")
+        print(pronto["prompt"])
+        if pronto.get("negativo"):
+            print(f"   negativo: {pronto['negativo']}")
+        if pronto.get("cortados"):
+            print(f"   (saiu para caber no limite: {', '.join(pronto['cortados'])})")
+    return 1 if falhas == len(servicos) else 0
+
+
+def _navegador(args, banco):
+    from .config import carregar_config, carregar_roteador
+    from .navegador import Navegador, sites_do_config
+
+    dados = carregar_config(args.config)
+    roteador = carregar_roteador(args.config, banco=banco)
+    tamanho = dados.get("seguranca", {}).get("tamanho_maximo_download_mb", 300)
+    return Navegador(banco, sites_do_config(dados), cotas=roteador.cotas, tamanho_maximo_mb=tamanho)
+
+
+def _perfil_de(args):
+    if not getattr(args, "perfil", None):
+        return None
+    from .config import carregar_perfis
+
+    return carregar_perfis(args.config).obter(args.perfil)
+
+
+def comando_pedidos_navegador(args):
+    """Grava saidas/<tema>/navegador/pedidos.json para a skill midia-navegador (K37)."""
+    import json as _json
+
+    from .config import carregar_banco
+    from .navegador import ErroNavegador
+
+    pasta = Path(args.pasta)
+    roteiro = pasta / "roteiro.json"
+    if not roteiro.is_file():
+        print(f"✗ não achei {roteiro}: rode o produzir do tema antes", file=sys.stderr)
+        return 1
+    cenas = _json.loads(roteiro.read_text(encoding="utf-8")).get("cenas", [])
+    escolhidas = set(args.cenas or [])
+    lista = [{**c, "indice": i} for i, c in enumerate(cenas, 1) if not escolhidas or i in escolhidas]
+    for c in lista:  # no animar, a entrada é a imagem que o próprio Studio fez para a cena
+        imagem = pasta / f"cena_{c['indice']:02d}.png"
+        if args.modalidade in ("animar", "editar_imagem") and imagem.is_file():
+            c["entrada"] = str(imagem)
+    with carregar_banco(args.config) as banco:
+        try:
+            dados = _navegador(args, banco).criar_pedidos(pasta, lista, args.modalidade, perfil=_perfil_de(args))
+        except ErroNavegador as e:
+            print(f"✗ {e}", file=sys.stderr)
+            return 1
+    for item in dados["fila"]:
+        print(f"{'✓' if not item['fora'] else '·'} {item['site']}" + (f": {item['fora']}" if item["fora"] else ""))
+    print(f"{len(dados['pedidos'])} pedidos em {pasta / 'navegador' / 'pedidos.json'}")
+    if not dados["sites"]:
+        print("⚠ nenhum site disponível agora: veja os motivos acima", file=sys.stderr)
+        return 1
+    return 0
+
+
+def comando_importar_midia(args):
+    """Confere e registra o que a skill baixou dos sites (K37)."""
+    from .config import carregar_banco, carregar_biblioteca
+    from .navegador import ErroNavegador
+
+    with carregar_banco(args.config) as banco:
+        try:
+            importados, problemas = _navegador(args, banco).importar(
+                args.pasta, carregar_biblioteca(args.config, banco=banco), site=args.site, perfil=_perfil_de(args))
+        except ErroNavegador as e:
+            print(f"✗ {e}", file=sys.stderr)
+            return 1
+    for p in problemas:
+        print(f"  ⚠ {p}", file=sys.stderr)
+    for i in importados:
+        print(f"✓ {i['id']}: {i['site']} · {i['tipo']} {i['largura']}x{i['altura']} · licença {i['licenca']}")
+    return 0 if importados or not problemas else 1
+
+
+def comando_produzir(args, roteador, perfil):
+    from .config import carregar_biblioteca, carregar_config, carregar_loop
+    from .montagem import ErroMontagem
+    from .producao import ErroProducao, pasta_do_tema, produzir_video
+    from .pronuncia import conferir_voz
+    from .rede import ErroProvedor
+
+    pasta = args.pasta or pasta_do_tema(args.tema)
+    try:
+        rel = produzir_video(roteador, carregar_loop(roteador, args.config), args.tema, pasta, duracao=args.duracao,
+                             perfil=perfil, pesquisar=args.pesquisa, trilha=args.trilha, bpm=args.bpm,
+                             cfg_montagem=carregar_config(args.config).get("montagem"),
+                             aviso=lambda t: print(t, file=sys.stderr, flush=True),
+                             refazer_roteiro=args.refazer_roteiro, biblioteca=carregar_biblioteca(args.config),
+                             trilha_auto=not args.sem_trilha, capcut=args.capcut, efeitos_auto=not args.sem_efeitos,
+                             publicacao=not args.sem_post, juiz_imagem=not args.sem_juiz_imagem,
+                             video_banco=not args.sem_video_banco,
+                             conferir_voz=None if args.sem_conferir_voz else conferir_voz)
+    except KeyboardInterrupt:
+        print(f"\n✗ interrompido. O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
+        return 130
+    except (ErroProducao, ErroMontagem, ErroProvedor, OSError) as e:
+        print(f"✗ parou: {e}\n  O que já ficou pronto está em {pasta}; rode de novo para continuar.", file=sys.stderr)
+        return 1
+    for e in rel["etapas"]:
+        if not e["reaproveitado"] and e["etapa"] in ("pesquisa", "roteiro"):
+            nota = f"nota {e['nota']:.0f}" if e.get("nota") is not None else "sem juiz"
+            print(f"  {e['etapa']}: {e['provedor']} · {nota}", file=sys.stderr)
+    for problema in rel["problemas"]:
+        print(f"✗ {problema}")
+    for alerta in (rel.get("referencia") or {}).get("alertas", []):
+        print(f"⚠ {alerta}")
+    print(f"{'✓' if rel['aprovado'] else '⚠'} {rel['video']} · {rel['duracao_s']:.1f} s · US$ {rel['custo_usd']:.3f}"
+          f" · {rel['tempo_s']} s")
+    if rel.get("capcut"):
+        print(f"  CapCut: {rel['capcut']} (veja o LEIA-ME.txt)")
+    return 0 if rel["aprovado"] else 2
+
+
+def comando_servidor(args):
+    from .config import RAIZ, caminho_banco
+    from .servico import ServicoPecas
+
+    canal = None
+    if args.comando == "mcp":
+        from .servidor import isolar_stdin
+
+        canal = isolar_stdin()  # antes de qualquer FFmpeg: stdin/stdout são só do JSON-RPC
+    servico = ServicoPecas(caminho_banco(args.config), pasta_base=RAIZ / "saidas" / "pedidos", config=args.config)
+    servico.iniciar()
+    try:
+        if args.comando == "mcp":
+            from .servidor import saida_utf8, servir_mcp
+
+            servir_mcp(servico, entrada=canal, saida=saida_utf8())
+            return 0
+        from .painel import Painel
+        from .servidor import criar_servidor_http
+
+        painel = Painel(RAIZ / "saidas", caminho_banco(args.config), config=args.config, servico=servico)
+        try:
+            http = criar_servidor_http(servico, args.host, args.porta, painel=painel)
+        except (ValueError, OSError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            return 1
+        endereco = f"http://{'[::1]' if args.host == '::1' else args.host}:{args.porta}"
+        print(f"✓ Torralles Studio ouvindo em {endereco}/v1/pecas (Ctrl+C para parar)\n"
+              f"  Painel: abra {endereco}/ no navegador", file=sys.stderr)
+        try:
+            http.serve_forever()
+        except KeyboardInterrupt:
+            print("\nparando…", file=sys.stderr)
+        finally:
+            http.server_close()
+        return 0
+    finally:
+        servico.parar(esperar=False)
+
+
+def comando_analisar_referencia(args, roteador):
+    import subprocess
+    import tomllib
+
+    from .config import RAIZ
+    from .rede import ErroProvedor
+    from .calibracao import carregar_ancoras
+    from .referencias import analisar_referencia
+    from .seguranca import mascarar
+    from .roteador import TodosFalharam
+
+    try:
+        categorias = tomllib.loads((RAIZ / "config" / "referencias.toml").read_text(encoding="utf-8"))["categorias"]
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
+        categorias = {}
+    categorias = {k: v for k, v in categorias.items() if isinstance(v, dict)} if isinstance(categorias, dict) else {}
+    categoria = args.categoria.upper()
+    if categorias and categoria not in categorias:
+        print(f"✗ categoria {categoria!r} não existe (use {', '.join(categorias)})", file=sys.stderr)
+        return 1
+    try:
+        cat = categorias.get(categoria) or {}
+        r = analisar_referencia(roteador, args.video, categoria, nome_categoria=cat.get("nome"),
+                                formato=cat.get("formato"), pasta=RAIZ / "dados" / "referencias",
+                                negativo=args.negativo,
+                                ancoras=carregar_ancoras(RAIZ / "config" / "ancoras.toml", categoria))
+    except (TodosFalharam, ValueError, ErroProvedor, subprocess.CalledProcessError, OSError) as e:
+        print(f"✗ não deu para analisar: {mascarar(str(e))}", file=sys.stderr)
+        return 1
+    p = r["potencial"]
+    print(f"✓ {r['origem']} · categoria {categoria} · {r['medido_por']}")
+    print(f"  duração {r['duracao_s']:.0f} s · {r['cortes_por_minuto']:.0f} cortes/min · plano médio "
+          f"{r['duracao_media_plano_s']:.1f} s · {r['palavras_por_segundo']:.1f} palavras/s")
+    print(f"  gancho: {r['gancho']['tipo']} aos {r['gancho']['momento_s']:.0f} s — {r['gancho']['trecho']}")
+    print("  estrutura: " + " → ".join(f"{e['parte']} ({e['inicio_s']:.0f}–{e['fim_s']:.0f} s)" for e in r["estrutura"]))
+    print(f"  potencial {r['nota_potencial']:.0f}/100: " + ", ".join(f"{c} {v['nota']:.0f}" for c, v in p.items()))
+    print(f"  salvo em {r['arquivo']}")
+    return 0
+
+
+def comando_perfil_referencia(args):
+    from .config import RAIZ
+    from .referencias import NOMES_MEDIDAS, carregar_analises, perfil_da_categoria, salvar_perfil
+
+    categoria = args.categoria.upper()
+    analises = carregar_analises(RAIZ / "dados" / "referencias", categoria)
+    try:
+        perfil = perfil_da_categoria(analises)
+    except ValueError as e:
+        print(f"✗ categoria {categoria}: {e}. Analise mais vídeos com analisar-referencia.", file=sys.stderr)
+        return 1
+    negativos = len(analises) - perfil["n"]
+    print(f"Categoria {categoria}: {perfil['n']} referências positivas" + (f" ({negativos} negativas fora da conta)"
+                                                                          if negativos else ""))
+    for m, (baixo, alto) in perfil["faixas"].items():
+        print(f"  {NOMES_MEDIDAS[m]}: {baixo:g} a {alto:g}")
+    print(f"  ganchos: {', '.join(perfil['gancho_tipos_aceitos']) or '—'}")
+    if perfil["medidas_estimadas"]:
+        print(f"  {perfil['medidas_estimadas']} de {perfil['n']} com números estimados pelo Gemini (link); "
+              "arquivos locais são medidos pelo FFmpeg")
+    if perfil["nota_potencial_minima"] is not None:
+        print(f"  potencial (25º percentil): {perfil['nota_potencial_minima']:g}/100")
+    if args.salvar:
+        try:
+            destino = salvar_perfil(RAIZ / "config" / "perfis_referencia.toml", categoria, perfil)
+        except ValueError as e:
+            print(f"✗ {e}", file=sys.stderr)
+            return 1
+        print(f"✓ salvo em {destino} (revise e commite)")
+    else:
+        print("  (use --salvar para gravar em config/perfis_referencia.toml)")
+    return 0
+
+
+def comando_nota_referencia(args):
+    from .calibracao import registrar_notas
+    from .config import RAIZ
+
+    notas = {c: getattr(args, c) for c in ("gancho", "fluxo", "valor", "tendencia") if getattr(args, c) is not None}
+    try:
+        arq = registrar_notas(RAIZ / "dados" / "referencias", args.video, args.categoria.upper(), notas)
+    except ValueError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    print(f"✓ notas guardadas em {arq}")
+    return 0
+
+
+def comando_calibrar(args):
+    from .calibracao import calibrar
+    from .config import RAIZ
+    from .referencias import carregar_analises
+
+    pasta = RAIZ / "dados" / "referencias"
+    cats = [args.categoria.upper()] if args.categoria else sorted(p.name for p in pasta.glob("*") if p.is_dir())
+    analises = [a for c in cats for a in carregar_analises(pasta, c)]
+    try:
+        r = calibrar(analises)
+    except ValueError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    g = r["geral"]
+    print(f"Calibração ({', '.join(cats) or '—'}): {r['videos']} vídeos · juiz − você = {g['media_diferenca']:+.1f} "
+          f"em média (diferença típica {g['media_absoluta']:.1f}) · {g['veredito']}")
+    for c, v in r["por_criterio"].items():
+        print(f"  {c}: {v['media_diferenca']:+.1f} (típica {v['media_absoluta']:.1f})")
+    for p, v in r["por_juiz"].items():
+        print(f"  juiz {p}: {v['media_diferenca']:+.1f} · {v['veredito']}")
+    for rec in r["recomendacoes"]:
+        print(f"→ {rec}")
+    pasta.mkdir(parents=True, exist_ok=True)
+    destino = pasta / f"calibracao_{args.categoria.upper() if args.categoria else 'todas'}.json"
+    destino.write_text(json.dumps(r, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"  salvo em {destino}")
+    return 0
+
+
+def comando_benchmark(args):
+    from pathlib import Path
+
+    from . import benchmark as bm
+    from .config import RAIZ
+
+    pasta = Path(args.pasta) if args.pasta else RAIZ / "dados" / "benchmark"
+    if args.acao == "briefings":
+        for b, info in bm.BRIEFINGS.items():
+            print(f"{b}. {info['tema']} ({info['tipo']}; testa {info['testa']}) → {pasta / b}/<ferramenta>.mp4")
+        print(f"Todos em pt-BR, {bm.PROPORCAO}, ~{bm.DURACAO_S} s. Depois: benchmark dados <briefing> <ferramenta> …")
+        return 0
+    if args.acao == "dados":
+        valores = {c: getattr(args, c) for c in bm.CAMPOS_MANUAIS}
+        try:
+            arq = bm.registrar_dados(pasta, args.briefing, args.ferramenta, valores, args.obs)
+        except ValueError as e:
+            print(f"✗ {e}", file=sys.stderr)
+            return 1
+        print(f"✓ anotado em {arq}")
+        return 0
+    if args.acao == "produzir":
+        return comando_benchmark_produzir(args, pasta)
+    from .config import carregar_avaliador
+
+    resultados = bm.avaliar_benchmark(pasta, lambda: carregar_avaliador(caminho=args.config),
+                                      aviso=lambda t: print(t, file=sys.stderr, flush=True), refazer=args.refazer)
+    if not resultados:
+        print(f"✗ nenhum vídeo em {pasta}/<A|B|C>/ (veja: benchmark briefings)", file=sys.stderr)
+        return 1
+    texto = bm.relatorio_markdown(resultados)
+    (pasta / "relatorio.md").write_text(texto, encoding="utf-8")
+    for r in bm.ranking(resultados):
+        nota = "sem juiz" if r["nota_juiz"] is None else f"juiz {r['nota_juiz']:g}"
+        print(f"  {r['ferramenta']}: {nota} · {r['videos']} vídeo(s) · {r['problemas']} problema(s) automático(s)")
+    for r in resultados:
+        if r.get("sem_juiz"):
+            motivos = [m for m in r.get("problemas_juiz") or [] if not m.startswith("nenhum juiz disponível")]
+            motivo = "; ".join(motivos) or "nenhum juiz disponível"
+            print(f"  ⚠ {r['briefing']} · {r['ferramenta']} sem juiz: {motivo}")
+    print(f"✓ relatório em {pasta / 'relatorio.md'}")
+    if args.doc:
+        doc = RAIZ / "docs" / "sdd" / "04b-benchmark-pratico.md"
+        if doc.is_file() and doc.read_text(encoding="utf-8") != texto:
+            print(f"  ⚠ {doc.name} já existia e foi substituído (a versão anterior fica no Git)")
+        doc.write_text(texto, encoding="utf-8")
+        print(f"✓ também em {doc} (revise e commite)")
+    return 0
+
+
+def comando_benchmark_produzir(args, pasta):
+    from . import benchmark as bm
+    from .config import carregar_biblioteca, carregar_config, carregar_loop
+    from .montagem import ErroMontagem
+    from .producao import ErroProducao, produzir_video
+    from .pronuncia import conferir_voz
+    from .rede import ErroProvedor
+
+    try:
+        briefings = [bm.briefing_valido(b) for b in args.briefing]
+    except ValueError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    import time
+
+    falhas = 0
+    for b in briefings:
+        tema = bm.BRIEFINGS[b]["tema"]
+        if (pasta / b / f"{bm.ESTUDIO}.mp4").is_file():
+            if not args.refazer:
+                print(f"== briefing {b}: já tem vídeo do Studio (use --refazer para fazer de novo)", file=sys.stderr)
+                continue
+            import shutil
+
+            # do zero: trabalho, vídeo e números antigos saem (as notas eram do vídeo anterior)
+            shutil.rmtree(pasta / b / "_studio", ignore_errors=True)
+            for velho in (pasta / b / f"{bm.ESTUDIO}.mp4", pasta / b / f"{bm.ESTUDIO}.json"):
+                velho.unlink(missing_ok=True)
+        print(f"== briefing {b}: {tema}", file=sys.stderr)
+        inicio = time.monotonic()
+        roteador = carregar_roteador(args.config)  # um teto de US$ 1,50 por vídeo, não um para os três
+        roteador.aviso = lambda texto: print(texto, file=sys.stderr, flush=True)
+        trabalho = pasta / b / "_studio"
+        try:
+            rel = produzir_video(roteador, carregar_loop(roteador, args.config), tema, trabalho,
+                                 duracao=bm.DURACAO_S, proporcao=bm.PROPORCAO, pesquisar=not args.sem_pesquisa,
+                                 cfg_montagem=carregar_config(args.config).get("montagem"),
+                                 aviso=lambda t: print(t, file=sys.stderr, flush=True),
+                                 biblioteca=carregar_biblioteca(args.config), conferir_voz=conferir_voz)
+        except KeyboardInterrupt:
+            bm.registrar_execucao(pasta, b, custo_usd=roteador.orcamento.gasto_usd, tempo_s=time.monotonic() - inicio)
+            print(f"\n✗ interrompido. Rode de novo para continuar (o que ficou pronto está em {trabalho}).",
+                  file=sys.stderr)
+            return 130
+        except (ErroProducao, ErroMontagem, ErroProvedor, OSError) as e:
+            # o que já foi gasto conta no custo do Studio, mesmo sem vídeo
+            bm.registrar_execucao(pasta, b, custo_usd=roteador.orcamento.gasto_usd, tempo_s=time.monotonic() - inicio)
+            print(f"✗ briefing {b} parou: {e}. Rode de novo para continuar.", file=sys.stderr)
+            falhas += 1
+            continue
+        destino = bm.registrar_execucao(pasta, b, custo_usd=rel["custo_usd"], tempo_s=rel["tempo_s"],
+                                        tentativas=bm.tentativas_do_relatorio(rel), relatorio=rel)
+        print(f"{'✓' if rel['aprovado'] else '⚠'} {destino} · US$ {rel['custo_usd']:.3f} · {rel['tempo_s']} s")
+    return 1 if falhas else 0
+
+
+def comando_testar_voz(args, roteador):
+    from pathlib import Path
+
+    from .pronuncia import FRASE_TESTE, conferir_voz
+    from .rede import ErroProvedor
+
+    frase, pasta = args.frase or FRASE_TESTE, Path(args.pasta)
+    pasta.mkdir(parents=True, exist_ok=True)
+    print(f"Frase: {frase}\n")
+    algum = False
+    for nome in roteador.cadeias.get("voz", []):
+        prov = roteador.provedores[nome]
+        motivo = prov.configurado()
+        if motivo:
+            print(f"  {nome:12s} pulado ({motivo})")
+            continue
+        algum = True
+        saida = pasta / f"{nome}.mp3"
+        try:
+            prov.executar(texto=frase, saida=saida)
+        except (ErroProvedor, ValueError, OSError) as e:
+            print(f"  {nome:12s} falhou: {e}")
+            continue
+        c = conferir_voz(saida, frase)
+        nota = f"erro de palavras {c['wer']:.0%} ({'ok' if c['ok'] else 'acima de 10%'})" if c else "sem transcrição"
+        print(f"  {nome:12s} {saida} · {nota}")
+    if algum:
+        print("\nOuça os arquivos: a transcrição às vezes corrige pronúncia ruim pelo contexto (ex.: 'ola' → 'olha').")
+    return 0 if algum else 1
+
+
+def comando_exportar_capcut(args):
+    from pathlib import Path
+
+    from .exportar import ErroExportacao, exportar_capcut
+    from .rede import ErroProvedor
+
+    pasta = Path(args.pasta)
+    try:
+        resultado = json.loads((pasta / "montagem.json").read_text(encoding="utf-8"))
+        rel = json.loads((pasta / "relatorio.json").read_text(encoding="utf-8")) if (pasta / "relatorio.json").is_file() else {}
+        guardada = Path(resultado.get("pasta_trabalho") or "")
+        trabalho = guardada if guardada.is_dir() else pasta / "montagem"  # a pasta do vídeo pode ter sido movida
+        try:
+            roteiro = json.loads((pasta / "roteiro.json").read_text(encoding="utf-8")).get("roteiro")
+        except (OSError, ValueError, AttributeError):
+            roteiro = None
+        destino = exportar_capcut(resultado, pasta / "capcut", creditos=rel.get("creditos"), titulo=rel.get("titulo"),
+                                  pasta_trabalho=trabalho, roteiro=roteiro if isinstance(roteiro, dict) else None)
+    except FileNotFoundError:
+        print(f"✗ {pasta} não tem montagem.json: produza o vídeo primeiro (comando produzir)", file=sys.stderr)
+        return 1
+    except (ErroExportacao, ErroProvedor, OSError, ValueError) as e:
+        print(f"✗ não deu para exportar: {e}", file=sys.stderr)
+        return 1
+    print(f"✓ pasta para o CapCut: {destino} (veja o LEIA-ME.txt)")
+    return 0
+
+
+def comando_montar(args):
+    import tempfile
+    from pathlib import Path
+
+    from .config import carregar_config
+    from .montagem import ErroMontagem, montar, verificar_montagem
+    from .rede import ErroProvedor
+
+    projeto = Path(args.projeto)
+    try:
+        dados = json.loads(projeto.read_text(encoding="utf-8-sig"))
+        base = projeto.resolve().parent  # caminhos relativos valem a partir do JSON
+
+        def caminho(valor):
+            return str(base / valor) if valor else None
+
+        cenas = [{**c, "video": caminho(c.get("video")), "voz": caminho(c.get("voz"))} for c in dados["cenas"]]
+        with tempfile.TemporaryDirectory() as temporaria:  # sem --trabalho, a voz fica até conferir a sincronia
+            r = montar(cenas, args.saida, proporcao=dados.get("proporcao", "9:16"),
+                       trilha=caminho(dados.get("trilha")), bpm=dados.get("bpm"),
+                       cfg=carregar_config(args.config).get("montagem"), pasta_trabalho=args.trabalho or temporaria,
+                       duracao_alvo=dados.get("duracao"))
+            v = verificar_montagem(r, duracao_pedida=dados.get("duracao"))
+    except KeyError as e:
+        print(f"✗ o projeto não tem o campo {e}", file=sys.stderr)
+        return 1
+    except (OSError, TypeError, ValueError, ErroMontagem, ErroProvedor) as e:
+        print(f"✗ não deu para montar: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(v["medidas"], ensure_ascii=False))
+    for problema in v["problemas"]:
+        print(f"✗ {problema}")
+    print(f"{'✓' if v['aprovado'] else '⚠'} {r['arquivo']}")
+    return 0 if v["aprovado"] else 2
+
+
+def comando_com_qualidade(args, roteador, perfil):
+    """roteiro/pesquisa pelo loop de correção: mostra resultado, nota, motivo e custo."""
+    from .config import carregar_loop
+
+    loop = carregar_loop(roteador, args.config)
+    if args.comando == "roteiro":
+        from .roteiro import produzir_roteiro
+
+        r = produzir_roteiro(loop, args.tema, args.duracao, perfil=perfil)
+        saida = json.dumps(r.valor, ensure_ascii=False, indent=2) if r.valor is not None else ""
+    else:
+        from .pesquisa import produzir_pesquisa
+
+        r = produzir_pesquisa(loop, args.tema)
+        v = r.valor or {}
+        fontes = "\n".join(f"[{i}] {f['url']}" for i, f in enumerate(v.get("fontes", []), 1))
+        saida = v.get("resumo", "") + (f"\n\nFontes:\n{fontes}" if fontes else "")
+    estado = "✓ aprovado" if r.aprovado else "⚠ revisar"
+    nota = f", nota {r.nota:.0f}" if r.nota is not None else ""
+    custo = sum(t.custo_usd for t in r.tentativas)
+    print(f"{estado} ({r.motivo}{nota}, {len(r.tentativas)} tentativa(s), US$ {custo:.3f})", file=sys.stderr)
+    av = r.avaliacao
+    if av is not None and (getattr(av, "sem_juiz", False) or not r.aprovado):
+        for problema in (getattr(av, "problemas", None) or [])[:8]:  # por que não houve juiz ou o que reprovou
+            print(f"  · {problema}", file=sys.stderr)
+    if saida:
+        print(saida)
+    return 0 if r.valor is not None else 1
+
+
+def main(argv=None):
+    # Windows com saída redirecionada usa cp1252: "✓" quebrava o comando. Troca por "?" em vez de cair.
+    for fluxo in (sys.stdout, sys.stderr):
+        try:
+            fluxo.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass  # fluxo trocado (testes, StringIO)
+    p = argparse.ArgumentParser(prog="torralles_studio", description="Gera conteúdo com fallback entre modelos de IA.")
+    p.add_argument("--config", help="caminho de um fallbacks.toml alternativo")
+    sub = p.add_subparsers(dest="comando", required=True)
+
+    sub.add_parser("status", help="mostra as cadeias e quais provedores estão prontos")
+    sub.add_parser("perfis", help="lista os perfis de projeto")
+    s = sub.add_parser("perfil-novo", help="cria um perfil de projeto a partir do modelo")
+    s.add_argument("id")
+    s.add_argument("nome")
+    s = sub.add_parser("ideias")
+    s.add_argument("tema")
+    s.add_argument("-n", "--quantidade", type=int, default=10)
+    s.add_argument("-p", "--perfil", help="id do perfil do projeto")
+    s = sub.add_parser("roteiro")
+    s.add_argument("tema")
+    s.add_argument("-d", "--duracao", type=int, default=30)
+    s.add_argument("-p", "--perfil", help="id do perfil do projeto")
+    s.add_argument("-q", "--qualidade", action="store_true", help="avalia com juiz e refaz até aprovar (loop)")
+    s = sub.add_parser("pesquisa")
+    s.add_argument("tema")
+    s.add_argument("-q", "--qualidade", action="store_true", help="checa citações e avalia com juiz (loop)")
+    s = sub.add_parser("imagem")
+    s.add_argument("prompt")
+    s.add_argument("-o", "--saida", default="saidas/imagem.png")
+    s.add_argument("-p", "--perfil", help="id do perfil do projeto")
+    s = sub.add_parser("voz")
+    s.add_argument("texto")
+    s.add_argument("-o", "--saida", default="saidas/voz.mp3")
+    s.add_argument("-p", "--perfil", help="id do perfil do projeto")
+    s = sub.add_parser("video")
+    s.add_argument("imagem")
+    s.add_argument("prompt")
+    s.add_argument("-o", "--saida", default="saidas/video.mp4")
+    s.add_argument("-d", "--duracao", type=int, default=5)
+    s.add_argument("--proporcao", choices=["9:16", "16:9", "1:1", "4:5"], help="padrão: a do perfil")
+    s.add_argument("-p", "--perfil", help="id do perfil do projeto")
+
+    s = sub.add_parser("avaliar-video", help="juiz que assiste o vídeo inteiro com som e dá nota na régua 0–100")
+    s.add_argument("video", help="arquivo de vídeo ou link do YouTube")
+    s.add_argument("-c", "--contexto", help="o que o vídeo deveria ser (briefing, tema)")
+    s.add_argument("--percepcao", action="store_true", help="mede antes (cortes, volume, transcrição) e envia ao juiz")
+
+    s = sub.add_parser("cerebro", help="resumo dos aprendizados de produção para colar no Cérebro")
+    s.add_argument("--desde", help="só tentativas a partir desta data (AAAA-MM-DD)")
+    s.add_argument("-p", "--perfil", help="só um perfil de projeto")
+    s.add_argument("-o", "--pasta", help="pasta onde salvar o resumo (padrão: dados/cerebro na raiz do repositório)")
+
+    s = sub.add_parser("assistir", help="analisa um vídeo (quadros, cortes, som, transcrição) para avaliação")
+    s.add_argument("video")
+    s.add_argument("-o", "--saida", default="saidas/percepcao")
+    s.add_argument("--sem-transcricao", action="store_true")
+
+    s = sub.add_parser("produzir", help="vídeo completo: roteiro com juiz, imagens, narração, cenas e montagem")
+    s.add_argument("tema")
+    s.add_argument("-d", "--duracao", type=int, default=30, help="segundos (padrão 30)")
+    s.add_argument("-p", "--perfil", help="id do perfil do projeto (formato, estilo, voz)")
+    s.add_argument("--pesquisa", action="store_true", help="pesquisa na web antes do roteiro (fontes reais)")
+    s.add_argument("--trilha", help="arquivo de música (padrão: escolhida pelo clima do roteiro)")
+    s.add_argument("--sem-trilha", action="store_true", help="vídeo só com a narração")
+    s.add_argument("--sem-efeitos", action="store_true", help="sem os sons curtos nos cortes (acervo local)")
+    s.add_argument("--sem-video-banco", action="store_true",
+                   help="não usa clipes de banco grátis (Pexels/Pixabay) nas cenas (K40)")
+    s.add_argument("--sem-juiz-imagem", action="store_true", help="não chama o juiz de visão nas imagens (K38)")
+    s.add_argument("--sem-post", action="store_true", help="sem a capa (capa.jpg) e o texto para postar (post.txt)")
+    s.add_argument("--bpm", type=float, help="batidas por minuto da trilha (opcional)")
+    s.add_argument("-o", "--pasta", help="pasta do vídeo (padrão: saidas/<tema>)")
+    s.add_argument("--refazer-roteiro", action="store_true", help="faz um roteiro novo (e cenas novas) mesmo se já houver")
+    s.add_argument("--capcut", action="store_true", help="também gera a pasta para editar no CapCut (<pasta>/capcut)")
+    s.add_argument("--sem-conferir-voz", action="store_true",
+                   help="não transcreve a narração para conferir a pronúncia (mais rápido, sem custo de transcrição)")
+
+    s = sub.add_parser("prompt-midia", help="prompt pronto de cada serviço para uma ideia, já conferido (K35)")
+    s.add_argument("ideia", help="descrição da imagem, em inglês de preferência")
+    s.add_argument("-m", "--modalidade", default="imagem",
+                   choices=["imagem", "editar_imagem", "animar", "video_texto", "editar_video"])
+    s.add_argument("-s", "--servico", help="só este serviço (provedor, site ou molde)")
+    s.add_argument("-p", "--perfil")
+    s.add_argument("--movimento", help="movimento de câmera (animar/video_texto), ex.: 'pan to the right'")
+    s.add_argument("--clima", help="clima da cena (calmo, curioso, inspirador, epico, alegre, reflexivo, tenso)")
+    s.add_argument("--instrucao", help="o que mudar (editar_imagem/editar_video)")
+    s.add_argument("--proporcao", choices=["9:16", "16:9", "1:1", "4:5"])
+    s.add_argument("--com-texto", action="store_true", help="a imagem pode ter texto escrito")
+    s = sub.add_parser("pedidos-navegador", help="pedidos para os sites grátis no navegador do Claude (K37)")
+    s.add_argument("pasta", help="saidas/<tema> (precisa do roteiro.json)")
+    s.add_argument("-m", "--modalidade", default="imagem", choices=["imagem", "editar_imagem", "animar", "video_texto"])
+    s.add_argument("-c", "--cenas", type=int, nargs="*", help="só estas cenas (1, 2...)")
+    s.add_argument("-p", "--perfil")
+    s = sub.add_parser("importar-midia", help="confere e registra o que veio dos sites (K37)")
+    s.add_argument("pasta", help="saidas/<tema>")
+    s.add_argument("--site", help="de qual site vieram os arquivos (a licença vem do config dele)")
+    s.add_argument("-p", "--perfil")
+    s = sub.add_parser("cotas", help="quanto falta de cada cota gratuita e quando renova (K34)")
+    marca = s.add_mutually_exclusive_group()
+    marca.add_argument("--esgotar", metavar="SERVICO", help="marca o serviço como esgotado até a renovação")
+    marca.add_argument("--liberar", metavar="SERVICO", help="apaga o registro de cota do serviço")
+    s.add_argument("--motivo", help="texto guardado com o --esgotar")
+    s = sub.add_parser("importar-sons", help="põe uma pasta de efeitos sonoros no acervo local, com a licença")
+    s.add_argument("pasta", help="pasta com os arquivos de áudio (mp3, wav, ogg…)")
+    s.add_argument("--licenca", required=True, help="licença de todos os arquivos (ex.: pixabay, cc0)")
+    s.add_argument("--fonte", required=True, help="de onde vieram (ex.: Pixabay)")
+    s.add_argument("--link", help="página da licença ou da fonte (http/https)")
+    s.add_argument("--autor", help="autor (obrigatório em CC BY)")
+
+    s = sub.add_parser("importar-acervo", help="põe uma pasta de mídia no acervo, medida e etiquetada (K47)")
+    s.add_argument("pasta", help="pasta com os arquivos (as subpastas também entram)")
+    s.add_argument("--tipo", required=True, choices=["trilha", "efeito", "sonoplastia", "ambiente", "imagem", "video"])
+    s.add_argument("--licenca", required=True, help="licença de todos os arquivos (ex.: pixabay, cc0)")
+    s.add_argument("--fonte", required=True, help="de onde vieram (ex.: Pixabay)")
+    s.add_argument("--clima", choices=["calmo", "alegre", "epico", "tenso", "inspirador", "curioso", "reflexivo"],
+                   help="clima de todos os arquivos (sem isto, vem do nome do arquivo ou da pasta)")
+    s.add_argument("--link", help="página da licença ou da fonte (http/https)")
+    s.add_argument("--autor", help="autor (obrigatório em CC BY)")
+    s.add_argument("--arquivo-licenca", help="texto da licença da fonte, para guardar uma cópia (D18)")
+    s = sub.add_parser("acervo", help="busca no acervo por tipo, clima, energia e duração (K47)")
+    s.add_argument("acao", choices=["buscar"])
+    s.add_argument("--tipo", choices=["trilha", "efeito", "sonoplastia", "ambiente", "imagem", "video"])
+    s.add_argument("--clima", choices=["calmo", "alegre", "epico", "tenso", "inspirador", "curioso", "reflexivo"])
+    s.add_argument("--energia", choices=["baixa", "media", "alta"])
+    s.add_argument("--duracao", type=float, help="segundos que o item precisa cobrir (ou chegar perto)")
+    s.add_argument("--orientacao", choices=["vertical", "horizontal", "quadrado"])
+    s.add_argument("--palavra", action="append", help="palavra do nome (pode repetir)")
+    s.add_argument("--loop", action="store_true", help="só os que fazem loop")
+    s.add_argument("--limite", type=int, default=10)
+    s.add_argument("--json", action="store_true", help="saída em JSON para agentes")
+
+    s = sub.add_parser("analisar-referencia", help="analisa um vídeo de referência (link do YouTube ou arquivo) para a régua")
+    s.add_argument("video", help="link de um vídeo do YouTube (sem baixar) ou arquivo local")
+    s.add_argument("-c", "--categoria", required=True, help="categoria de referência (A, B, C… de config/referencias.toml)")
+    marca = s.add_mutually_exclusive_group()
+    marca.add_argument("--negativo", dest="negativo", action="store_const", const=True,
+                       help="exemplo do que NÃO fazer (fica fora das faixas do perfil)")
+    marca.add_argument("--positivo", dest="negativo", action="store_const", const=False,
+                       help="desfaz um --negativo anterior (sem nenhum dos dois, mantém o que estava)")
+
+    s = sub.add_parser("perfil-referencia", help="faixas típicas (25º–75º) de uma categoria a partir das análises")
+    s.add_argument("-c", "--categoria", required=True, help="categoria (A–F)")
+    s.add_argument("--salvar", action="store_true", help="grava em config/perfis_referencia.toml (revise e commite)")
+
+    s = sub.add_parser("nota-referencia", help="sua nota (0 a 10) para um vídeo de referência já analisado (K14)")
+    s.add_argument("video", help="o mesmo link ou arquivo usado no analisar-referencia")
+    s.add_argument("-c", "--categoria", required=True, help="categoria (A–F)")
+    for c in ("gancho", "fluxo", "valor", "tendencia"):
+        s.add_argument(f"--{c}", type=float, help=f"nota de 0 a 10 para {c}")
+
+    s = sub.add_parser("calibrar", help="compara as suas notas com as do juiz nas referências (K14)")
+    s.add_argument("-c", "--categoria", help="só uma categoria (padrão: todas)")
+
+    s = sub.add_parser("benchmark", help="teste prático: mesmos 3 briefings e mesma régua para todas as ferramentas (K31)")
+    comum = argparse.ArgumentParser(add_help=False)
+    comum.add_argument("--pasta", help="pasta do benchmark (padrão dados/benchmark)")
+    bm = s.add_subparsers(dest="acao", required=True)
+    b = bm.add_parser("produzir", parents=[comum], help="faz os vídeos do Studio para os briefings (cada um com o próprio teto)")
+    b.add_argument("-b", "--briefing", nargs="+", default=["A", "B", "C"], help="quais briefings (A, B, C)")
+    b.add_argument("--sem-pesquisa", action="store_true", help="não pesquisa fontes antes do roteiro")
+    b.add_argument("--refazer", action="store_true",
+                   help="faz de novo do zero os briefings que já têm vídeo do Studio (apaga o anterior e paga de novo)")
+    b = bm.add_parser("dados", parents=[comum], help="anota tempo, custo, intervenções e suas notas de uma ferramenta num briefing")
+    b.add_argument("briefing", help="A, B ou C")
+    b.add_argument("ferramenta", help="nome da ferramenta, igual ao nome do arquivo do vídeo (ex.: capcut)")
+    b.add_argument("--tempo-min", type=float, help="minutos até o vídeo pronto")
+    b.add_argument("--custo", type=float, dest="custo_usd", help="custo real em US$ (0 no grátis)")
+    b.add_argument("--creditos", type=float, help="créditos gastos")
+    b.add_argument("--intervencoes", type=float, help="quantas vezes você precisou mexer à mão")
+    b.add_argument("--tentativas", type=float, help="tentativas até um resultado aceitável")
+    b.add_argument("--nota", type=float, dest="nota_diego", help="sua nota geral de 0 a 10")
+    b.add_argument("--voz", type=float, dest="voz_ptbr", help="voz em pt-BR, de 0 a 10")
+    b.add_argument("--legenda", type=float, dest="legenda_ptbr", help="legenda em pt-BR, de 0 a 10")
+    b.add_argument("--obs", help="observação curta")
+    b = bm.add_parser("avaliar", parents=[comum], help="passa todos os vídeos pela mesma régua e gera o relatório comparativo")
+    b.add_argument("--doc", action="store_true", help="grava também docs/sdd/04b-benchmark-pratico.md")
+    b.add_argument("--refazer", action="store_true", help="julga de novo vídeos já julgados (paga de novo)")
+    bm.add_parser("briefings", parents=[comum], help="mostra os 3 briefings e onde salvar os vídeos")
+
+    s = sub.add_parser("testar-voz", help="grava uma frase difícil (lh, nh, rr) em cada voz pronta e mede o erro")
+    s.add_argument("-o", "--pasta", default="saidas/teste-voz")
+    s.add_argument("--frase", help="frase de teste (padrão: palavras com lh, nh, r e rr)")
+
+    s = sub.add_parser("servidor", help="servidor HTTP local para o Torralles Ops pedir peças (spec 08)")
+    s.add_argument("--porta", type=int, default=8765)
+    s.add_argument("--host", default="127.0.0.1", help="padrão: só este PC")
+    sub.add_parser("mcp", help="servidor MCP por stdio para o Hermes (produzir_peca, consultar_peca)")
+
+    s = sub.add_parser("exportar-capcut", help="pasta para editar no CapCut a partir de um vídeo já produzido")
+    s.add_argument("pasta", help="pasta do vídeo (ex.: saidas/beneficios-do-cha-verde)")
+
+    s = sub.add_parser("montar", help="monta o vídeo final (cenas, narração, legendas, trilha) e confere a régua")
+    s.add_argument("projeto", help="arquivo JSON com as cenas (veja docs/montagem.md)")
+    s.add_argument("-o", "--saida", default="saidas/final.mp4")
+    s.add_argument("--trabalho", help="pasta para guardar clipes, áudios e legendas (para o CapCut)")
+
+    args = p.parse_args(argv)
+    if args.comando in ("servidor", "mcp"):
+        return comando_servidor(args)
+    if args.comando == "exportar-capcut":
+        return comando_exportar_capcut(args)
+    if args.comando == "cotas":
+        return comando_cotas(args)
+    if args.comando == "prompt-midia":
+        return comando_prompt_midia(args)
+    if args.comando == "pedidos-navegador":
+        return comando_pedidos_navegador(args)
+    if args.comando == "importar-midia":
+        return comando_importar_midia(args)
+    if args.comando == "importar-sons":
+        return comando_importar_sons(args)
+    if args.comando == "importar-acervo":
+        return comando_importar_acervo(args)
+    if args.comando == "acervo":
+        return comando_acervo(args)
+    if args.comando == "montar":
+        return comando_montar(args)
+    if args.comando == "assistir":
+        from .config import carregar_env
+        from .percepcao import analisar_video
+
+        carregar_env()
+        rel = analisar_video(args.video, args.saida, transcrever_audio=not args.sem_transcricao)
+        resumo = {k: v for k, v in rel.items() if k not in ("quadros",)}
+        print(json.dumps(resumo, ensure_ascii=False, indent=2))
+        return 0
+    if args.comando in ("perfis", "perfil-novo"):
+        return comando_perfis(args)
+    if args.comando == "avaliar-video":
+        return comando_avaliar_video(args)
+    if args.comando == "cerebro":
+        return comando_cerebro(args)
+    if args.comando == "benchmark":
+        return comando_benchmark(args)
+    roteador = carregar_roteador(args.config)
+    roteador.aviso = lambda texto: print(texto, file=sys.stderr, flush=True)  # mostra quem está trabalhando
+
+    if args.comando == "status":
+        mostrar_status(roteador)
+        return 0
+
+    perfil = None
+    if getattr(args, "perfil", None):
+        from .config import carregar_perfis
+        from .perfis import ErroPerfil
+
+        try:
+            perfil = carregar_perfis(args.config).obter(args.perfil)
+        except ErroPerfil as e:
+            print(f"✗ {e}", file=sys.stderr)
+            return 1
+        roteador = perfil.roteador(roteador)
+
+    if args.comando == "produzir":
+        return comando_produzir(args, roteador, perfil)
+    if args.comando == "analisar-referencia":
+        return comando_analisar_referencia(args, roteador)
+    if args.comando == "perfil-referencia":
+        return comando_perfil_referencia(args)
+    if args.comando == "nota-referencia":
+        return comando_nota_referencia(args)
+    if args.comando == "calibrar":
+        return comando_calibrar(args)
+    if args.comando == "testar-voz":
+        return comando_testar_voz(args, roteador)
+    if getattr(args, "qualidade", False):
+        return comando_com_qualidade(args, roteador, perfil)
+
+    try:
+        if args.comando == "ideias":
+            r = funcoes.gerar_ideias(roteador, args.tema, args.quantidade, perfil=perfil)
+            saida = r.valor
+        elif args.comando == "roteiro":
+            r = funcoes.gerar_roteiro(roteador, args.tema, args.duracao, perfil=perfil)
+            saida = json.dumps(r.valor, ensure_ascii=False, indent=2)
+        elif args.comando == "pesquisa":
+            r = funcoes.pesquisar(roteador, args.tema)
+            fontes = "\n".join(f"[{i}] {f['url']}" for i, f in enumerate(r.valor["fontes"], 1))
+            saida = r.valor["resumo"] + (f"\n\nFontes:\n{fontes}" if fontes else "")
+        elif args.comando == "imagem":
+            r = funcoes.gerar_imagem(roteador, args.prompt, args.saida, perfil=perfil)
+            saida = str(r.valor)
+        elif args.comando == "voz":
+            r = funcoes.gerar_voz(roteador, args.texto, args.saida)
+            saida = str(r.valor)
+        else:
+            r = funcoes.gerar_video(roteador, args.imagem, args.prompt, args.saida, args.duracao,
+                                   proporcao=args.proporcao, perfil=perfil)
+            saida = str(r.valor)
+    except TodosFalharam as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+
+    relatar(r)
+    print(saida)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

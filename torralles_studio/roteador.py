@@ -1,0 +1,288 @@
+"""Roteador com fallback: tenta cada provedor da cadeia de uma tarefa, em ordem.
+
+Regras:
+- Provedor sem chave/configuração é pulado.
+- Erro temporário (429, 5xx, rede) → repete no mesmo provedor com espera
+  crescente; se continuar falhando, passa para o próximo.
+- Erro definitivo (400, resposta inválida...) → passa direto para o próximo.
+- 429 (limite) e 401/403 (chave inválida) colocam o provedor em "descanso"
+  por um tempo, para as próximas chamadas nem tentarem nele.
+- Teto de custo (D20): provedor cuja estimativa não cabe no que resta do orçamento
+  é pulado; os gratuitos continuam disponíveis. Mensagens passam por mascarar().
+- Cotas (K34): com `cotas` (banco), cada chamada gasta créditos da conta do provedor; conta esgotada
+  (limite do config, padrão de mensagem declarado ou Retry-After longo) é pulada até renovar, mesmo
+  numa nova execução. Acerto do cache não gasta cota.
+- Licença (D24): `a_conferir` nunca entra; nas modalidades de mídia, marca d'água e licença só não
+  comercial seguem a regra do perfil (licenca_por_modalidade + comercial).
+"""
+
+import time
+from dataclasses import dataclass, field
+from typing import Any
+
+import sqlite3
+
+from .cotas import bloqueio_de_licenca, conta_de, config_cota, cota_esgotada, creditos_de
+from .rede import ErroProvedor
+from .seguranca import Orcamento, mascarar
+
+DESCANSO_LIMITE = 60  # segundos após um 429
+DESCANSO_CHAVE = 3600  # segundos após 401/403
+# Nomes antigos de tarefa (spec 14): "video" (imagem → vídeo) passou a se chamar "animar".
+APELIDOS = {"video": "animar", "animar": "video"}
+
+
+@dataclass
+class Tentativa:
+    provedor: str
+    status: str  # "ok", "cache", "pulado" ou "falhou"
+    detalhe: str = ""
+
+
+@dataclass
+class Resultado:
+    valor: Any
+    provedor: str
+    tentativas: list = field(default_factory=list)
+
+
+class TodosFalharam(Exception):
+    def __init__(self, tarefa, tentativas):
+        linhas = "\n".join(f"  - {t.provedor}: {t.status} ({t.detalhe})" for t in tentativas)
+        super().__init__(f"nenhum provedor conseguiu executar '{tarefa}':\n{linhas}")
+        self.tarefa = tarefa
+        self.tentativas = tentativas
+
+
+class Roteador:
+    def __init__(self, provedores, cadeias, repeticoes=1, espera_base=1.0, dormir=time.sleep, relogio=time.monotonic,
+                 orcamento=None, cache=None, cotas=None):
+        self.provedores = provedores
+        self.cotas = cotas  # Cotas (K34); None = sem cota que dura (como antes)
+        self.comercial = True  # perfil monetizado? (D22/D24; o perfil ajusta)
+        self.licenca_por_modalidade = {}  # regra por modalidade do perfil (D24)
+        self.perfil = None  # Perfil dono deste roteador (checagem de prompt usa os nomes a evitar dele)
+        self.cache = cache  # ex.: Banco (K24); resultado repetido não é pago de novo
+        self.orcamento = orcamento or Orcamento()
+        self.cadeias = cadeias
+        self.repeticoes = repeticoes
+        self.espera_base = espera_base
+        self._dormir = dormir
+        self._relogio = relogio
+        self._descanso_ate = {}
+        self.aviso = None  # função(texto) para mostrar o andamento (o CLI liga; testes e servidor não)
+
+    def _tarefa_real(self, tarefa):
+        if tarefa not in self.cadeias and APELIDOS.get(tarefa) in self.cadeias:
+            return APELIDOS[tarefa]
+        return tarefa
+
+    def tipo_da_tarefa(self, tarefa):
+        return self.provedores[self.cadeias[self._tarefa_real(tarefa)][0]].tipo
+
+    def executar(self, tarefa, *, validar=None, excluir=(), usar_cache=True, **kwargs):
+        """Executa a tarefa no primeiro provedor que funcionar.
+
+        validar: função opcional que recebe a resposta e devolve o valor final,
+        ou lança ValueError para tratar a resposta como falha e tentar o próximo.
+        excluir: provedores que não podem ser usados nesta chamada (ex.: o juiz não pode
+        ser da mesma família de quem gerou a peça).
+        usar_cache: False para pedir um resultado novo (ex.: refazer peça rejeitada, variações).
+        """
+        tarefa = self._tarefa_real(tarefa)
+        self._tarefa = tarefa
+        if tarefa not in self.cadeias:
+            raise KeyError(f"tarefa desconhecida: {tarefa}")
+        tentativas = []
+        chaves = {}
+        if usar_cache:  # acerto de qualquer provedor da cadeia vale antes de pagar outro
+            for nome in self.cadeias[tarefa]:
+                if nome in excluir:
+                    continue
+                chaves[nome] = self._chave_cache(nome, self.provedores[nome], kwargs)
+                guardado = self._do_cache(chaves[nome], kwargs, validar)
+                if guardado is not None:
+                    return Resultado(guardado[0], nome, [Tentativa(nome, "cache")])
+        for nome in self.cadeias[tarefa]:
+            provedor = self.provedores[nome]
+            if nome in excluir:
+                tentativas.append(Tentativa(nome, "pulado", "excluído nesta chamada"))
+                continue
+            chave = chaves[nome] if nome in chaves else self._chave_cache(nome, provedor, kwargs)
+            motivo = (provedor.configurado() or self._bloqueio_de_licenca(provedor, tarefa)
+                      or self._em_descanso(nome) or self._sem_cota(nome, provedor, tarefa))
+            if motivo:
+                tentativas.append(Tentativa(nome, "pulado", motivo))
+                continue
+            try:
+                kw = self._preparar_prompt(nome, provedor, kwargs)
+            except ValueError as e:  # prompt reprovado na checagem: não chega ao serviço nem gasta cota (K35)
+                tentativas.append(Tentativa(nome, "pulado", mascarar(str(e))))
+                self._avisar_falha(tentativas[-1])
+                continue
+            custo = self.orcamento.estimar(provedor, kw)
+            if not self.orcamento.cabe(custo):
+                tentativas.append(Tentativa(nome, "pulado", f"teto de custo: precisa US$ {custo:.3f}, "
+                                                             f"restam US$ {self.orcamento.restante:.3f}"))
+                continue
+            try:
+                bruto = self._chamar(nome, provedor, kw, custo)
+                valor = validar(bruto) if validar else bruto
+            except (ErroProvedor, ValueError) as e:
+                tentativas.append(Tentativa(nome, "falhou", mascarar(str(e))))
+                self._avisar_falha(tentativas[-1])
+                continue
+            except Exception as e:  # resposta em formato inesperado, bug no provedor...
+                tentativas.append(Tentativa(nome, "falhou", mascarar(f"{type(e).__name__}: {e}")))
+                self._avisar_falha(tentativas[-1])
+                continue
+            tentativas.append(Tentativa(nome, "ok"))
+            self._guardar_cache(chave, nome, provedor, bruto)
+            return Resultado(valor, nome, tentativas)
+        raise TodosFalharam(tarefa, tentativas)
+
+    def _chave_cache(self, nome, provedor, kwargs):
+        if self.cache is None or not provedor.cfg.get("cache", True):
+            return None
+        from .banco import chave_cache
+
+        try:
+            return chave_cache(nome, provedor.modelo, kwargs, provedor.cfg)
+        except (OSError, TypeError, ValueError):
+            return None
+
+    def _do_cache(self, chave, kwargs, validar):
+        """(valor,) se houver resultado guardado que ainda passa na validação; senão None."""
+        if chave is None:
+            return None
+        try:
+            guardado = self.cache.cache_buscar(chave, kwargs.get("saida"))
+            if guardado is None:
+                return None
+            return (validar(guardado) if validar else guardado,)
+        except ValueError:  # resposta antiga que não passa mais na validação: segue para o provedor
+            return None
+        except Exception as e:  # cache com defeito (banco travado, arquivo preso): segue, mas avisa
+            if self.aviso:
+                self.aviso(f"  ⚠ cache indisponível: {mascarar(str(e))[:120]}")
+            return None
+
+    def _guardar_cache(self, chave, nome, provedor, valor):
+        if chave is None:
+            return
+        try:
+            self.cache.cache_guardar(chave, nome, provedor.modelo, valor)
+        except Exception as e:  # falha no cache nunca derruba a geração, mas avisa
+            if self.aviso:
+                self.aviso(f"  ⚠ não deu para guardar no cache: {mascarar(str(e))[:120]}")
+
+    def _avisar_falha(self, tentativa):
+        if self.aviso:  # mostra a falha mesmo quando o próximo provedor resolve (senão o motivo some)
+            detalhe = " ".join(tentativa.detalhe.split())
+            self.aviso(f"  ✗ {tentativa.provedor}: {detalhe[:220]}")
+
+    def _chamar(self, nome, provedor, kwargs, custo=0.0):
+        for n in range(self.repeticoes + 1):
+            if n and not self.orcamento.cabe(custo):
+                raise ErroProvedor("teto de custo atingido antes de repetir")
+            if n and self._sem_cota(nome, provedor, self._tarefa):
+                raise ErroProvedor("cota acabou antes de repetir")
+            self.orcamento.registrar(nome, custo)
+            self._gastar_cota(nome, provedor, self._tarefa)
+            if self.aviso:
+                espera = getattr(provedor, "timeout", None)
+                self.aviso(f"… {getattr(self, '_tarefa', '')}: {nome}{' (repetindo)' if n else ''}"
+                           + (f" (até {espera} s)" if espera else ""))
+            try:
+                return provedor.executar(**kwargs)
+            except ErroProvedor as e:
+                if self._esgotou(nome, provedor, e):
+                    raise
+                if e.status == 429:
+                    self._descansar(nome, DESCANSO_LIMITE)
+                    raise  # limite atingido: melhor ir logo para o próximo
+                if e.status in (401, 403):
+                    self._descansar(nome, DESCANSO_CHAVE)
+                    raise
+                if not e.temporario or n == self.repeticoes:
+                    raise
+                self._dormir(self.espera_base * 2**n)
+
+    # -- prompt por serviço (K35) -------------------------------------------------
+    def _preparar_prompt(self, nome, provedor, kwargs):
+        """Com `neutro` (prompt neutro da cena), escreve o prompt no molde deste provedor e confere por regra."""
+        if "neutro" not in kwargs:
+            return kwargs
+        from .prompts_midia import preparar
+
+        kw = {k: v for k, v in kwargs.items() if k != "neutro"}
+        if provedor.cfg.get("prompt_por_molde") is False:  # local (Ken Burns): usa o pedido original e nunca é barrado
+            return kw
+        pronto = preparar(nome, kwargs["neutro"], perfil=self.perfil)
+        kw["prompt"] = pronto["prompt"]
+        if pronto.get("negativo") and provedor.cfg.get("aceita_negativo"):
+            kw["negativo"] = pronto["negativo"]
+        return kw
+
+    # -- licença e cotas (K34) ---------------------------------------------------
+    def _bloqueio_de_licenca(self, provedor, tarefa):
+        return bloqueio_de_licenca(provedor, tarefa, comercial=self.comercial, regras=self.licenca_por_modalidade)
+
+    def _sem_cota(self, nome, provedor, tarefa):
+        if self.cotas is None:
+            return None
+        try:
+            return self.cotas.bloqueio(conta_de(nome, provedor), config_cota(provedor), creditos_de(provedor, tarefa))
+        except sqlite3.Error as e:  # banco com defeito nunca derruba a geração: segue sem cota, mas avisa
+            self._aviso_cota(nome, e)
+            return None
+
+    def _gastar_cota(self, nome, provedor, tarefa):
+        if self.cotas is None:
+            return
+        try:
+            self.cotas.gastar(conta_de(nome, provedor), config_cota(provedor), creditos_de(provedor, tarefa))
+        except sqlite3.Error as e:
+            self._aviso_cota(nome, e)
+
+    def _aviso_cota(self, nome, erro):
+        if self.aviso:
+            self.aviso(f"  ⚠ {nome}: não deu para ler ou gravar a cota no banco ({mascarar(str(erro))[:120]})")
+
+    def _esgotou(self, nome, provedor, erro):
+        """Se o erro diz que os créditos acabaram, marca a conta até renovar e devolve True."""
+        cota = config_cota(provedor)
+        if not cota_esgotada(erro, cota):
+            return False
+        segundos = None
+        if not cota.get("renova") and getattr(erro, "retry_after", None):
+            segundos = erro.retry_after
+        if self.cotas is None:  # sem banco: ao menos não tenta de novo nesta execução
+            self._descansar(nome, segundos or DESCANSO_CHAVE)
+            return True
+        try:
+            ate = self.cotas.esgotar(conta_de(nome, provedor), cota, mascarar(str(erro)), segundos)
+        except sqlite3.Error as e:
+            self._aviso_cota(nome, e)
+            self._descansar(nome, segundos or DESCANSO_CHAVE)
+            return True
+        if self.aviso:
+            from .cotas import hora_local
+
+            self.aviso(f"  ⏸ {nome}: cota acabou, volta {hora_local(ate)}")
+        return True
+
+    def _descansar(self, nome, segundos):
+        self._descanso_ate[nome] = self._relogio() + segundos
+
+    def _em_descanso(self, nome):
+        restante = self._descanso_ate.get(nome, 0) - self._relogio()
+        return f"em descanso por mais {int(restante)}s" if restante > 0 else None
+
+    def status(self):
+        """Mapa tarefa → [(provedor, motivo ou None se pronto)]."""
+        return {
+            tarefa: [(n, self.provedores[n].configurado() or self._bloqueio_de_licenca(self.provedores[n], tarefa)
+                      or self._em_descanso(n) or self._sem_cota(n, self.provedores[n], tarefa)) for n in cadeia]
+            for tarefa, cadeia in self.cadeias.items()
+        }

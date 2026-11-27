@@ -1,0 +1,342 @@
+import json
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from torralles_studio.config import carregar_config
+from torralles_studio.loop import LoopCorrecao
+from torralles_studio.producao import ErroProducao, pasta_do_tema, prompt_da_imagem, produzir_video
+from torralles_studio.provedores.base import Provedor
+from torralles_studio.provedores.video import KenBurnsVideo
+from torralles_studio.qualidade import Avaliador
+from torralles_studio.roteador import Roteador
+from torralles_studio.seguranca import Orcamento
+
+ROTEIRO = {
+    "titulo": "Chá verde", "cta": "Siga para mais.",
+    "cenas": [
+        {"narracao": "Chá verde tem antioxidantes.", "duracao": 4, "prompt_imagem": "cup of green tea",
+         "prompt_movimento": "slow zoom in", "clima": "curioso", "sons": [], "texto_tela": "Antioxidantes"},
+        {"narracao": "Siga para mais curiosidades.", "duracao": 4, "prompt_imagem": "tea field",
+         "prompt_movimento": "pan right", "clima": "alegre", "sons": [], "texto_tela": "Siga!"},
+    ],
+}
+CRITERIOS = ["gancho", "precisao", "aderencia", "clareza", "ritmo", "cta"]
+
+
+def _ff(*args):
+    subprocess.run(["ffmpeg", "-y", "-v", "error", *args], check=True)
+
+
+class Texto(Provedor):
+    tipo = "texto"
+
+    def __init__(self, nome, respostas, familia):
+        super().__init__(nome, {"familia": familia, "custo_usd": 0.01, "modelo": nome})
+        self.respostas, self.pedidos = list(respostas), []
+
+    def configurado(self):
+        return None
+
+    def executar(self, **kw):
+        self.pedidos.append(kw)
+        return self.respostas.pop(0)
+
+
+class Imagem(Provedor):
+    tipo = "imagem"
+
+    def __init__(self):
+        super().__init__("img", {"custo_usd": 0.06})
+        self.pedidos = []
+
+    def configurado(self):
+        return None
+
+    falhar = False
+
+    def executar(self, prompt, saida, proporcao=None):
+        self.pedidos.append({"prompt": prompt, "proporcao": proporcao})
+        if self.falhar:
+            from torralles_studio.rede import ErroProvedor
+
+            raise ErroProvedor("HTTP 402 no download")
+        _ff("-f", "lavfi", "-i", "testsrc=size=540x960", "-frames:v", "1", str(saida))
+        return Path(saida)
+
+
+class Voz(Provedor):
+    tipo = "voz"
+
+    def __init__(self):
+        super().__init__("voz", {})
+        self.chamadas = 0
+
+    def configurado(self):
+        return None
+
+    def executar(self, texto, saida):
+        self.chamadas += 1
+        _ff("-f", "lavfi", "-i", "sine=f=300:d=1.4", "-af", "adelay=200,apad=pad_dur=0.3", str(saida))
+        return Path(saida)
+
+
+@unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg não instalado")
+class TestProduzirVideo(unittest.TestCase):
+    def setUp(self):
+        # O faster-whisper pode estar instalado no PC: os testes nunca carregam o modelo de verdade
+        sem_whisper = mock.patch("torralles_studio.percepcao.whisper_disponivel", return_value=False)
+        sem_whisper.start()
+        self.addCleanup(sem_whisper.stop)
+
+    def montar(self, roteiros=None):
+        juiz = json.dumps({"criterios": {c: {"evidencia": "ok", "nota": 85} for c in CRITERIOS}, "problemas": []})
+        self.redator = Texto("redator", roteiros or [json.dumps(ROTEIRO)], "deepseek")
+        self.juiz = Texto("juiz", [juiz] * 3, "anthropic")
+        self.img, self.voz = Imagem(), Voz()
+        provs = {"redator": self.redator, "juiz": self.juiz, "img": self.img, "voz": self.voz,
+                 "ken_burns": KenBurnsVideo("ken_burns", {"fps": 25})}
+        cadeias = {"roteiro": ["redator"], "juiz": ["juiz"], "imagem": ["img"], "voz": ["voz"], "video": ["ken_burns"]}
+        rt = Roteador(provs, cadeias, dormir=lambda s: None, orcamento=Orcamento(1.5))
+        return rt, LoopCorrecao(rt, Avaliador(rt, carregar_config()["avaliacao"]))
+
+    def test_tema_vira_video_e_rodar_de_novo_nao_refaz(self):
+        rt, loop = self.montar()
+        with tempfile.TemporaryDirectory() as d:
+            rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, cfg_montagem={"preset": "ultrafast"})
+            self.assertTrue(Path(rel["video"]).is_file())
+            self.assertEqual(rel["medidas"]["resolucao"], "1080x1920")
+            self.assertEqual(self.voz.chamadas, 2)
+            self.assertEqual([p["proporcao"] for p in self.img.pedidos], ["9:16", "9:16"])
+            self.assertIn("Avoid: text", self.img.pedidos[0]["prompt"])  # K35: prompt no molde do serviço
+            roteiro = next(e for e in rel["etapas"] if e["etapa"] == "roteiro")
+            self.assertEqual((roteiro["provedor"], roteiro["nota"]), ("redator", 85))
+            self.assertGreater(rel["custo_usd"], 0)
+            self.assertTrue((Path(d) / "v" / "relatorio.json").is_file())
+            self.assertTrue((Path(d) / "v" / "montagem.json").is_file())  # permite exportar para o CapCut depois
+
+            from torralles_studio.__main__ import main  # K23: exporta sem refazer nada
+            self.assertEqual(main(["exportar-capcut", str(Path(d) / "v")]), 0)
+            self.assertTrue((Path(d) / "v" / "capcut" / "01_clipes" / "cena_02.mp4").is_file())
+
+            rt2, loop2 = self.montar(roteiros=[])  # sem respostas: se tentar gerar de novo, quebra
+            faixas = Path(d) / "perfis_referencia.toml"  # K13: faixas da categoria do perfil viram alertas
+            faixas.write_text("[referencia.A]\nduracao_s = [20.0, 45.0]\n", encoding="utf-8")
+            from types import SimpleNamespace
+            rel2 = produzir_video(rt2, loop2, "chá verde", Path(d) / "v", duracao=8,
+                                  cfg_montagem={"preset": "ultrafast"}, perfis_referencia=faixas,
+                                  perfil=SimpleNamespace(categoria="A", formato={}))
+            self.assertTrue(rel2["referencia"]["perfil_medido"])
+            self.assertEqual(len(rel2["referencia"]["alertas"]), 1)
+            self.assertIn("duração", rel2["referencia"]["alertas"][0])
+            self.assertEqual(self.voz.chamadas, 0)
+            self.assertEqual(self.img.pedidos, [])
+            self.assertTrue(all(e["reaproveitado"] for e in rel2["etapas"]))
+            self.assertEqual(rel2["custo_usd"], 0)
+
+    def test_arquivo_pela_metade_nao_e_reaproveitado(self):  # verificador: retomada com arquivo parcial
+        rt, loop = self.montar()
+        with tempfile.TemporaryDirectory() as d:
+            pasta = Path(d) / "v"
+            produzir_video(rt, loop, "chá verde", pasta, duracao=8, cfg_montagem={"preset": "ultrafast"})
+            (pasta / "cena_02.mp4").write_bytes(b"\x00" * 262)  # vídeo quebrado (ex.: Ctrl+C na codificação)
+            (pasta / "voz_01.mp3").write_bytes(b"lixo")           # narração cortada
+            (pasta / "cena_01.png").write_bytes(b"<html>erro</html>")
+            rt2, loop2 = self.montar(roteiros=[])
+            rel = produzir_video(rt2, loop2, "chá verde", pasta, duracao=8, cfg_montagem={"preset": "ultrafast"})
+            refeitas = sorted(e["etapa"] for e in rel["etapas"] if not e["reaproveitado"])
+            # imagem e voz da cena 1 refeitas: o vídeo dela (feito com as antigas) também é refeito
+            self.assertEqual(refeitas, ["cena 1: imagem", "cena 1: voz", "cena 1: vídeo", "cena 2: vídeo"])
+            self.assertFalse(list(pasta.glob("*.parte.*")))  # nada provisório sobrando
+
+    def test_roteiro_de_outro_tema_ou_duracao_nao_e_reaproveitado(self):
+        rt, loop = self.montar()
+        with tempfile.TemporaryDirectory() as d:
+            pasta = Path(d) / "v"
+            produzir_video(rt, loop, "chá verde", pasta, duracao=8, cfg_montagem={"preset": "ultrafast"})
+            rt2, loop2 = self.montar()  # tem um roteiro novo para dar
+            rel = produzir_video(rt2, loop2, "chá preto", pasta, duracao=8, cfg_montagem={"preset": "ultrafast"})
+            self.assertFalse(next(e for e in rel["etapas"] if e["etapa"] == "roteiro")["reaproveitado"])
+            self.assertEqual(self.voz.chamadas, 2)  # cenas do roteiro antigo foram descartadas
+            self.assertEqual(json.loads((pasta / "roteiro.json").read_text(encoding="utf-8"))["tema"], "chá preto")
+
+    def test_sem_ia_de_imagem_usa_foto_gratuita_com_credito(self):  # teste real: Gemini sem faturamento, Pollinations 402
+        from torralles_studio.banco import Banco
+        from torralles_studio.biblioteca import Biblioteca
+
+        rt, loop = self.montar()
+        self.img.falhar = True
+        with tempfile.TemporaryDirectory() as d, Banco(Path(d) / "b.db") as banco:
+            bib = Biblioteca(Path(d) / "bib", banco)
+            for nome, tags in (("a.png", ["cup", "green", "tea"]), ("b.png", ["tea", "field"])):
+                _ff("-f", "lavfi", "-i", f"color=c={'green' if nome == 'a.png' else 'olive'}:s=540x960", "-frames:v", "1",
+                    str(Path(d) / nome))
+                bib.adicionar(Path(d) / nome, "cc-by", "Openverse", autor="Fulano", link="https://exemplo.org/f",
+                              tags=tags, titulo=f"foto {nome}")
+            rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, biblioteca=bib,
+                                 cfg_montagem={"preset": "ultrafast"})
+            self.assertTrue(Path(rel["video"]).is_file())
+            imagens = [e for e in rel["etapas"] if e["etapa"].endswith("imagem")]
+            self.assertEqual([e["provedor"] for e in imagens], ["foto gratuita (Openverse)"] * 2)
+            self.assertEqual(set(rel["fotos_gratuitas"]), {"1", "2"})
+            self.assertIn("Fulano", rel["creditos"])
+            self.assertIn("CC BY", (Path(d) / "v" / "creditos.txt").read_text(encoding="utf-8"))
+            self.assertEqual(len(self.img.pedidos), 1)  # a IA falhou na cena 1: a cena 2 foi direto para a foto
+
+            rt2, loop2 = self.montar()  # IA de imagem voltou e o roteiro é refeito: crédito antigo some
+            rel2 = produzir_video(rt2, loop2, "chá verde", Path(d) / "v", duracao=8, biblioteca=bib,
+                                  refazer_roteiro=True, cfg_montagem={"preset": "ultrafast"})
+            self.assertEqual(rel2["fotos_gratuitas"], {})
+            self.assertFalse((Path(d) / "v" / "creditos.txt").exists())
+
+    def test_trilha_pelo_clima_entra_no_video_com_credito(self):  # K21
+        from torralles_studio.banco import Banco
+        from torralles_studio.biblioteca import Biblioteca
+
+        rt, loop = self.montar()
+        with tempfile.TemporaryDirectory() as d, Banco(Path(d) / "b.db") as banco:
+            bib = Biblioteca(Path(d) / "bib", banco)
+            musica = Path(d) / "m.mp3"
+            _ff("-f", "lavfi", "-i", "aevalsrc='0.5*sin(2*PI*220*t)*exp(-10*mod(t,0.5))':s=22050:d=12", str(musica))
+            bib.adicionar(musica, "cc-by", "Openverse (jamendo)", autor="Bia Música", link="https://exemplo.org/m",
+                          tags=["trilha", "curioso"], titulo="Curious loop")
+            rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, biblioteca=bib,
+                                 cfg_montagem={"preset": "ultrafast"})
+            self.assertEqual(rel["trilha"]["clima"], "curioso")
+            self.assertAlmostEqual(rel["trilha"]["bpm"], 120, delta=3)
+            self.assertGreaterEqual(rel["medidas"]["voz_menos_trilha_lu"], 10)
+            self.assertIn("Bia Música", (Path(d) / "v" / "creditos.txt").read_text(encoding="utf-8"))
+            rt2, loop2 = self.montar(roteiros=[])
+            rel2 = produzir_video(rt2, loop2, "chá verde", Path(d) / "v", duracao=8, biblioteca=bib,
+                                  cfg_montagem={"preset": "ultrafast"})
+            self.assertTrue(next(e for e in rel2["etapas"] if e["etapa"] == "trilha")["reaproveitado"])
+
+    def test_efeitos_do_acervo_nos_cortes_com_licenca(self):  # K21: sons curtos nas transições
+        from torralles_studio.banco import Banco
+        from torralles_studio.biblioteca import Biblioteca
+        from torralles_studio.efeitos import importar_pasta
+
+        rt, loop = self.montar()
+        with tempfile.TemporaryDirectory() as d, Banco(Path(d) / "b.db") as banco:
+            bib = Biblioteca(Path(d) / "bib", banco)
+            sons = Path(d) / "sons"
+            sons.mkdir()
+            for nome in ("whoosh.mp3", "pop.mp3"):
+                _ff("-f", "lavfi", "-i", "sine=f=1500:d=0.4", str(sons / nome))
+            importar_pasta(bib, sons, "pixabay", "Pixabay", link="https://pixabay.com/service/license-summary/")
+            rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, biblioteca=bib, capcut=True,
+                                 cfg_montagem={"preset": "ultrafast"})
+            self.assertEqual([(s["cena"], s["nome"], s["licenca"]) for s in rel["efeitos"]], [(2, "pop", "pixabay")])
+            self.assertGreaterEqual(rel["medidas"]["voz_menos_efeitos_lu"], 14)
+            self.assertFalse([p for p in rel["problemas"] if "efeito" in p])
+            self.assertTrue((Path(d) / "v" / "capcut" / "02_audio" / "efeitos.wav").is_file())
+            sem = produzir_video(*self.montar(roteiros=[]), "chá verde", Path(d) / "v", duracao=8, biblioteca=bib,
+                                 efeitos_auto=False, cfg_montagem={"preset": "ultrafast"})
+            self.assertEqual(sem["efeitos"], [])
+            self.assertNotIn("voz_menos_efeitos_lu", sem["medidas"])
+
+    def test_narracao_errada_e_refeita_com_outra_voz(self):  # K18
+        rt, loop = self.montar()
+        voz2 = Voz()
+        voz2.nome = "voz2"
+        rt.provedores["voz2"] = voz2
+        rt.cadeias["voz"] = ["voz", "voz2"]
+        respostas = iter([{"wer": 0.5, "erros": 2, "ok": False}, {"wer": 0.0, "erros": 0, "ok": True},
+                          {"wer": 0.0, "erros": 0, "ok": True}])
+        with tempfile.TemporaryDirectory() as d:
+            rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, cfg_montagem={"preset": "ultrafast"},
+                                 conferir_voz=lambda arq, texto: next(respostas))
+            vozes = [e for e in rel["etapas"] if e["etapa"].endswith(": voz")]
+            self.assertEqual([e["provedor"] for e in vozes], ["voz2", "voz"])
+            self.assertEqual([e["erro_palavras"] for e in vozes], [0.0, 0.0])
+            self.assertEqual((self.voz.chamadas, voz2.chamadas), (2, 1))
+            self.assertFalse(list((Path(d) / "v").glob("voz_*_b.*")))  # arquivo da 2ª tentativa não sobra
+
+    def test_segunda_voz_pior_nao_substitui_a_primeira(self):
+        rt, loop = self.montar()
+        voz2 = Voz()
+        voz2.nome = "voz2"
+        rt.provedores["voz2"] = voz2
+        rt.cadeias["voz"] = ["voz", "voz2"]
+        respostas = iter([{"wer": 0.3, "erros": 2, "ok": False}, {"wer": 0.6, "erros": 4, "ok": False},
+                          {"wer": 0.0, "erros": 0, "ok": True}])
+        with tempfile.TemporaryDirectory() as d:
+            rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8, cfg_montagem={"preset": "ultrafast"},
+                                 conferir_voz=lambda arq, texto: next(respostas))
+            vozes = [e for e in rel["etapas"] if e["etapa"].endswith(": voz")]
+            self.assertEqual(vozes[0]["provedor"], "voz")  # a primeira errou menos: fica
+            self.assertEqual(vozes[0]["erro_palavras"], 0.3)
+
+    def test_trilha_que_quebra_a_montagem_nao_derruba_o_video(self):  # verificador K21: rede de segurança
+        from unittest import mock
+
+        from torralles_studio.banco import Banco
+        from torralles_studio.biblioteca import Biblioteca
+
+        rt, loop = self.montar()
+        with tempfile.TemporaryDirectory() as d, Banco(Path(d) / "b.db") as banco:
+            muda = Path(d) / "muda.wav"
+            _ff("-f", "lavfi", "-i", "anullsrc=r=22050:cl=mono", "-t", "5", str(muda))
+            falsa = {"arquivo": str(muda), "bpm": None, "clima": "curioso", "nota": 50,
+                     "ativo": {"hash": "h", "caminho": "m.wav", "licenca": "cc0", "fonte": "x", "autor": None,
+                               "link": None, "titulo": "muda"}}
+            with mock.patch("torralles_studio.trilha.escolher_trilha", return_value=falsa):
+                rel = produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8,
+                                     biblioteca=Biblioteca(Path(d) / "bib", banco), cfg_montagem={"preset": "ultrafast"})
+            self.assertTrue(Path(rel["video"]).is_file())
+            self.assertIsNone(rel["trilha"])
+            self.assertFalse((Path(d) / "v" / "trilha.json").exists())
+
+    def test_sem_ia_de_imagem_e_sem_biblioteca_para_com_mensagem(self):
+        rt, loop = self.montar()
+        self.img.falhar = True
+        with tempfile.TemporaryDirectory() as d, self.assertRaises(ErroProducao):
+            produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8)
+
+    def test_roteiro_que_nao_sai_para_com_mensagem(self):
+        rt, loop = self.montar(roteiros=["não é JSON"] * 4)
+        with tempfile.TemporaryDirectory() as d, self.assertRaises(ErroProducao):
+            produzir_video(rt, loop, "chá verde", Path(d) / "v", duracao=8)
+
+
+class TestAjudantes(unittest.TestCase):
+    def test_pasta_do_tema(self):
+        self.assertEqual(pasta_do_tema("Benefícios do Chá Verde!"), Path("saidas") / "beneficios-do-cha-verde")
+        self.assertEqual(pasta_do_tema("CON"), Path("saidas") / "video-con")  # nome proibido no Windows
+
+    def test_gemini_sem_opcao_de_proporcao_refaz_sem_ela(self):  # verificador: recuo em HTTP 400
+        import base64
+        import os
+        from unittest import mock
+
+        from torralles_studio.provedores import imagem
+        from torralles_studio.rede import ErroProvedor
+
+        corpos = []
+
+        def falso(url, corpo, cab, timeout):
+            corpos.append(dict(corpo))
+            if "generationConfig" in corpo:
+                raise ErroProvedor("HTTP 400: aspectRatio not supported", status=400)
+            return {"candidates": [{"content": {"parts": [{"inlineData": {"data": base64.b64encode(b"x").decode()}}]}}]}
+
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"CHAVE_TESTE": "k"}), \
+                mock.patch.object(imagem, "post_json", falso):
+            rt = Roteador({"g": imagem.GeminiImagem("g", {"custo_usd": 0.06, "modelo": "m", "chave_env": "CHAVE_TESTE"})},
+                          {"imagem": ["g"]}, orcamento=Orcamento(1.5))
+            rt.executar("imagem", prompt="x", saida=Path(d) / "a.png", proporcao="9:16")
+        self.assertEqual([("generationConfig" in c) for c in corpos], [True, False])
+        self.assertEqual(corpos[0]["generationConfig"], {"imageConfig": {"aspectRatio": "9:16"}})
+        self.assertAlmostEqual(rt.orcamento.gasto_usd, 0.06)  # lançado uma vez só
+
+    def test_prompt_pede_formato_e_nenhum_texto(self):
+        p = prompt_da_imagem({"prompt_imagem": "xícara de chá"}, "9:16")
+        self.assertIn("vertical 9:16", p)
+        self.assertIn("sem nenhum texto", p)
+
+
+if __name__ == "__main__":
+    unittest.main()

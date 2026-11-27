@@ -1,0 +1,101 @@
+# Torralles Studio — guia para agentes
+
+App que transforma ideias ou briefings em **imagens e vídeos prontos para publicar**, escolhendo o melhor
+modelo de IA por etapa, com fallback, controle de qualidade com loop e teto de custo.
+
+## Antes de agir
+1. Leia `KANBAN.md` (o que está em andamento e o próximo cartão) e `docs/sdd/decisoes.md` (D1–D20).
+2. A spec de cada cartão está em `docs/sdd/` (o cartão aponta qual). **Não implemente fora de um cartão.**
+3. Siga o protocolo de execução: plano → implementação → **verificação por um agente diferente** → correção.
+
+## Regras do projeto
+- **D9 — marca:** "Torralles" é a marca de todos os projetos do Diego; o Studio é **independente**. Não use
+  exemplos, briefings ou dados de outros projetos (nada jurídico) em código, testes ou specs.
+- **Sem segredos no repositório:** chaves só em variáveis de ambiente ou no `.env` (ignorado pelo Git).
+  Mensagens de erro passam por `mascarar()`.
+- **Modelos são dados, não código:** nomes e custos ficam em `config/fallbacks.toml`. O teste
+  `tests/test_contratos.py` impede modelos aposentados. Revisão mensal: cartão KR1.
+- **Downloads** de arquivos devolvidos por provedores só via `rede.baixar()` (lista de domínios em `[seguranca]`).
+- **Teto de custo** (D20): US$ 1,50 por vídeo; provedores pagos que não couberem são pulados.
+- **Licenças:** nada AGPL ou "não comercial" no produto (D2). Cada mídia guarda fonte e licença (D18).
+- **Dependências:** o núcleo usa só a biblioteca padrão do Python + FFmpeg. Nova dependência só com motivo registrado.
+- Textos e mensagens ao usuário em **português do Brasil**, simples e diretos.
+
+## Estrutura
+```
+torralles_studio/
+  roteador.py     fallback por tarefa, descanso de provedores, teto de custo
+  provedores/     texto, busca, imagem, voz, vídeo (um arquivo por tipo)
+  funcoes.py      ideias, roteiro, pesquisa, imagem, voz, vídeo
+  roteiro.py      roteiro JSON com clima e sons por cena (esquema + régua); pesquisa.py fontes e citações
+  percepcao.py    "assistir" um vídeo: quadros, cortes, som, transcrição
+  seguranca.py    mascarar chaves, orçamento
+  cotas.py        cotas gratuitas que duram entre execuções e licença por modalidade (K34, D24)
+  prompts_midia.py prompt de cada serviço (moldes em config/prompts_midia.toml) e checagem antes da cota (K35)
+  navegador.py    pedidos para sites grátis no navegador do Claude e importação segura (K37)
+  publicacao.py   capa com título (capa.jpg) e texto para postar (post.txt)
+  ff.py           FFmpeg/ffprobe com prazo e UTF-8 (todas as chamadas passam por aqui)
+  qualidade.py    avaliador 0–100 (juízes de outra família); fatos.py fatos travados
+  loop.py         loop de correção; relatorio.py relatório de qualidade e custo
+  producao.py     vídeo completo de um tema: pesquisa → roteiro → imagem, voz e cena → montagem (retoma sem pagar de novo)
+  trilha.py       trilha pelo clima do roteiro (BPM e energia pelo FFmpeg, voz eliminatória); exportar.py pasta para o CapCut
+  efeitos.py      sons curtos nos cortes, pelo clima, só do acervo local (importar-sons)
+  acervo.py       acervo medido e etiquetado (tipo, clima, energia, BPM, loop, orientação) e busca para agentes (K47)
+  contrato.py     pedido Ops → Studio (spec 08); servico.py fila de pedidos; servidor.py HTTP local e MCP
+  painel.py       painel no navegador (K43, spec 15): projetos, aprovar ou pedir alteração; página em painel_web/
+  montagem.py     vídeo final: tempo da fala, transições na batida, legendas na área segura, trilha sob a voz, −14 LUFS
+  banco.py        SQLite: projetos, peças, tentativas, custo, retomada e cache (dados/, fora do Git)
+  biblioteca.py   mídia por hash (sem duplicatas), licença obrigatória, busca por etiqueta, créditos CC-BY
+  referencias.py  análise de vídeos de referência e perfis por categoria (faixas 25º–75º); calibracao.py suas notas × juiz
+  benchmark.py    teste prático: 3 briefings, mesma régua para o Studio e as outras ferramentas (spec 04)
+  cerebro.py      resumo dos aprendizados de produção para colar no Cérebro (D16)
+  perfis.py       perfis por projeto (dados/perfis/<id>.toml, fora do Git; modelo em config/perfil_modelo.toml)
+  rede.py         HTTP com erros padronizados e downloads seguros
+  config.py       carrega config/fallbacks.toml e o .env
+config/fallbacks.toml   cadeias, modelos, custos, segurança
+.claude/skills/capcut-navegador/  o Claude monta e finaliza no CapCut web pelo navegador do Claude (K33)
+.claude/skills/midia-navegador/   o Claude gera cenas em sites grátis, com fallback quando os créditos acabam (K37)
+ferramentas/kokoro_tts.py         voz Kokoro em processo separado (opcional; fonemizador GPL-3 fora do Studio, D26)
+docs/sdd/               specs (SDD) e decisões
+exemplos/               vídeos de teste da percepção
+```
+
+## Comandos
+```bash
+python -m unittest discover -s tests          # testes (rodar antes de todo commit)
+python -m torralles_studio status             # cadeias e provedores prontos
+python -m torralles_studio assistir video.mp4 # relatório de percepção
+python -m torralles_studio avaliar-video video.mp4   # juiz que assiste com som (Gemini); aceita link do YouTube
+python -m torralles_studio analisar-referencia "link" -c A   # vídeo de referência → dados/referencias/A/ (K12); --negativo
+python -m torralles_studio perfil-referencia -c A --salvar    # faixas 25º–75º → config/perfis_referencia.toml (K13)
+python -m torralles_studio nota-referencia "link" -c A --gancho 8 --fluxo 7   # sua nota 0–10; 'calibrar' compara (K14)
+python -m torralles_studio benchmark briefings                # K31: 'produzir', 'dados A capcut --nota 7', 'avaliar --doc'
+python -m torralles_studio perfil-novo meu-canal "Meu canal"   # cria perfil de projeto; 'perfis' lista
+python -m torralles_studio cerebro --desde 2026-10-01          # aprendizados para colar no CEREBRO_MESTRE.md
+python -m torralles_studio roteiro "tema" -p meu-canal          # gera com o perfil do projeto
+python -m torralles_studio roteiro "tema" -q                    # com juiz e loop de correção (também em pesquisa)
+python -m torralles_studio produzir "tema" -d 30 --pesquisa      # vídeo completo + capa.jpg + post.txt; --capcut, --sem-trilha, --sem-post, --sem-juiz-imagem, --sem-video-banco
+python -m torralles_studio exportar-capcut saidas/<tema>         # pasta para editar no CapCut
+python -m torralles_studio importar-sons <pasta> --licenca pixabay --fonte Pixabay   # efeitos dos cortes no acervo
+python -m torralles_studio importar-acervo <pasta> --tipo trilha --licenca pixabay --fonte Pixabay   # mede e etiqueta (K47)
+python -m torralles_studio acervo buscar --tipo trilha --clima calmo --duracao 30 --json   # busca para agentes
+python -m torralles_studio cotas                              # quanto falta de cada cota grátis; --esgotar/--liberar <serviço>
+python -m torralles_studio prompt-midia "ideia" -m animar       # prompt pronto de cada serviço, já conferido (sem chave)
+python -m torralles_studio pedidos-navegador saidas/<tema> -m imagem   # K37: pedidos para a skill midia-navegador
+python -m torralles_studio importar-midia saidas/<tema> --site adobe_firefly   # confere e registra o que veio dos sites
+python -m torralles_studio testar-voz                          # frase com lh, nh, rr em cada voz pronta (ouvir + erro de palavras)
+python -m torralles_studio servidor                           # painel em http://127.0.0.1:8765/ + HTTP para o Ops (docs/servidor.md); 'mcp' para o Hermes
+python -m torralles_studio montar projeto.json -o final.mp4   # montagem final + régua (docs/montagem.md)
+python -m torralles_studio --config outro.toml status   # config alternativo (ou TORRALLES_CONFIG)
+```
+- O `.env` é lido da **raiz do repositório** e nunca sobrescreve variáveis já definidas.
+- Teste real com chaves (no PC do Diego): `docs/teste-real.md`.
+- **FFmpeg** é necessário para `percepcao`, o vídeo `ken_burns` e alguns testes (pulados se faltar).
+- **Transcrição local (opcional):** `pip install faster-whisper` (D25). Sem ele, a transcrição usa o Gemini. Com ele, o `assistir`
+  não lista os sons (só o Gemini lista); `TRANSCRICAO_ORDEM=gemini,whisper` volta a ordem antiga. Teste real
+  do Whisper: `TESTES_WHISPER=1 python -m unittest tests.test_whisper_local`.
+
+## Git
+- Branch de trabalho: `claude/multi-model-integration-app-g1697x`.
+- Commits pequenos, um cartão por commit, mensagem `tipo(Kxx): descrição` em português.
+- Ao concluir um cartão: atualizar `KANBAN.md` e, ao fim de cada camada, registrar aprendizados para o Cérebro (D16).
